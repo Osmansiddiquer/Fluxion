@@ -22,7 +22,7 @@ intersections.
 | `t^2 + y^2 = 9` | Implicit curve (marching squares) |
 | `r = 1 + cos(theta)` | Polar curve, drawn as the (x, y) parametric overlay |
 | `(1, 2)` | A single point |
-| `((0,0),(1,1),(2,3))` | A connected polyline (`polyline(...)` is the same, keyword optional) |
+| `((0,0),(1,1),(2,3))` | A connected polyline (a parens-tuple of points) |
 | `[(0,0),(1,1),(2,3)]` | An array of scattered points |
 | `A = (1, 2)` then `(A, B)` | Point-valued variables; a tuple of them draws a line |
 | `a = 2` | A variable you can slide, animate, and reuse in other equations |

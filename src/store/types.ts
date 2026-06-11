@@ -35,6 +35,10 @@ export interface Entry {
   varMax?: number;
   varStep?: number;
 
+  /** Polar entry (`r = f(θ)`): the θ sweep range (defaults to 0 … 2π). */
+  thetaMin?: number;
+  thetaMax?: number;
+
   /** Slider animation mode (play button): repeat, back-and-forth, or one pass. */
   animMode?: AnimMode;
   /** Animation speed multiplier (1 = a full sweep in ~4s). */

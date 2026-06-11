@@ -14,6 +14,16 @@ import MathField from './MathField';
 export default function EquationField({ entry }: { entry: Entry }) {
   const update = useStore((s) => s.updateEntry);
   const sigFigs = useStore((s) => s.sigFigs);
+  const entries = useStore((s) => s.entries);
+
+  const varNames = useMemo(
+    () =>
+      entries
+        .map((e) => parseEntry(e.raw))
+        .filter((p) => p.kind === 'variable')
+        .map((p) => (p as { name: string }).name),
+    [entries],
+  );
 
   const latexValue = useMemo(() => {
     if (!entry.raw.trim()) return '';
@@ -30,6 +40,7 @@ export default function EquationField({ entry }: { entry: Entry }) {
       <MathField
         className="math-field"
         value={latexValue}
+        varNames={varNames}
         onChange={(latex) => {
           const text = latexToText(latex);
           update(entry.id, { raw: text, varValue: undefined });

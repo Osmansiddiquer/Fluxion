@@ -5,6 +5,7 @@ import { greekWordToGlyph } from '../../lib/math/greek';
 import type { Entry } from '../../store/types';
 import VariableSlider from './VariableSlider';
 import IVPControls from './IVPControls';
+import PolarControls from './PolarControls';
 import EquationField from './EquationField';
 import ColorPopover from './ColorPopover';
 
@@ -17,7 +18,7 @@ function badgeFor(kind: string | undefined, order?: number): string | null {
     case 'variable':
       return 'var';
     case 'implicit':
-      return 'implicit';
+      return null;
     case 'polar':
       return 'polar';
     default:
@@ -45,6 +46,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
     kind === 'function' ||
     kind === 'implicit' ||
     kind === 'polar' ||
+    kind === 'inequality' ||
     kind === 'points' ||
     kind === 'pointvar';
   let badge = badgeFor(kind, parsed && parsed.kind === 'ode' ? parsed.order : undefined);
@@ -54,7 +56,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
     const n = res?.points?.length ?? (parsed.kind === 'points' ? parsed.points.length : 1);
     badge = isLine ? 'line' : n > 1 ? 'points' : 'point';
   }
-  const hasControls = kind === 'variable' || kind === 'ode';
+  const hasControls = kind === 'variable' || kind === 'ode' || kind === 'polar';
 
   return (
     <div
@@ -154,6 +156,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
       {entry.expanded && parsed?.kind === 'ode' && (
         <IVPControls entry={entry} depVar={parsed.depVar} order={parsed.order} />
       )}
+      {entry.expanded && parsed?.kind === 'polar' && <PolarControls entry={entry} />}
     </div>
   );
 }

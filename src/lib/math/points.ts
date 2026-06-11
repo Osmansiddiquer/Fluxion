@@ -64,7 +64,6 @@ function parseOnePoint(str: string): PointSpec {
  * Recognise point literals:
  *   (a, b)                  -> single point
  *   [(x1,y1), (x2,y2), …]   -> scattered point array
- *   polyline((x1,y1), …)    -> connected polyline
  *   ((x1,y1), (x2,y2), …)   -> connected polyline (parens-of-points)
  * Returns null if the text isn't a point expression.
  */
@@ -74,10 +73,6 @@ export function parsePoints(input: string): PointsParsed | null {
   if (s.startsWith('[') && s.endsWith(']')) {
     const list = splitTopLevel(s.slice(1, -1));
     return { points: list.map(parseOnePoint), polyline: false, scattered: true };
-  }
-  if (/^polyline\s*\(/i.test(s) && s.endsWith(')')) {
-    const list = splitTopLevel(s.slice(s.indexOf('(') + 1, -1));
-    return { points: list.map(parseOnePoint), polyline: true, scattered: false };
   }
   if (s.startsWith('(') && s.endsWith(')')) {
     const inner = s.slice(1, -1);
@@ -100,7 +95,6 @@ export function parsePoints(input: string): PointsParsed | null {
 /** Does this text look like a point expression (cheap pre-check)? */
 export function looksLikePoints(input: string): boolean {
   const s = input.trim();
-  if (/^polyline\s*\(/i.test(s)) return true;
   if (s.startsWith('[') && s.includes('(')) return true;
   if (s.startsWith('(') && s.includes(',')) return true;
   return false;
@@ -118,7 +112,7 @@ export function formatPointsRaw(
 ): string {
   const pts = coords.map(([t, y]) => `(${fmtNum(t)}, ${fmtNum(y)})`);
   if (coords.length === 1 && !polyline) return pts[0];
-  if (polyline) return `polyline(${pts.join(', ')})`;
   if (scattered) return `[${pts.join(', ')}]`;
+  // A connected polyline is a parens-tuple of points: ((x1,y1), (x2,y2), …)
   return `(${pts.join(', ')})`;
 }

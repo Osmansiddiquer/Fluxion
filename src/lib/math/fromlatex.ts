@@ -65,6 +65,46 @@ function replaceSqrt(s: string): string {
   return out;
 }
 
+/** Index just past the `)` matching the `(` at `open`, or -1. */
+function parenEnd(s: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === '(') depth++;
+    else if (s[i] === ')' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Rewrite log with a subscript base — log_b(x) — to mathjs's log(x, b). The base
+ * may be an identifier/number or a (possibly nested) parenthesised expression. */
+function replaceLogBase(s: string): string {
+  let out = s;
+  let guard = 0;
+  let idx: number;
+  while ((idx = out.search(/\blog_/)) !== -1 && guard++ < 200) {
+    let p = idx + 4; // just past "log_"
+    let base: string;
+    if (out[p] === '(') {
+      const e = parenEnd(out, p);
+      if (e === -1) break;
+      base = out.slice(p + 1, e); // strip the outer parens of the base
+      p = e + 1;
+    } else {
+      const m = /^[A-Za-z0-9.]+/.exec(out.slice(p));
+      if (!m) break;
+      base = m[0];
+      p += m[0].length;
+    }
+    p = skipSpace(out, p);
+    if (out[p] !== '(') break; // no parenthesised argument
+    const e = parenEnd(out, p);
+    if (e === -1) break;
+    const arg = out.slice(p + 1, e);
+    out = out.slice(0, idx) + `log(${arg}, ${base})` + out.slice(e + 1);
+  }
+  return out;
+}
+
 /** Replace \operatorname{name} and \mathrm{name} with name. */
 function replaceWrapped(s: string, cmd: string): string {
   let out = s;
@@ -109,6 +149,12 @@ export function latexToText(latex: string): string {
   s = replaceFrac(s);
   s = replaceSqrt(s);
 
+  // Inequalities and conjunction (& joins region constraints).
+  s = s.replace(/\\leq/g, '<=').replace(/\\le(?![a-zA-Z])/g, '<=');
+  s = s.replace(/\\geq/g, '>=').replace(/\\ge(?![a-zA-Z])/g, '>=');
+  s = s.replace(/\\lt/g, '<').replace(/\\gt/g, '>');
+  s = s.replace(/\\land|\\wedge|\\&/g, '&');
+
   // Operators.
   s = s.replace(/\\cdot|\\times|\\ast/g, '*');
   s = s.replace(/\\div/g, '/');
@@ -124,6 +170,9 @@ export function latexToText(latex: string): string {
 
   // Remaining braces (exponent/grouping) become parentheses.
   s = s.replace(/\{/g, '(').replace(/\}/g, ')');
+
+  // log_b(x) -> log(x, b)  (after braces became parens so a base like x+1 works).
+  s = replaceLogBase(s);
 
   // Tidy.
   s = s.replace(/\\/g, '').replace(/\s+/g, ' ').trim();

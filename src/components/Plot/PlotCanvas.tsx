@@ -268,11 +268,52 @@ export default function PlotCanvas() {
     const tf = makeTransform(viewport, size.w, size.h);
     drawGrid(ctx, tf, readGridColors());
 
+    // Inequality regions (shaded), drawn under the curves. A coarse pixel grid is
+    // filled where the test holds; the boundary curve gives the crisp edge.
+    for (const entry of entries) {
+      const res = analysis.results.get(entry.id);
+      if (!res || !entry.visible || !res.inequality) continue;
+      const { test } = res.inequality;
+      const STEP = 6;
+      ctx.fillStyle = entry.color;
+      ctx.globalAlpha = 0.16;
+      for (let px = 0; px < size.w; px += STEP) {
+        const t = tf.ix(px + STEP / 2);
+        for (let py = 0; py < size.h; py += STEP) {
+          if (test(t, tf.iy(py + STEP / 2))) ctx.fillRect(px, py, STEP, STEP);
+        }
+      }
+      ctx.globalAlpha = 1;
+    }
+
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    const drawSegs = (segs: [number, number][][]) => {
+      for (const seg of segs) {
+        ctx.beginPath();
+        for (let i = 0; i < seg.length; i++) {
+          const px = tf.tx(seg[i][0]);
+          const py = tf.ty(seg[i][1]);
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+    };
     for (const entry of entries) {
       const res = analysis.results.get(entry.id);
       if (!res || !entry.visible) continue;
+      // Inequality boundaries: dashed when strict (< >), solid when inclusive (≤ ≥).
+      if (res.inequality) {
+        ctx.strokeStyle = entry.color;
+        ctx.lineWidth = 2;
+        for (const b of res.inequality.boundaries) {
+          ctx.setLineDash(b.strict ? [5, 4] : []);
+          drawSegs(b.segments);
+        }
+        ctx.setLineDash([]);
+        continue;
+      }
       ctx.strokeStyle = entry.color;
       ctx.lineWidth = 2.25;
       for (const seg of res.curve.segments) {

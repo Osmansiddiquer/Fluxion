@@ -49,6 +49,16 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
       return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
     case 'polar':
       return `r = ${postTex(parsed.rNode.toTex())}`;
+    case 'inequality': {
+      const OP = { '<': '<', '>': '>', '<=': '\\le ', '>=': '\\ge ' } as const;
+      return parsed.conjuncts
+        .map((c) => {
+          let s = texOf(c.operands[0]);
+          for (let i = 0; i < c.ops.length; i++) s += ` ${OP[c.ops[i]]} ${texOf(c.operands[i + 1])}`;
+          return s;
+        })
+        .join(' \\wedge ');
+    }
     default:
       return null;
   }

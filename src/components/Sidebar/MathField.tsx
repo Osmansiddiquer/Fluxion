@@ -1,6 +1,8 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import 'mathlive';
 import { MathfieldElement } from 'mathlive';
+import { suggestionsFor } from '../../lib/math/suggest';
+import { latexToText } from '../../lib/math/fromlatex';
 
 // MathLive needs its symbol fonts; serve them from a CDN matching the lib version.
 // (For fully offline/static hosting these can later be copied into /public.)
@@ -25,6 +27,7 @@ export default function MathField({
   onEnter,
   onFocusChange,
   className,
+  varNames,
 }: {
   /** LaTeX to display (applied only while the field is not focused). */
   value: string;
@@ -33,6 +36,8 @@ export default function MathField({
   onEnter?: () => void;
   onFocusChange?: (focused: boolean) => void;
   className?: string;
+  /** Defined variable names, offered as autocomplete suggestions. */
+  varNames?: string[];
 }) {
   const ref = useRef<MathfieldElement>(null);
   const focused = useRef(false);
@@ -40,6 +45,28 @@ export default function MathField({
   valueRef.current = value;
   const cbs = useRef({ onChange, onEnter, onFocusChange });
   cbs.current = { onChange, onEnter, onFocusChange };
+  const varNamesRef = useRef(varNames ?? []);
+  varNamesRef.current = varNames ?? [];
+
+  // Autocomplete state. Refs mirror it for the (once-registered) keydown handler.
+  const [suggs, setSuggs] = useState<string[]>([]);
+  const [sel, setSel] = useState(0);
+  const tokenRef = useRef('');
+  const suggsRef = useRef<string[]>([]);
+  const selRef = useRef(0);
+  suggsRef.current = suggs;
+  selRef.current = sel;
+
+  const accept = (i: number) => {
+    const mf = ref.current;
+    const pick = suggsRef.current[i];
+    if (!mf || !pick) return;
+    mf.insert(pick.slice(tokenRef.current.length));
+    setSuggs([]);
+    cbs.current.onChange(mf.value);
+  };
+  const acceptRef = useRef(accept);
+  acceptRef.current = accept;
 
   useEffect(() => {
     const mf = ref.current;
@@ -60,7 +87,20 @@ export default function MathField({
     if (className) mf.className = className;
     mf.value = value;
 
-    const onInput = () => cbs.current.onChange(mf.value);
+    const refreshSuggestions = () => {
+      const text = latexToText(mf.value);
+      const m = /([A-Za-z][A-Za-z0-9]*)$/.exec(text);
+      const token = m && m[1].length >= 2 ? m[1] : '';
+      tokenRef.current = token;
+      const list = token ? suggestionsFor(token, varNamesRef.current) : [];
+      setSuggs(list);
+      setSel(0);
+    };
+
+    const onInput = () => {
+      cbs.current.onChange(mf.value);
+      refreshSuggestions();
+    };
     const onFocusIn = () => {
       focused.current = true;
       cbs.current.onFocusChange?.(true);
@@ -68,6 +108,7 @@ export default function MathField({
     const onFocusOut = () => {
       focused.current = false;
       cbs.current.onFocusChange?.(false);
+      setSuggs([]);
       // Re-feed the canonical LaTeX after editing so editor-internal forms (e.g.
       // \doubleprime, which renders oddly) normalise to our display form.
       requestAnimationFrame(() => {
@@ -75,6 +116,29 @@ export default function MathField({
       });
     };
     const onKey = (e: KeyboardEvent) => {
+      const list = suggsRef.current;
+      if (list.length) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          setSel((s) => (s + 1) % list.length);
+          return;
+        }
+        if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          setSel((s) => (s - 1 + list.length) % list.length);
+          return;
+        }
+        if (e.key === 'Tab' || (e.key === 'Enter' && list.length)) {
+          e.preventDefault();
+          acceptRef.current(selRef.current);
+          return;
+        }
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          setSuggs([]);
+          return;
+        }
+      }
       if (e.key === 'Enter') {
         e.preventDefault();
         mf.blur();
@@ -116,5 +180,28 @@ export default function MathField({
     return () => clearTimeout(id);
   }, [value]);
 
-  return <math-field ref={ref} />;
+  return (
+    <span className="mf-wrap">
+      <math-field ref={ref} />
+      {suggs.length > 0 && (
+        <ul className="mf-suggest" role="listbox">
+          {suggs.map((s, i) => (
+            <li
+              key={s}
+              role="option"
+              aria-selected={i === sel}
+              className={i === sel ? 'sel' : undefined}
+              // pointerdown (not click) so it fires before the field blurs.
+              onPointerDown={(e) => {
+                e.preventDefault();
+                accept(i);
+              }}
+            >
+              {s}
+            </li>
+          ))}
+        </ul>
+      )}
+    </span>
+  );
 }

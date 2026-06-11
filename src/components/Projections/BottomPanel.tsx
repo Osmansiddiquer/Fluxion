@@ -64,7 +64,8 @@ export default function BottomPanel() {
             (x.res.parsed.kind === 'function' ||
               x.res.parsed.kind === 'ode' ||
               x.res.parsed.kind === 'implicit' ||
-              x.res.parsed.kind === 'polar'),
+              x.res.parsed.kind === 'polar' ||
+              x.res.parsed.kind === 'inequality'),
         ),
     [entries, results],
   );

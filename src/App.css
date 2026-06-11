@@ -29,6 +29,23 @@
   font-size: 17px;
   letter-spacing: -0.02em;
 }
+.beta-tag {
+  margin-left: -2px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  line-height: 1;
+  align-self: center;
+}
+/* Report-a-bug link reuses .icon-btn; just keep it from looking like a link. */
+a.report-bug {
+  text-decoration: none;
+}
 .topbar-spacer {
   flex: 1;
 }

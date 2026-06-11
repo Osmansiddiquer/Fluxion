@@ -18,6 +18,11 @@ export interface CurveResult {
   unknownFns?: string[];
   /** Marker coordinates for a 'points' entry. */
   points?: [number, number][];
+  /** Shaded-region test + per-constraint boundaries for an 'inequality' entry. */
+  inequality?: {
+    test: (t: number, y: number) => boolean;
+    boundaries: { segments: Point[][]; strict: boolean }[];
+  };
 }
 
 type OdeParsed = Extract<Parsed, { kind: 'ode' }>;
@@ -64,19 +69,30 @@ function unknownFunctions(parsed: Parsed): string[] {
   if (parsed.kind === 'polar') {
     return [...calledFunctions(parsed.rNode)].filter((f) => !KNOWN_FUNCTIONS.has(f));
   }
+  if (parsed.kind === 'inequality') {
+    const fns = new Set<string>();
+    for (const p of parsed.parts) for (const f of calledFunctions(p.node)) fns.add(f);
+    return [...fns].filter((f) => !KNOWN_FUNCTIONS.has(f));
+  }
   return [];
 }
 
 /** Sample a polar curve r = f(θ) as the parametric (x, y) = (r·cosθ, r·sinθ)
- * polyline over θ ∈ [0, 2π]. Breaks the polyline where r is undefined. */
-function samplePolar(rEval: { evaluate: (scope: object) => unknown }, scope: Record<string, number>): SampledCurve {
-  const N = 720;
-  const TWO_PI = Math.PI * 2;
+ * polyline over θ ∈ [thetaMin, thetaMax]. Breaks the polyline where r is undefined. */
+function samplePolar(
+  rEval: { evaluate: (scope: object) => unknown },
+  scope: Record<string, number>,
+  thetaMin: number,
+  thetaMax: number,
+): SampledCurve {
+  const span = thetaMax - thetaMin;
+  // ~720 samples per full turn, capped, so wide sweeps stay smooth but bounded.
+  const N = Math.max(2, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 720)));
   const ps = { ...scope } as Record<string, number>;
   const segments: Point[][] = [];
   let cur: Point[] = [];
   for (let i = 0; i <= N; i++) {
-    const th = (i / N) * TWO_PI;
+    const th = thetaMin + (i / N) * span;
     ps['θ'] = th;
     ps.theta = th;
     let r: unknown;
@@ -266,8 +282,53 @@ export function computeAll(
         const curve = sampleImplicit(compileNode(parsed.node), scope, viewport);
         results.set(entry.id, { parsed, curve });
       } else if (parsed.kind === 'polar') {
-        const curve = samplePolar(compileNode(parsed.rNode), scope);
+        const tMinP = entry.thetaMin ?? 0;
+        const tMaxP = entry.thetaMax ?? Math.PI * 2;
+        const curve = samplePolar(compileNode(parsed.rNode), scope, tMinP, tMaxP);
         results.set(entry.id, { parsed, curve });
+      } else if (parsed.kind === 'inequality') {
+        // Each constraint contributes a boundary curve; the region is their AND.
+        // Wrap so r and θ are always derived from (t, y) — this makes polar
+        // constraints (r < f(θ)) work for both the test and the boundary contour.
+        const polarWrap = (c: ReturnType<typeof compileNode>) => ({
+          evaluate: (s: Record<string, number>): unknown => {
+            s.r = Math.hypot(s.t, s.y);
+            s['θ'] = Math.atan2(s.y, s.t);
+            s.theta = s['θ'];
+            return c.evaluate(s);
+          },
+        });
+        const sc: Record<string, number> = { ...scope };
+        const compiled = parsed.parts.map((p) => ({ ev: polarWrap(compileNode(p.node)), op: p.op }));
+        const test = (t: number, y: number): boolean => {
+          sc.t = t;
+          sc.y = y;
+          for (const c of compiled) {
+            let v: unknown;
+            try {
+              v = c.ev.evaluate(sc);
+            } catch {
+              return false;
+            }
+            if (typeof v !== 'number' || Number.isNaN(v)) return false;
+            const ok = c.op === '<' ? v < 0 : c.op === '<=' ? v <= 0 : c.op === '>' ? v > 0 : v >= 0;
+            if (!ok) return false;
+          }
+          return true;
+        };
+        const boundaries = parsed.parts.map((p) => ({
+          segments: sampleImplicit(
+            polarWrap(compileNode(p.node)) as unknown as Parameters<typeof sampleImplicit>[0],
+            scope,
+            viewport,
+          ).segments,
+          strict: p.op === '<' || p.op === '>',
+        }));
+        results.set(entry.id, {
+          parsed,
+          curve: { segments: boundaries.flatMap((b) => b.segments) },
+          inequality: { test, boundaries },
+        });
       } else if (parsed.kind === 'points') {
         // Reinterpret a single (A, B) as a line when both are point-variables.
         let specs = parsed.points;

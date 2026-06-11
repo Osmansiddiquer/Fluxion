@@ -78,7 +78,18 @@ export type Parsed =
       rNode: MathNode;
       deps: string[];
       raw: string;
+    }
+  | {
+      kind: 'inequality';
+      /** AND of constraints; the region is where every `node` satisfies its `op` 0. */
+      parts: { node: MathNode; op: IneqOp }[];
+      /** Comparison chains (one per &-conjunct) for display. */
+      conjuncts: { operands: string[]; ops: IneqOp[] }[];
+      deps: string[];
+      raw: string;
     };
+
+export type IneqOp = '<' | '>' | '<=' | '>=';
 
 const DERIV_TOKEN = /^D(\d+)_([A-Za-z]\w*)$/;
 
@@ -114,6 +125,59 @@ function stateSymbolsFor(depVar: string, order: number): string[] {
   const syms = [depVar];
   for (let k = 1; k < order; k++) syms.push(`D${k}_${depVar}`);
   return syms;
+}
+
+/** Split a string on a separator char at the top level (outside ()/[]). */
+function splitTopChar(s: string, sep: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth--;
+    else if (depth === 0 && c === sep) {
+      out.push(s.slice(start, i));
+      start = i + 1;
+    }
+  }
+  out.push(s.slice(start));
+  return out;
+}
+
+/** Split a comparison chain (a < b <= c) into its operands and operators. */
+function splitComparisons(s: string): { operands: string[]; ops: IneqOp[] } {
+  const operands: string[] = [];
+  const ops: IneqOp[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '[') depth++;
+    else if (c === ')' || c === ']') depth--;
+    else if (depth === 0 && (c === '<' || c === '>')) {
+      operands.push(s.slice(start, i).trim());
+      const two = s[i + 1] === '=';
+      ops.push((two ? c + '=' : c) as IneqOp);
+      if (two) i++;
+      start = i + 1;
+    }
+  }
+  operands.push(s.slice(start).trim());
+  return { operands, ops };
+}
+
+/** Parse a (possibly compound) inequality: chained a<b<c and &-joined conjuncts. */
+function parseInequality(
+  s: string,
+): { conjuncts: { operands: string[]; ops: IneqOp[] }[] } | null {
+  if (!/[<>]/.test(s)) return null;
+  const conjuncts = splitTopChar(s, '&')
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .map(splitComparisons);
+  if (conjuncts.some((c) => c.ops.length === 0)) return null;
+  return { conjuncts };
 }
 
 function splitEquation(s: string): [string, string] | null {
@@ -179,7 +243,7 @@ function parseEntryUncached(raw: string): Parsed {
 
   const normalized = normalizeInput(trimmed);
 
-  // Point literals: (a,b), [(x,y),…], polyline(…), ((x,y),(x,y),…)
+  // Point literals: (a,b), [(x,y),…], ((x,y),(x,y),…)
   if (looksLikePoints(normalized)) {
     try {
       const pts = parsePoints(normalized);
@@ -199,6 +263,31 @@ function parseEntryUncached(raw: string): Parsed {
           raw,
         };
       }
+    } catch (err) {
+      return { kind: 'error', message: friendlyError(err) };
+    }
+  }
+
+  // Inequalities: y < f(t), t²+y² ≤ 9, 1 < y < sin(t), a<f & b>g … → a shaded
+  // region where every LHS−RHS constraint satisfies its operator vs 0.
+  const ineq = parseInequality(normalized);
+  if (ineq) {
+    try {
+      const parts: { node: MathNode; op: IneqOp }[] = [];
+      const deps = new Set<string>();
+      for (const { operands, ops } of ineq.conjuncts) {
+        for (let i = 0; i < ops.length; i++) {
+          const node = mjParse(`(${operands[i]}) - (${operands[i + 1]})`);
+          parts.push({ node, op: ops[i] });
+          // t, y are the axes; r, θ are the polar coordinates derived from them.
+          for (const sym of freeSymbols(node)) {
+            if (sym !== INDEP && sym !== 'y' && sym !== 'r' && sym !== 'θ' && sym !== 'theta') {
+              deps.add(sym);
+            }
+          }
+        }
+      }
+      return { kind: 'inequality', parts, conjuncts: ineq.conjuncts, deps: [...deps], raw };
     } catch (err) {
       return { kind: 'error', message: friendlyError(err) };
     }
