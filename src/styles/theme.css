@@ -1,0 +1,128 @@
+/* Design tokens. Light is the default; dark is applied when data-theme="dark",
+   or when the OS prefers dark and data-theme="system". */
+:root {
+  --bg: #f4f6f9;
+  --surface: #ffffff;
+  --surface-2: #f3f5f8;
+  --surface-hover: #eaeef3;
+  --surface-sunken: #f7f9fb; /* recessed chrome (sidebar) — barely-there cool tint vs the white canvas */
+  --border: #e6e9ef;
+  --border-strong: #d3d9e2;
+
+  --text: #222a35;
+  --text-muted: #5d6877;
+  --text-faint: #98a2af;
+
+  --accent: #2d70b3;
+  --accent-hover: #255e97;
+  --accent-soft: #e9f1fa;
+
+  --danger: #c74440;
+  --danger-soft: #fbeaea;
+  --warning: #b8860b;
+
+  --plot-bg: #ffffff;
+  --grid-minor: #f0f3f7;
+  --grid-major: #dde3ec;
+  --axis: #97a1af;
+  --axis-text: #6b7686;
+  --cursor: #ef8f1c;
+
+  --radius-sm: 7px;
+  --radius: 11px;
+  --radius-lg: 15px;
+  --shadow-sm: 0 1px 2px rgba(20, 30, 45, 0.06);
+  --shadow: 0 6px 20px rgba(20, 30, 45, 0.10);
+  --shadow-lg: 0 14px 40px rgba(20, 30, 45, 0.16);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+
+  --panel-w: 248px;
+  --panel-h: 184px;
+
+  --font: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica,
+    Arial, sans-serif;
+  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', ui-monospace, Menlo, Consolas,
+    monospace;
+}
+
+/* Dark token block, shared by explicit dark and system+OS-dark. */
+:root[data-theme='dark'] {
+  --bg: #14171c;
+  --surface: #1c2027;
+  --surface-2: #232831;
+  --surface-hover: #2b313c;
+  --surface-sunken: #161a20; /* recessed chrome (sidebar) */
+  --border: #2c333e;
+  --border-strong: #3a424f;
+  --text: #e8ecf2;
+  --text-muted: #9aa6b4;
+  --text-faint: #69727f;
+  --accent: #4d92d6;
+  --accent-hover: #62a1de;
+  --accent-soft: #1e2d3d;
+  --danger: #e06b67;
+  --danger-soft: #2e1f1f;
+  --plot-bg: #181c22;
+  --grid-minor: #21262e;
+  --grid-major: #333b46;
+  --axis: #5c6675;
+  --axis-text: #8a95a3;
+  --cursor: #f0a000;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 14px 40px rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme='system'] {
+    --bg: #14171c;
+    --surface: #1c2027;
+    --surface-2: #232831;
+    --surface-hover: #2b313c;
+    --surface-sunken: #161a20;
+    --border: #2c333e;
+    --border-strong: #3a424f;
+    --text: #e8ecf2;
+    --text-muted: #9aa6b4;
+    --text-faint: #69727f;
+    --accent: #4d92d6;
+    --accent-hover: #62a1de;
+    --accent-soft: #1e2d3d;
+    --danger: #e06b67;
+    --danger-soft: #2e1f1f;
+    --plot-bg: #181c22;
+    --grid-minor: #21262e;
+    --grid-major: #333b46;
+    --axis: #5c6675;
+    --axis-text: #8a95a3;
+    --cursor: #f0a000;
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 14px 40px rgba(0, 0, 0, 0.5);
+  }
+}
+
+/* Theme segmented control (topbar). */
+.theme-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+.theme-seg-btn {
+  width: 28px;
+  height: 24px;
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-muted);
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.theme-seg-btn:hover {
+  color: var(--text);
+}
+.theme-seg-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}

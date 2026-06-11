@@ -1,0 +1,125 @@
+.proj-panel {
+  position: relative;
+  background: var(--surface-sunken);
+  flex-shrink: 0;
+}
+.proj-right {
+  width: var(--panel-w);
+  border-left: 1px solid var(--border);
+}
+.proj-bottom {
+  height: var(--panel-h);
+  border-top: 1px solid var(--border);
+}
+
+.proj-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 6px 10px 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg, var(--surface-sunken) 55%, transparent);
+}
+.proj-bottom .proj-head {
+  background: linear-gradient(
+    180deg,
+    var(--surface-sunken) 70%,
+    color-mix(in srgb, var(--surface-sunken) 20%, transparent)
+  );
+}
+.proj-title b {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.slice-input {
+  width: 56px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 2px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: auto;
+}
+.slice-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.slice-input-invalid {
+  border-color: var(--error, #d92d20);
+  color: var(--error, #d92d20);
+  background: color-mix(in srgb, var(--error, #d92d20) 8%, var(--surface));
+}
+.proj-head .icon-btn {
+  pointer-events: auto;
+}
+
+.proj-body {
+  position: absolute;
+  inset: 0;
+}
+.proj-canvas {
+  display: block;
+  touch-action: none;
+}
+
+/* Drag handles to resize a panel. */
+.panel-resize {
+  position: absolute;
+  z-index: 4;
+  background: transparent;
+  transition: background 0.12s var(--ease);
+}
+.panel-resize:hover,
+.panel-resize:active {
+  background: var(--accent);
+}
+.panel-resize-v {
+  top: 0;
+  bottom: 0;
+  left: -3px;
+  width: 7px;
+  cursor: ew-resize;
+}
+.panel-resize-h {
+  left: 0;
+  right: 0;
+  top: -3px;
+  height: 7px;
+  cursor: ns-resize;
+}
+
+/* Collapsed reopen tabs -------------------------------------------------- */
+.panel-reopen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.panel-reopen:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.panel-reopen-right {
+  width: 22px;
+  border-left: 1px solid var(--border);
+  font-size: 16px;
+}
+.panel-reopen-bottom {
+  height: 22px;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}

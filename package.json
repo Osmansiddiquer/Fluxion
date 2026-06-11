@@ -1,0 +1,30 @@
+{
+  "name": "ode-plotter",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "A Desmos-like grapher specialized for plotting numerical solutions of ODEs.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b --noEmit"
+  },
+  "dependencies": {
+    "@types/katex": "^0.16.8",
+    "katex": "^0.17.0",
+    "mathjs": "^14.0.1",
+    "mathlive": "^0.110.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.20",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.6.3",
+    "vite": "^6.0.3"
+  }
+}

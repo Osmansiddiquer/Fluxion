@@ -1,0 +1,649 @@
+.sidebar-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Entry row -------------------------------------------------------------- */
+.entry {
+  border-bottom: 1px solid var(--border);
+  transition: background 0.12s var(--ease);
+}
+.entry:hover {
+  background: var(--surface-2);
+}
+.entry-hidden .entry-tex,
+.entry-hidden .entry-input {
+  opacity: 0.5;
+}
+
+.entry-main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 10px;
+}
+
+.entry-grip {
+  flex-shrink: 0;
+  cursor: grab;
+  color: var(--text-faint);
+  font-size: 13px;
+  line-height: 1;
+  letter-spacing: -2px;
+  opacity: 0;
+  user-select: none;
+  transition: opacity 0.12s var(--ease);
+}
+.entry:hover .entry-grip {
+  opacity: 0.7;
+}
+.entry-grip:active {
+  cursor: grabbing;
+}
+.entry-drop {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.entry-color-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+.entry-color {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.1s var(--ease);
+}
+.entry-color:hover {
+  transform: scale(1.12);
+}
+.entry-color-err {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.entry-index {
+  display: inline-block;
+  width: 20px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Equation field (inline MathLive editor) */
+.eqfield {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+}
+math-field.math-field {
+  display: block;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+  padding: 2px 0;
+  --caret-color: var(--accent);
+  --selection-background-color: var(--accent-soft);
+  --selection-color: var(--text);
+  --contains-highlight-background-color: transparent;
+  --smart-fence-color: var(--text-muted);
+  --placeholder-color: var(--text-faint);
+}
+math-field.math-field::part(menu-toggle),
+math-field.math-field::part(virtual-keyboard-toggle),
+math-field.math-field::part(content) {
+  /* hide the editor chrome; keep just the math */
+}
+math-field.math-field::part(menu-toggle) {
+  display: none;
+}
+math-field.math-field::part(virtual-keyboard-toggle) {
+  display: none;
+}
+.entry-input {
+  width: 100%;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--mono);
+  font-size: 15px;
+  padding: 5px 2px;
+  color: var(--text);
+}
+.entry-input::placeholder {
+  color: var(--text-faint);
+  font-family: var(--font);
+  font-size: 13px;
+}
+.entry-tex {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  padding: 5px 2px;
+  cursor: text;
+  overflow-x: auto;
+  white-space: nowrap;
+  color: var(--text);
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+}
+.entry-tex .katex {
+  font-size: 1.04em;
+}
+
+/* Live preview shown beneath the input while typing */
+.eq-preview {
+  margin-top: 4px;
+  padding: 5px 8px;
+  font-size: 16px;
+  color: var(--text);
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+.eq-preview .katex {
+  font-size: 1.02em;
+}
+
+/* Autocomplete */
+.autocomplete {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 2px);
+  left: 0;
+  min-width: 150px;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.autocomplete li {
+  padding: 5px 9px;
+  border-radius: var(--radius-sm);
+  font-family: var(--mono);
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text);
+}
+.autocomplete li.ac-active,
+.autocomplete li:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.entry-badge {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+.badge-ode {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.badge-function {
+  font-size: 13px;
+  font-style: italic;
+}
+.badge-variable {
+  background: #f3eefc;
+  color: #6042a6;
+}
+.badge-implicit {
+  background: #e8f5ee;
+  color: #2f8a52;
+}
+.badge-points {
+  background: #fdeede;
+  color: #b9651b;
+}
+:root[data-theme='dark'] .badge-points {
+  background: #2b2013;
+  color: #e0954f;
+}
+:root[data-theme='dark'] .badge-variable {
+  background: #271e3a;
+  color: #b39ddb;
+}
+:root[data-theme='dark'] .badge-implicit {
+  background: #16271d;
+  color: #6cc08b;
+}
+
+.entry-expand,
+.entry-del {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  font-size: 12px;
+}
+.entry-del:hover {
+  color: var(--danger);
+  background: var(--danger-soft);
+}
+
+/* Define prompt + errors */
+.entry-define {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: -4px 12px 11px 42px;
+}
+.define-msg {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+.define-btn {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition: border-color 0.12s var(--ease);
+}
+.define-btn:hover {
+  border-color: var(--accent);
+}
+.entry-error {
+  margin: -4px 12px 11px 42px;
+  font-size: 12.5px;
+  color: var(--danger);
+  line-height: 1.4;
+}
+
+/* Color popover --------------------------------------------------------- */
+.color-pop {
+  position: absolute;
+  z-index: 30;
+  top: 28px;
+  left: 0;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  width: 184px;
+}
+.color-swatches {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.color-swatch {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  transition: transform 0.1s var(--ease);
+}
+.color-swatch:hover {
+  transform: scale(1.12);
+}
+.color-swatch.selected {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--border-strong);
+}
+.color-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.color-custom {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.color-custom input[type='color'] {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+.color-vis {
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 550;
+}
+.color-vis:hover {
+  background: var(--surface-hover);
+}
+
+/* Point options (inside the colour popover) ------------------------------ */
+.point-opts {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.point-opt-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.point-opt-label {
+  width: 34px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.point-opt-label-row {
+  align-items: flex-start;
+}
+.seg {
+  display: flex;
+  flex: 1;
+  gap: 2px;
+  padding: 2px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.seg-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 22px;
+  padding: 2px 0;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 550;
+  color: var(--text-muted);
+}
+.seg-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+
+/* Point controls --------------------------------------------------------- */
+.point-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px 14px 42px;
+}
+.point-label-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  padding: 6px 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.point-label-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.dir-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 14px);
+  grid-template-rows: repeat(3, 14px);
+  gap: 2px;
+  flex-shrink: 0;
+}
+.dir-cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+.dir-cell:hover {
+  background: var(--surface-hover);
+}
+.dir-cell.sel {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.dir-center {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.dir-center::after {
+  content: '';
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+
+/* Variable slider -------------------------------------------------------- */
+.var-slider,
+.ivp {
+  padding: 4px 14px 14px 42px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.var-readout {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+}
+.var-name {
+  font-weight: 600;
+}
+.var-eq {
+  color: var(--text-muted);
+}
+.var-value {
+  width: 92px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 4px 7px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+}
+.var-track {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.var-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 9px;
+  padding-left: 2px;
+}
+.play-ctrl {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.play-btn,
+.play-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-muted);
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.play-btn:hover,
+.play-mode:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.play-btn.playing {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Compact speed slider — visually distinct from the value slider: short, thin
+   track, small muted thumb, in a pill with a gauge icon and the ×value. */
+.speed-slider {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+  padding: 3px 9px;
+  background: var(--surface-2);
+  border-radius: 999px;
+}
+.speed-ico {
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+.speed-range {
+  flex: 1;
+  min-width: 40px;
+  height: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.speed-range::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.speed-range::-moz-range-track {
+  height: 3px;
+  border-radius: 2px;
+  background: var(--border);
+}
+.speed-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.speed-range::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: none;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.speed-val {
+  min-width: 30px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+.var-bound {
+  width: 48px;
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.var-bound:first-child {
+  text-align: left;
+}
+.var-bound:last-child {
+  text-align: right;
+}
+
+/* IVP controls ----------------------------------------------------------- */
+.ivp-row {
+  display: grid;
+  grid-template-columns: 52px 1fr auto 64px;
+  align-items: center;
+  gap: 7px;
+}
+.ivp-label {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.ivp-num {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: 4px 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  width: 100%;
+  color: var(--text);
+}
+
+/* Add button (sits right below the last entry, full width) --------------- */
+.add-entry {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 13px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 13.5px;
+  font-weight: 500;
+  background: transparent;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.add-entry:hover {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.add-plus {
+  font-size: 16px;
+  line-height: 1;
+}

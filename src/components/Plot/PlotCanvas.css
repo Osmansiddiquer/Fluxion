@@ -1,0 +1,130 @@
+.plot {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: var(--plot-bg);
+}
+
+.plot-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  touch-action: none;
+  cursor: grab;
+}
+.plot-canvas:active {
+  cursor: grabbing;
+}
+
+.plot-tooltip {
+  position: absolute;
+  transform: translate(-50%, calc(-100% - 12px));
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 5;
+}
+.tt-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.tt-kind {
+  font-weight: 600;
+}
+.tt-coords {
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.point-label {
+  position: absolute;
+  pointer-events: none;
+  font-size: 14px;
+  z-index: 4;
+  white-space: nowrap;
+  text-shadow:
+    0 0 2px var(--plot-bg),
+    0 0 2px var(--plot-bg);
+}
+
+/* Feature toggle control ------------------------------------------------- */
+.feat {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 6;
+}
+.feat-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text);
+}
+.feat-btn:hover {
+  background: var(--surface-hover);
+}
+.feat-icon {
+  font-size: 14px;
+  color: var(--accent);
+}
+.feat-count {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+}
+.feat-menu {
+  margin-top: 6px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 180px;
+}
+.feat-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  cursor: pointer;
+}
+.feat-item:hover {
+  background: var(--surface-2);
+}
+.feat-item input {
+  accent-color: var(--accent);
+  width: 15px;
+  height: 15px;
+}

@@ -1,0 +1,213 @@
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  padding: 0 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  z-index: 10;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* Wordmark: confident ink, no gradient. The Ḟ mark carries the concept (Newton's
+   fluxion = a dotted letter); the word just needs to be clean and well-set. */
+.brand-name {
+  color: var(--text);
+  font-weight: 640;
+  font-size: 17px;
+  letter-spacing: -0.02em;
+}
+.topbar-spacer {
+  flex: 1;
+}
+
+.sigfig {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 4px 3px 9px;
+  background: var(--surface-2);
+  border-radius: 999px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.sigfig-mark {
+  font-family: var(--mono);
+  letter-spacing: -1px;
+}
+.sigfig-select {
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 1px;
+}
+.sigfig-select:focus {
+  outline: none;
+}
+
+/* Share / save menu --------------------------------------------------------- */
+.graph-menu {
+  position: relative;
+  display: inline-flex;
+}
+.graph-menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  min-width: 168px;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.18));
+}
+.graph-menu-pop button {
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+}
+.graph-menu-pop button:hover {
+  background: var(--surface-hover);
+}
+.graph-toast {
+  position: fixed;
+  top: 60px;
+  right: 16px;
+  z-index: 60;
+  padding: 9px 14px;
+  background: var(--text);
+  color: var(--surface);
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 550;
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.2));
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.sidebar {
+  flex-shrink: 0;
+  background: var(--surface-sunken);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.resizer {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  background: var(--border);
+  position: relative;
+  transition: background 0.12s var(--ease);
+}
+.resizer:hover,
+.resizer:active {
+  background: var(--accent);
+}
+
+.stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.top-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  min-width: 0;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-faint);
+  font-size: 13px;
+  user-select: none;
+}
+
+/* The drawer toggle + backdrop only exist on small screens; hidden otherwise.
+   `.topbar` prefix keeps this above .icon-btn's own display rule. */
+.topbar .sidebar-toggle {
+  display: none;
+}
+.sidebar-backdrop {
+  display: none;
+}
+
+/* Phone / narrow layout: the sidebar becomes a slide-in drawer over the graph. */
+@media (max-width: 760px) {
+  .topbar {
+    gap: 8px;
+    padding: 0 10px;
+  }
+  .topbar .sidebar-toggle {
+    display: inline-flex;
+  }
+  /* No dragging to resize on touch layouts. */
+  .resizer {
+    display: none;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 52px;
+    left: 0;
+    bottom: 0;
+    width: min(86vw, 340px) !important;
+    z-index: 40;
+    border-right: 1px solid var(--border);
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-100%);
+    transition: transform 0.22s var(--ease);
+  }
+  .sidebar.sidebar-open {
+    transform: translateX(0);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 52px 0 0 0;
+    background: rgba(10, 14, 20, 0.38);
+    z-index: 35;
+    animation: backdrop-in 0.18s var(--ease);
+  }
+}
+
+@keyframes backdrop-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
