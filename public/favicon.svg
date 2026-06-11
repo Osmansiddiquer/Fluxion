@@ -1,0 +1,8 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fluxion mark: Ḟ (Newton's fluxion notation) on a brand badge -->
+  <rect width="32" height="32" rx="7" fill="#2d70b3" />
+  <g stroke="#ffffff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M11 11 H22 M11 11 V24 M11 17 H19" />
+  </g>
+  <circle cx="13" cy="6" r="2.3" fill="#ffffff" />
+</svg>

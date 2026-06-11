@@ -3,8 +3,62 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-    <meta name="description" content="Plot and inspect numerical solutions of ODEs — a Desmos-like grapher for differential equations." />
-    <title>ODE Plotter</title>
+
+    <title>Fluxion — Plot &amp; explore differential equations</title>
+    <meta
+      name="description"
+      content="A free, browser-based grapher for differential equations: solve ODEs numerically (RK4), plot slope fields and implicit curves, and explore solutions interactively."
+    />
+    <link rel="canonical" href="https://osmansiddiquer.github.io/Fluxion/" />
+    <meta name="author" content="Osman Siddique" />
+    <meta name="keywords" content="ODE, differential equations, grapher, plotter, RK4, slope field, phase portrait, math, calculus, Desmos" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14171c" media="(prefers-color-scheme: dark)" />
+
+    <!-- Icons -->
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
+    <link rel="apple-touch-icon" href="apple-touch-icon.png" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Fluxion" />
+    <meta property="og:title" content="Fluxion — Plot &amp; explore differential equations" />
+    <meta
+      property="og:description"
+      content="An interactive grapher for differential equations. Solve ODEs numerically (RK4), plot slope fields and implicit curves, right in your browser."
+    />
+    <meta property="og:url" content="https://osmansiddiquer.github.io/Fluxion/" />
+    <meta property="og:image" content="https://osmansiddiquer.github.io/Fluxion/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Fluxion — a grapher for differential equations, showing a solution curve." />
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Fluxion — Plot &amp; explore differential equations" />
+    <meta
+      name="twitter:description"
+      content="An interactive grapher for differential equations. Solve ODEs numerically (RK4), plot slope fields and implicit curves, right in your browser."
+    />
+    <meta name="twitter:image" content="https://osmansiddiquer.github.io/Fluxion/og.png" />
+    <meta name="twitter:image:alt" content="Fluxion — a grapher for differential equations, showing a solution curve." />
+
+    <!-- Structured data for richer search results -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Fluxion",
+        "url": "https://osmansiddiquer.github.io/Fluxion/",
+        "description": "A free, browser-based grapher for differential equations: solve ODEs numerically (RK4), plot slope fields and implicit curves, and explore solutions interactively.",
+        "applicationCategory": "EducationalApplication",
+        "operatingSystem": "Any (web browser)",
+        "browserRequirements": "Requires JavaScript",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Person", "name": "Osman Siddique" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
