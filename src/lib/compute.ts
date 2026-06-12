@@ -1,4 +1,4 @@
-import { parseEntry, calledFunctions, type Parsed } from './math/parse';
+import { parseEntry, calledFunctions, hasSymbol, type Parsed } from './math/parse';
 import { buildSystem } from './math/reduce';
 import { compileNode } from './math/compileCache';
 import { KNOWN_FUNCTIONS } from './math/builtins';
@@ -26,6 +26,17 @@ export interface CurveResult {
 }
 
 type OdeParsed = Extract<Parsed, { kind: 'ode' }>;
+
+// Per-entry result cache: a curve is re-sampled only when one of its real inputs
+// (expression, viewport, samples, the variable values it depends on, …) changes.
+// During an animation or a single-slider drag this skips re-sampling every *other*
+// curve — marching-squares (implicit/inequality) is the expensive one to avoid.
+const RESULT_CACHE = new Map<string, { key: string; result: CurveResult }>();
+// ODE integration is cached per coupling-group (keyed by the group's member ids).
+const ODE_GROUP_CACHE = new Map<
+  string,
+  { key: string; curves: Map<string, SampledCurve>; errors: Map<string, string> }
+>();
 
 function resolveIC(ic: number[] | undefined, order: number): number[] {
   const out = new Array<number>(order).fill(0);
@@ -193,6 +204,26 @@ export function computeAll(
   const odeError = new Map<string, string>();
   for (const idxs of groups.values()) {
     const members = idxs.map((i) => odes[i]);
+    // Cache the (expensive) RK4 integration: a group re-integrates only when a
+    // member's expression / IVP / a referenced variable / the t-range changes.
+    const cacheId = members.map((m) => m.entry.id).sort().join('+');
+    const groupDeps = new Set<string>();
+    for (const m of members) for (const d of m.parsed.deps) groupDeps.add(baseVar(d));
+    const depSig = [...groupDeps]
+      .map((d) => (d in scope ? scope[d] : 'u'))
+      .join(',');
+    const memberSig = members
+      .map((m) => `${m.entry.id}:${m.entry.raw}:${m.entry.t0 ?? ''}:${m.entry.ic?.join('_') ?? ''}`)
+      .join(';');
+    const gkey = `${memberSig}|${depSig}|${tMin}|${tMax}|${samples}`;
+    const cached = ODE_GROUP_CACHE.get(cacheId);
+    if (cached && cached.key === gkey) {
+      for (const [id, c] of cached.curves) odeCurve.set(id, c);
+      for (const [id, e] of cached.errors) odeError.set(id, e);
+      continue;
+    }
+    const curves = new Map<string, SampledCurve>();
+    const errors = new Map<string, string>();
     try {
       const system = buildSystem(members.map((m) => m.parsed), scope);
       const y0 = new Array<number>(system.dim).fill(0);
@@ -211,64 +242,81 @@ export function computeAll(
       });
       const traj = integrateSystem(system.deriv, { t0, y0, tMin, tMax, samples });
       system.blocks.forEach((block, b) => {
-        odeCurve.set(members[b].entry.id, extractComponent(traj, block.offset));
+        curves.set(members[b].entry.id, extractComponent(traj, block.offset));
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      for (const i of idxs) odeError.set(odes[i].entry.id, msg);
+      for (const i of idxs) errors.set(odes[i].entry.id, msg);
     }
+    for (const [id, c] of curves) odeCurve.set(id, c);
+    for (const [id, e] of errors) odeError.set(id, e);
+    ODE_GROUP_CACHE.set(cacheId, { key: gkey, curves, errors });
   }
 
+  // The set of names defined anywhere folds into each entry's cache key, so a
+  // definition appearing/disappearing elsewhere invalidates the cached curve.
+  const definedKey =
+    [...varNames].sort().join(',') +
+    ';' +
+    [...depVars].sort().join(',') +
+    ';' +
+    [...pointvarNames].sort().join(',');
+  // Serialise the values an entry depends on (variables, and point-variable coords).
+  const depKey = (deps: string[]): string =>
+    deps
+      .map((d) => {
+        if (d in scope) return scope[d];
+        const p = pointScope.get(d);
+        return p ? `${p[0]}_${p[1]}` : 'u';
+      })
+      .join(',');
+
   for (const { entry, parsed } of parsedList) {
-    if (parsed.kind === 'empty' || parsed.kind === 'variable') {
-      results.set(entry.id, { parsed, curve: EMPTY_CURVE });
-      continue;
-    }
-    if (parsed.kind === 'error') {
-      results.set(entry.id, { parsed, curve: EMPTY_CURVE, error: parsed.message });
-      continue;
-    }
+    const computeOne = (): CurveResult => {
+      if (parsed.kind === 'empty' || parsed.kind === 'variable') {
+        return { parsed, curve: EMPTY_CURVE };
+      }
+      if (parsed.kind === 'error') {
+        return { parsed, curve: EMPTY_CURVE, error: parsed.message };
+      }
 
-    // A bare reference to a point-valued variable (parsed as a function `y = A`).
-    let barePoint: string | undefined;
-    if (parsed.kind === 'function') {
-      const nm = loneSymbol(parsed.node as unknown as { type?: string; name?: string });
-      if (nm && pointvarNames.has(nm)) barePoint = nm;
-    }
+      // A bare reference to a point-valued variable (parsed as a function `y = A`).
+      let barePoint: string | undefined;
+      if (parsed.kind === 'function') {
+        const nm = loneSymbol(parsed.node as unknown as { type?: string; name?: string });
+        if (nm && pointvarNames.has(nm)) barePoint = nm;
+      }
 
-    // Validation common to plottable kinds.
-    const unknownFns = unknownFunctions(parsed);
-    let defined: Set<string>;
-    if (parsed.kind === 'ode') defined = new Set([...varNames, ...depVars]);
-    else if (parsed.kind === 'points') defined = new Set([...varNames, ...pointvarNames]);
-    else defined = varNames;
-    const undefinedVars = barePoint ? [] : parsed.deps.filter((d) => !defined.has(d));
+      // Validation common to plottable kinds.
+      const unknownFns = unknownFunctions(parsed);
+      let defined: Set<string>;
+      if (parsed.kind === 'ode') defined = new Set([...varNames, ...depVars]);
+      else if (parsed.kind === 'points') defined = new Set([...varNames, ...pointvarNames]);
+      else defined = varNames;
+      const undefinedVars = barePoint ? [] : parsed.deps.filter((d) => !defined.has(d));
 
-    if (unknownFns.length) {
-      results.set(entry.id, {
-        parsed,
-        curve: EMPTY_CURVE,
-        unknownFns,
-        error: `Unknown function: ${unknownFns.join(', ')}`,
-      });
-      continue;
-    }
-    if (undefinedVars.length) {
-      results.set(entry.id, { parsed, curve: EMPTY_CURVE, undefinedVars });
-      continue;
-    }
-    if (!entry.visible) {
-      results.set(entry.id, { parsed, curve: EMPTY_CURVE });
-      continue;
-    }
+      if (unknownFns.length) {
+        return {
+          parsed,
+          curve: EMPTY_CURVE,
+          unknownFns,
+          error: `Unknown function: ${unknownFns.join(', ')}`,
+        };
+      }
+      if (undefinedVars.length) {
+        return { parsed, curve: EMPTY_CURVE, undefinedVars };
+      }
+      if (!entry.visible) {
+        return { parsed, curve: EMPTY_CURVE };
+      }
 
-    try {
+      try {
       if (barePoint) {
         const coord = pointScope.get(barePoint);
-        results.set(entry.id, { parsed, curve: EMPTY_CURVE, points: coord ? [coord] : [] });
+        return { parsed, curve: EMPTY_CURVE, points: coord ? [coord] : [] };
       } else if (parsed.kind === 'pointvar') {
         const coord = pointScope.get(parsed.name);
-        results.set(entry.id, { parsed, curve: EMPTY_CURVE, points: coord ? [coord] : [] });
+        return { parsed, curve: EMPTY_CURVE, points: coord ? [coord] : [] };
       } else if (parsed.kind === 'function') {
         const curve = sampleFunction(compileNode(parsed.node), scope, {
           tMin,
@@ -277,58 +325,132 @@ export function computeAll(
           yMin: viewport.yMin,
           yMax: viewport.yMax,
         });
-        results.set(entry.id, { parsed, curve });
+        return { parsed, curve };
       } else if (parsed.kind === 'implicit') {
         const curve = sampleImplicit(compileNode(parsed.node), scope, viewport);
-        results.set(entry.id, { parsed, curve });
+        return { parsed, curve };
       } else if (parsed.kind === 'polar') {
         const tMinP = entry.thetaMin ?? 0;
         const tMaxP = entry.thetaMax ?? Math.PI * 2;
         const curve = samplePolar(compileNode(parsed.rNode), scope, tMinP, tMaxP);
-        results.set(entry.id, { parsed, curve });
+        return { parsed, curve };
       } else if (parsed.kind === 'inequality') {
         // Each constraint contributes a boundary curve; the region is their AND.
-        // Wrap so r and θ are always derived from (t, y) — this makes polar
-        // constraints (r < f(θ)) work for both the test and the boundary contour.
-        const polarWrap = (c: ReturnType<typeof compileNode>) => ({
-          evaluate: (s: Record<string, number>): unknown => {
-            s.r = Math.hypot(s.t, s.y);
-            s['θ'] = Math.atan2(s.y, s.t);
-            s.theta = s['θ'];
-            return c.evaluate(s);
-          },
-        });
+        const TWO_PI = Math.PI * 2;
+        const thMin = entry.thetaMin ?? 0;
+        const thMax = entry.thetaMax ?? TWO_PI;
+        const parts = parsed.parts.map((p) => ({
+          ev: compileNode(p.node),
+          op: p.op,
+          // A polar part references r or θ — its θ is the swept angle, not a position.
+          polar:
+            hasSymbol(p.node, 'r') || hasSymbol(p.node, 'θ') || hasSymbol(p.node, 'theta'),
+        }));
+        const anyPolar = parts.some((p) => p.polar);
         const sc: Record<string, number> = { ...scope };
-        const compiled = parsed.parts.map((p) => ({ ev: polarWrap(compileNode(p.node)), op: p.op }));
+        const okOp = (v: unknown, op: typeof parts[number]['op']): boolean =>
+          typeof v === 'number' &&
+          Number.isFinite(v) &&
+          (op === '<' ? v < 0 : op === '<=' ? v <= 0 : op === '>' ? v > 0 : v >= 0);
+
+        // Region test. For polar constraints the angle is swept, so a point is inside
+        // if ANY θ ≡ φ (mod 2π) within [thMin, thMax] satisfies every part — this both
+        // clips to a θ-sector and lets a spiral (r < 2θ) keep filling for wider ranges.
         const test = (t: number, y: number): boolean => {
           sc.t = t;
           sc.y = y;
-          for (const c of compiled) {
-            let v: unknown;
-            try {
-              v = c.ev.evaluate(sc);
-            } catch {
-              return false;
+          if (!anyPolar) {
+            for (const p of parts) {
+              let v: unknown;
+              try {
+                v = p.ev.evaluate(sc);
+              } catch {
+                return false;
+              }
+              if (!okOp(v, p.op)) return false;
             }
-            if (typeof v !== 'number' || Number.isNaN(v)) return false;
-            const ok = c.op === '<' ? v < 0 : c.op === '<=' ? v <= 0 : c.op === '>' ? v > 0 : v >= 0;
-            if (!ok) return false;
+            return true;
           }
-          return true;
+          sc.r = Math.hypot(t, y);
+          let phi = Math.atan2(y, t);
+          if (phi < 0) phi += TWO_PI;
+          for (let k = Math.ceil((thMin - phi) / TWO_PI - 1e-9); ; k++) {
+            const th = phi + TWO_PI * k;
+            if (th > thMax + 1e-9) break;
+            if (th < thMin - 1e-9) continue;
+            sc['θ'] = th;
+            sc.theta = th;
+            let allOk = true;
+            for (const p of parts) {
+              let v: unknown;
+              try {
+                v = p.ev.evaluate(sc);
+              } catch {
+                v = NaN;
+              }
+              if (!okOp(v, p.op)) {
+                allOk = false;
+                break;
+              }
+            }
+            if (allOk) return true;
+          }
+          return false;
         };
-        const boundaries = parsed.parts.map((p) => ({
-          segments: sampleImplicit(
-            polarWrap(compileNode(p.node)) as unknown as Parameters<typeof sampleImplicit>[0],
-            scope,
-            viewport,
-          ).segments,
+
+        // Boundaries: a polar part (r OP f(θ), linear in r) is drawn as a true polar
+        // curve over [thMin, thMax] so it spirals out across turns; other parts use
+        // marching squares.
+        const polarScope: Record<string, number> = { ...scope };
+        const samplePolarBoundary = (ev: ReturnType<typeof compileNode>): Point[][] => {
+          const span = thMax - thMin;
+          const N = Math.max(2, Math.min(12000, Math.round((Math.abs(span) / TWO_PI) * 720)));
+          const segs: Point[][] = [];
+          let cur: Point[] = [];
+          const at = (th: number, r: number): number => {
+            polarScope['θ'] = th;
+            polarScope.theta = th;
+            polarScope.r = r;
+            try {
+              const v = ev.evaluate(polarScope);
+              return typeof v === 'number' ? v : NaN;
+            } catch {
+              return NaN;
+            }
+          };
+          for (let i = 0; i <= N; i++) {
+            const th = thMin + (i / N) * span;
+            // Solve the (assumed linear-in-r) constraint f(r,θ)=0 for r.
+            const b = at(th, 0);
+            const a = at(th, 1) - b;
+            const r = a !== 0 ? -b / a : NaN;
+            if (Number.isFinite(r) && r >= 0) {
+              cur.push([r * Math.cos(th), r * Math.sin(th)]);
+            } else if (cur.length >= 2) {
+              segs.push(cur);
+              cur = [];
+            } else {
+              cur = [];
+            }
+          }
+          if (cur.length >= 2) segs.push(cur);
+          return segs;
+        };
+        const boundaries = parts.map((p) => ({
+          segments: p.polar
+            ? samplePolarBoundary(p.ev)
+            : sampleImplicit(
+                p.ev as unknown as Parameters<typeof sampleImplicit>[0],
+                scope,
+                viewport,
+              ).segments,
           strict: p.op === '<' || p.op === '>',
         }));
-        results.set(entry.id, {
+        return {
           parsed,
           curve: { segments: boundaries.flatMap((b) => b.segments) },
           inequality: { test, boundaries },
-        });
+        };
       } else if (parsed.kind === 'points') {
         // Reinterpret a single (A, B) as a line when both are point-variables.
         let specs = parsed.points;
@@ -354,16 +476,48 @@ export function computeAll(
           }
         }
         const curve = polyline && coords.length >= 2 ? { segments: [coords] } : EMPTY_CURVE;
-        results.set(entry.id, { parsed, curve, points: coords });
+        return { parsed, curve, points: coords };
       } else {
         const err = odeError.get(entry.id);
-        if (err) results.set(entry.id, { parsed, curve: EMPTY_CURVE, error: err });
-        else results.set(entry.id, { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE });
+        if (err) return { parsed, curve: EMPTY_CURVE, error: err };
+        return { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE };
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      results.set(entry.id, { parsed, curve: EMPTY_CURVE, error: msg });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { parsed, curve: EMPTY_CURVE, error: msg };
+      }
+    };
+
+    // Re-sample only when a real input changed. Cheap kinds (points, ODE reads,
+    // empty/var/error) aren't cached — their loop body is already trivial.
+    const cacheable =
+      parsed.kind === 'function' ||
+      parsed.kind === 'implicit' ||
+      parsed.kind === 'polar' ||
+      parsed.kind === 'inequality';
+    if (cacheable) {
+      const key =
+        `${parsed.kind}|${entry.raw}|${entry.visible ? 1 : 0}|` +
+        `${tMin},${tMax},${viewport.yMin},${viewport.yMax}|${samples}|` +
+        `${entry.thetaMin ?? ''},${entry.thetaMax ?? ''}|${depKey(parsed.deps)}|${definedKey}`;
+      const hit = RESULT_CACHE.get(entry.id);
+      if (hit && hit.key === key) {
+        results.set(entry.id, hit.result);
+        continue;
+      }
+      const result = computeOne();
+      RESULT_CACHE.set(entry.id, { key, result });
+      results.set(entry.id, result);
+    } else {
+      results.set(entry.id, computeOne());
     }
+  }
+
+  // Drop cache slots for entries that no longer exist, keeping the maps bounded.
+  const liveIds = new Set(entries.map((e) => e.id));
+  for (const id of [...RESULT_CACHE.keys()]) if (!liveIds.has(id)) RESULT_CACHE.delete(id);
+  for (const gid of [...ODE_GROUP_CACHE.keys()]) {
+    if (gid.split('+').some((id) => !liveIds.has(id))) ODE_GROUP_CACHE.delete(gid);
   }
 
   return results;

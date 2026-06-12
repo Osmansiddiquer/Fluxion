@@ -56,7 +56,8 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
     const n = res?.points?.length ?? (parsed.kind === 'points' ? parsed.points.length : 1);
     badge = isLine ? 'line' : n > 1 ? 'points' : 'point';
   }
-  const hasControls = kind === 'variable' || kind === 'ode' || kind === 'polar';
+  const polarIneq = parsed?.kind === 'inequality' && parsed.polar;
+  const hasControls = kind === 'variable' || kind === 'ode' || kind === 'polar' || polarIneq;
 
   return (
     <div
@@ -156,7 +157,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
       {entry.expanded && parsed?.kind === 'ode' && (
         <IVPControls entry={entry} depVar={parsed.depVar} order={parsed.order} />
       )}
-      {entry.expanded && parsed?.kind === 'polar' && <PolarControls entry={entry} />}
+      {entry.expanded && (parsed?.kind === 'polar' || polarIneq) && <PolarControls entry={entry} />}
     </div>
   );
 }

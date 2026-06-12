@@ -85,6 +85,8 @@ export type Parsed =
       parts: { node: MathNode; op: IneqOp }[];
       /** Comparison chains (one per &-conjunct) for display. */
       conjuncts: { operands: string[]; ops: IneqOp[] }[];
+      /** Uses r/θ — a polar region, so a θ-sweep range applies. */
+      polar: boolean;
       deps: string[];
       raw: string;
     };
@@ -224,6 +226,41 @@ function zeroOut(node: MathNode, symbol: string): MathNode {
   );
 }
 
+/** Does the node reference `name` as a symbol (not a function name)? */
+export function hasSymbol(node: MathNode, name: string): boolean {
+  let found = false;
+  node.traverse((n: MathNode, path: string | null, parent: MathNode | null) => {
+    if ((n as { type: string }).type !== 'SymbolNode') return;
+    if (parent && (parent as { type: string }).type === 'FunctionNode' && path === 'fn') return;
+    if ((n as unknown as { name: string }).name === name) found = true;
+  });
+  return found;
+}
+
+/** x is the independent variable when it's used and t isn't (Desmos-style). When
+ * both appear, t is independent and x is just a (possibly undefined) variable. */
+function xIsIndependent(node: MathNode): boolean {
+  return hasSymbol(node, 'x') && !hasSymbol(node, 't');
+}
+
+/** Rewrite every standalone `x` to `t` so x can serve as the horizontal axis. */
+function rewriteXtoT(node: MathNode): MathNode {
+  return node.transform((n) =>
+    (n as { isSymbolNode?: boolean }).isSymbolNode &&
+    (n as unknown as { name: string }).name === 'x'
+      ? mjParse('t')
+      : n,
+  );
+}
+
+function rewriteXtoTStr(expr: string): string {
+  try {
+    return rewriteXtoT(mjParse(expr)).toString();
+  } catch {
+    return expr;
+  }
+}
+
 // Parsing (especially the symbolic ODE solve) is expensive and viewport-independent,
 // so cache by raw text — this keeps pan/zoom and slider drags cheap.
 const parseCache = new Map<string, Parsed>();
@@ -273,9 +310,28 @@ function parseEntryUncached(raw: string): Parsed {
   const ineq = parseInequality(normalized);
   if (ineq) {
     try {
+      // Canonicalise x → t across the whole inequality when x is the independent.
+      let anyX = false;
+      let anyT = false;
+      for (const c of ineq.conjuncts) {
+        for (const op of c.operands) {
+          try {
+            const n = mjParse(op);
+            if (hasSymbol(n, 'x')) anyX = true;
+            if (hasSymbol(n, 't')) anyT = true;
+          } catch {
+            /* ignore unparseable operand here; the loop below will report it */
+          }
+        }
+      }
+      const conjuncts =
+        anyX && !anyT
+          ? ineq.conjuncts.map((c) => ({ operands: c.operands.map(rewriteXtoTStr), ops: c.ops }))
+          : ineq.conjuncts;
+
       const parts: { node: MathNode; op: IneqOp }[] = [];
       const deps = new Set<string>();
-      for (const { operands, ops } of ineq.conjuncts) {
+      for (const { operands, ops } of conjuncts) {
         for (let i = 0; i < ops.length; i++) {
           const node = mjParse(`(${operands[i]}) - (${operands[i + 1]})`);
           parts.push({ node, op: ops[i] });
@@ -287,7 +343,10 @@ function parseEntryUncached(raw: string): Parsed {
           }
         }
       }
-      return { kind: 'inequality', parts, conjuncts: ineq.conjuncts, deps: [...deps], raw };
+      const polar = parts.some(
+        (p) => hasSymbol(p.node, 'r') || hasSymbol(p.node, 'θ') || hasSymbol(p.node, 'theta'),
+      );
+      return { kind: 'inequality', parts, conjuncts, polar, deps: [...deps], raw };
     } catch (err) {
       return { kind: 'error', message: friendlyError(err) };
     }
@@ -298,10 +357,11 @@ function parseEntryUncached(raw: string): Parsed {
   // No '=' -> bare expression, function of t.
   if (!split) {
     try {
-      const node = mjParse(normalized);
+      let node = mjParse(normalized);
       if ([...freeSymbols(node)].some((s) => DERIV_TOKEN.test(s))) {
         return { kind: 'error', message: 'Write the ODE as an equation, e.g. y′ = …' };
       }
+      if (xIsIndependent(node)) node = rewriteXtoT(node);
       const deps = [...freeSymbols(node)].filter((s) => s !== INDEP);
       return { kind: 'function', name: 'y', node, deps, raw };
     } catch (err) {
@@ -362,6 +422,18 @@ function parseEntryUncached(raw: string): Parsed {
     return { kind: 'error', message: 'Ambiguous: isolate one derivative on a side' };
   }
   if (high) return parseODE(high.depVar, high.order, combined, lhs, rhs, raw);
+
+  // x as the independent (e.g. y = x², x² + y² = 9): canonicalise x → t. Skipped
+  // for ODEs above, where x may be a coupled dependent variable.
+  if (xIsIndependent(combined)) {
+    const l = rewriteXtoTStr(lhs);
+    const r = rewriteXtoTStr(rhs);
+    try {
+      return parseRelation(l, r, mjParse(`(${l}) - (${r})`), raw);
+    } catch {
+      /* fall through to the original */
+    }
+  }
 
   return parseRelation(lhs, rhs, combined, raw);
 }

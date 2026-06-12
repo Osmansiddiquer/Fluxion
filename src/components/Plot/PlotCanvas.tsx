@@ -166,7 +166,9 @@ export default function PlotCanvas() {
         .filter(
           (x) =>
             x.res &&
-            (x.res.parsed.kind === 'implicit' || x.res.parsed.kind === 'polar') &&
+            (x.res.parsed.kind === 'implicit' ||
+              x.res.parsed.kind === 'polar' ||
+              x.res.parsed.kind === 'inequality') &&
             x.res.curve.segments.length > 0,
         ),
     [entries, analysis],
@@ -288,28 +290,27 @@ export default function PlotCanvas() {
 
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
-    const drawSegs = (segs: [number, number][][]) => {
-      for (const seg of segs) {
-        ctx.beginPath();
-        for (let i = 0; i < seg.length; i++) {
-          const px = tf.tx(seg[i][0]);
-          const py = tf.ty(seg[i][1]);
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.stroke();
-      }
-    };
     for (const entry of entries) {
       const res = analysis.results.get(entry.id);
       if (!res || !entry.visible) continue;
-      // Inequality boundaries: dashed when strict (< >), solid when inclusive (≤ ≥).
+      // Inequality boundaries: dotted when strict (< >, excluded), solid when
+      // inclusive (≤ ≥). Draw each boundary as ONE path so the dash phase carries
+      // across the many short marching-squares segments (otherwise it looks solid).
       if (res.inequality) {
         ctx.strokeStyle = entry.color;
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2.25;
         for (const b of res.inequality.boundaries) {
-          ctx.setLineDash(b.strict ? [5, 4] : []);
-          drawSegs(b.segments);
+          ctx.setLineDash(b.strict ? [2, 4] : []);
+          ctx.beginPath();
+          for (const seg of b.segments) {
+            for (let i = 0; i < seg.length; i++) {
+              const px = tf.tx(seg[i][0]);
+              const py = tf.ty(seg[i][1]);
+              if (i === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+          }
+          ctx.stroke();
         }
         ctx.setLineDash([]);
         continue;
@@ -535,9 +536,13 @@ export default function PlotCanvas() {
       if (f.aId === entryId || f.bId === entryId) consider(f);
     }
     if (snap) return { entryId, ...(snap as { t: number; y: number; label: string }) };
-    // Implicit/polar curves are multi-valued: trace the nearest point on the curve.
+    // Implicit/polar/inequality boundaries are multi-valued: trace the nearest point.
     const res = analysis.results.get(entryId);
-    if (res?.parsed.kind === 'implicit' || res?.parsed.kind === 'polar') {
+    if (
+      res?.parsed.kind === 'implicit' ||
+      res?.parsed.kind === 'polar' ||
+      res?.parsed.kind === 'inequality'
+    ) {
       const np = nearestPointOnCurve(res.curve, mx, my, tf);
       if (np) return { entryId, t: np.t, y: np.y };
       return pin && pin.entryId === entryId ? pin : null;

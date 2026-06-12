@@ -1,5 +1,14 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import { computeAll, type CurveResult } from '../lib/compute';
+import type { Entry } from '../store/types';
 import { computeFeatures } from '../lib/analysis/features';
 import { computeIntersections, curveIntersections } from '../lib/analysis/intersections';
 import { detectSingularities } from '../lib/analysis/singularities';
@@ -24,6 +33,23 @@ const EMPTY: Analysis = {
   sliceStatus: { tValid: true, yValid: true },
 };
 const AnalysisContext = createContext<Analysis>(EMPTY);
+
+/**
+ * A string capturing only the fields of `entries` that actually affect the
+ * computed curves/features. Styling-and-UX-only edits (colour, expanded, point
+ * size, label, animation, variable-slider bounds) leave this unchanged, so the
+ * expensive recompute below is skipped entirely. Order is significant (ODE t0
+ * ordering + intersection pairing), so we keep the entries in array order.
+ */
+function computeSignature(entries: Entry[]): string {
+  let s = '';
+  for (const e of entries) {
+    s += `${e.id}${e.raw}${e.visible ? 1 : 0}${e.t0 ?? ''}${
+      e.ic?.join(',') ?? ''
+    }${e.varValue ?? ''}${e.thetaMin ?? ''}${e.thetaMax ?? ''}`;
+  }
+  return s;
+}
 
 /**
  * Computes every entry's curve and its inspection features once per
@@ -51,7 +77,15 @@ export function ResultsProvider({ children }: { children: ReactNode }) {
   const sampleCount = Math.min(4000, Math.max(800, Math.round(winW * 1.5)));
   const wantDiscontinuities = useStore((s) => s.features.discontinuities);
 
+  // The memo below recomputes only when a compute-relevant input changes; it
+  // reads the latest entries through a ref so a styling-only edit (which bumps
+  // `entries`' identity but not the signature) is a true no-op.
+  const entriesRef = useRef(entries);
+  entriesRef.current = entries;
+  const computeSig = useMemo(() => computeSignature(entries), [entries]);
+
   const analysis = useMemo<Omit<Analysis, 'sliceStatus'>>(() => {
+    const entries = entriesRef.current;
     const results = computeAll(entries, viewport, sampleCount);
     const scope = buildVarScope(entries);
 
@@ -95,7 +129,8 @@ export function ResultsProvider({ children }: { children: ReactNode }) {
     }
 
     return { results, features, intersections };
-  }, [entries, viewport, sampleCount, wantDiscontinuities]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [computeSig, viewport, sampleCount, wantDiscontinuities]);
 
   // Resolve parametric slice expressions (e.g. sliceT = "k") against the variable
   // scope so the projection cuts can be driven by a slider / animation, and track

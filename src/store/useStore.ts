@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Entry, FeatureToggles, Projections, ThemeMode, Viewport } from './types';
 import { nextColor } from '../utils/colors';
 import { setSigFigs as applySigFigs } from '../lib/format';
@@ -161,6 +161,25 @@ export const useStore = create<AppState>()(
     {
       name: 'ode-plotter',
       version: 2,
+      // Per-browser-tab state: read/write this tab's own sessionStorage so two
+      // open tabs are independent. Mirror to localStorage too, so a *fresh* tab
+      // (empty sessionStorage) starts from your last-edited graph and your work
+      // survives a browser restart.
+      storage: createJSONStorage(() => ({
+        getItem: (name) => sessionStorage.getItem(name) ?? localStorage.getItem(name),
+        setItem: (name, value) => {
+          sessionStorage.setItem(name, value);
+          try {
+            localStorage.setItem(name, value);
+          } catch {
+            /* localStorage may be full / blocked; sessionStorage still holds this tab */
+          }
+        },
+        removeItem: (name) => {
+          sessionStorage.removeItem(name);
+          localStorage.removeItem(name);
+        },
+      })),
       partialize: (s) => ({
         entries: s.entries,
         viewport: s.viewport,

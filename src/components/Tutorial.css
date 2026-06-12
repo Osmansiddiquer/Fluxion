@@ -1,0 +1,296 @@
+.tut-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(20, 30, 45, 0.42);
+  backdrop-filter: blur(3px);
+  animation: tut-fade 0.18s var(--ease);
+}
+@keyframes tut-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.tut-card {
+  position: relative;
+  width: min(620px, 100%);
+  max-height: calc(100vh - 40px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  animation: tut-pop 0.22s var(--ease);
+  overflow: hidden;
+}
+@keyframes tut-pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+}
+
+.tut-x {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  color: var(--text-faint);
+  font-size: 13px;
+  z-index: 2;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease);
+}
+.tut-x:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.tut-body {
+  padding: 34px 36px 22px;
+  overflow-y: auto;
+}
+.tut-step {
+  min-height: 252px;
+}
+
+/* --- Step headings --- */
+.tut-step h1 {
+  margin: 0;
+  font-size: 27px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.tut-step h1 span {
+  color: var(--accent);
+}
+.tut-step h2 {
+  margin: 0 0 4px;
+  font-size: 21px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+.tut-sub,
+.tut-lede {
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.tut-sub {
+  margin: 0 0 18px;
+  font-size: 14px;
+}
+
+/* --- Step 1: welcome --- */
+.tut-welcome {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.tut-mark {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 14px;
+  font-family: var(--mono);
+  font-size: 30px;
+  font-weight: 700;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: var(--radius);
+}
+.tut-lede {
+  margin: 12px auto 0;
+  max-width: 42ch;
+  font-size: 15px;
+}
+.tut-lede strong {
+  color: var(--text);
+}
+.tut-hero-row {
+  margin-top: 26px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 22px;
+  background: var(--surface-2);
+  border-radius: var(--radius);
+}
+.tut-hero-tex {
+  font-size: 19px;
+  color: var(--text);
+}
+.tut-arrow {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+/* --- Step 2: syntax grid --- */
+.tut-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.tut-syntax {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.tut-syntax-tex {
+  font-size: 17px;
+  color: var(--text);
+}
+.tut-syntax-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+}
+
+/* --- Step 3: inspect list --- */
+.tut-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.tut-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--text);
+  line-height: 1.45;
+}
+.tut-li-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  font-size: 13px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 8px;
+}
+
+/* --- Step 4: example launchers --- */
+.tut-examples {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.tut-example {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 15px 16px;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.14s var(--ease), background 0.14s var(--ease),
+    transform 0.14s var(--ease);
+}
+.tut-example:hover {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  transform: translateY(-2px);
+}
+.tut-example-tex {
+  font-size: 18px;
+  color: var(--text);
+}
+.tut-example-title {
+  font-size: 14px;
+  font-weight: 650;
+  color: var(--text);
+}
+.tut-example-blurb {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* --- Footer / nav --- */
+.tut-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 24px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+.tut-dots {
+  display: flex;
+  gap: 7px;
+}
+.tut-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  transition: background 0.14s var(--ease), width 0.14s var(--ease);
+}
+.tut-dot:hover {
+  background: var(--text-faint);
+}
+.tut-dot.active {
+  width: 20px;
+  background: var(--accent);
+}
+.tut-nav {
+  display: flex;
+  gap: 8px;
+}
+.tut-btn,
+.tut-btn-ghost {
+  padding: 8px 18px;
+  border-radius: var(--radius-sm);
+  font-size: 13.5px;
+  font-weight: 600;
+  transition: background 0.14s var(--ease), color 0.14s var(--ease);
+}
+.tut-btn {
+  background: var(--accent);
+  color: #fff;
+}
+.tut-btn:hover {
+  background: var(--accent-hover);
+}
+.tut-btn-ghost {
+  color: var(--text-muted);
+}
+.tut-btn-ghost:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+@media (max-width: 560px) {
+  .tut-body {
+    padding: 30px 22px 18px;
+  }
+  .tut-grid,
+  .tut-examples {
+    grid-template-columns: 1fr;
+  }
+  .tut-hero-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+}

@@ -25,9 +25,13 @@ function postTex(tex: string): string {
   return s;
 }
 
+// `implicit: 'hide'` drops the · for implicit products the user didn't type — so
+// 2t shows as "2t", not "2·t", while an explicit pi*t keeps its ·.
+const TEX_OPTS = { implicit: 'hide' } as const;
+
 function texOf(src: string): string {
   try {
-    return postTex(mjParse(src).toTex());
+    return postTex(mjParse(src).toTex(TEX_OPTS));
   } catch {
     return src;
   }
@@ -43,12 +47,12 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
       if (parsed.lhs != null && parsed.rhs != null) {
         return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
       }
-      return `y = ${postTex(parsed.node.toTex())}`;
+      return `y = ${postTex(parsed.node.toTex(TEX_OPTS))}`;
     case 'ode':
     case 'implicit':
       return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
     case 'polar':
-      return `r = ${postTex(parsed.rNode.toTex())}`;
+      return `r = ${postTex(parsed.rNode.toTex(TEX_OPTS))}`;
     case 'inequality': {
       const OP = { '<': '<', '>': '>', '<=': '\\le ', '>=': '\\ge ' } as const;
       return parsed.conjuncts

@@ -7,6 +7,7 @@ import Logo from './components/Logo';
 import ThemeToggle from './components/ThemeToggle';
 import SigFigs from './components/SigFigs';
 import GraphMenu from './components/GraphMenu';
+import Tutorial from './components/Tutorial';
 import Resizer from './components/Resizer';
 import { ResultsProvider } from './state/results';
 import { useStore } from './store/useStore';
@@ -20,6 +21,19 @@ export default function App() {
   // On phones the sidebar becomes a slide-in drawer; on desktop CSS keeps it
   // docked and this flag is irrelevant. Closed by default so the graph leads.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // The getting-started tour auto-opens once per browser; the ? button reopens it.
+  const [tour, setTour] = useState(
+    () => typeof localStorage !== 'undefined' && !localStorage.getItem('fluxion-tour-seen'),
+  );
+  const closeTour = () => {
+    try {
+      localStorage.setItem('fluxion-tour-seen', '1');
+    } catch {
+      /* private mode — fine, it just reopens next visit */
+    }
+    setTour(false);
+  };
 
   // Apply the theme during render (before child effects read CSS vars), so canvases
   // redraw with the correct palette the moment the theme changes.
@@ -44,6 +58,14 @@ export default function App() {
             <span className="beta-tag">beta</span>
           </div>
           <div className="topbar-spacer" />
+          <button
+            className="icon-btn"
+            title="Getting started"
+            aria-label="Getting started"
+            onClick={() => setTour(true)}
+          >
+            <HelpIcon />
+          </button>
           <a
             className="icon-btn report-bug"
             href="https://github.com/Osmansiddiquer/Fluxion/issues"
@@ -79,8 +101,24 @@ export default function App() {
             />
           )}
         </div>
+        <Tutorial open={tour} onClose={closeTour} />
       </div>
     </ResultsProvider>
+  );
+}
+
+function HelpIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
+      <circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.5" />
+      <path
+        d="M7.1 6.9a1.9 1.9 0 1 1 2.6 1.76c-.5.22-.7.6-.7 1.04v.4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+      />
+      <circle cx="9" cy="12.7" r="0.85" fill="currentColor" />
+    </svg>
   );
 }
 

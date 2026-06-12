@@ -86,8 +86,19 @@ localStorage.setItem('ode-plotter',JSON.stringify(st));location.reload();
 - [ ] Drag the divider between sidebar and plot → resizes the sidebar.
 - [ ] Reload the page → all entries / view / theme restored (localStorage).
 
-## Pending (known not-yet-done; should fail or be absent)
-- Animatable sliders (play/loop/bounce).
-- Intersections / trace on implicit curves (circle ∩ line).
-- Projection per-curve "projection line" redesign.
-- Accurate discontinuity detection (sin(t)/t hole, sqrt(t²−4) domain gap).
+### Polar & inequalities
+- [ ] `r = 3sin(3θ)` → 3-petal rose; expand row → editable `θ [0]→[2π]` π-aware fields.
+- [ ] `r < 3` with `θ [0]→[π]` → upper half-disk, **dotted** boundary (strict `<`).
+- [ ] `r < 2θ` with `θ [0]→[4π]` → two-turn spiral region (boundary spirals across turns).
+- [ ] `1 < y < sin(t)` → two dotted boundaries, region only where satisfiable.
+
+### Performance (4× CPU throttle)
+- [ ] Styling-only edits (colour, expanded, point size, anim speed) don't recompute curves.
+- [ ] Dragging/animating a variable re-samples only the curves that depend on it; an
+      independent implicit/inequality curve is reused (no marching-squares re-run).
+- [ ] Pan/zoom + a playing slider together stay smooth.
+
+## All core features shipped
+Animatable sliders, implicit intersections/trace, projection redesign, accurate
+discontinuities, polar, inequalities, sharing/export, x/t interchange, tutorial, and the
+compute caches are all in. There is no longer a known-absent feature in this checklist.
