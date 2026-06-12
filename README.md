@@ -21,6 +21,8 @@ intersections.
 | `y = sin(t)/t` or `sin(t)` | Plain function of `t` (holes/asymptotes handled) |
 | `t^2 + y^2 = 9` | Implicit curve (marching squares) |
 | `r = 1 + cos(theta)` | Polar curve, drawn as the (x, y) parametric overlay |
+| `1 < y < sin(t)` | Inequality / shaded region (compound, strict vs inclusive) |
+| `r < 2*theta` | Polar inequality with an editable θ-sweep (a spiral region) |
 | `(1, 2)` | A single point |
 | `((0,0),(1,1),(2,3))` | A connected polyline (a parens-tuple of points) |
 | `[(0,0),(1,1),(2,3)]` | An array of scattered points |
@@ -35,13 +37,19 @@ intersections.
 - **Inspection markers** — extrema, roots, intercepts, intersections (works across
   functions, implicit, and polar curves), and accurate discontinuities (removable
   holes vs. asymptotes vs. domain edges).
+- **Inequalities** — shaded regions, compound (`1 < y < sin(t)`, `&`-joined annuli),
+  strict (dotted) vs inclusive (solid) boundaries, polar regions with a θ-sweep; shown
+  in the projection panels and traceable.
 - **Draggable points** with per-axis drag modes, sizes, and labels.
 - **Animatable sliders** — play / loop / bounce / once with a speed control.
 - **Linked projection panels** — per-curve cross-sections onto the y- and t-axes,
   with cut lines you drag on the graph (and that you can drive with a variable).
+- **Share & save** — export/import a graph file, or copy a shareable link; plus a
+  built-in getting-started tutorial.
 - **Polished UX** — light/dark/system themes, configurable significant figures,
   drag-to-reorder, resizable sidebar and panels, equal-aspect grid, power-notation
-  axes, `localStorage` persistence.
+  axes, and **per-tab** persistence (two browser tabs stay independent; your work
+  survives a refresh).
 
 ## Tech
 
