@@ -73,6 +73,10 @@ a.report-bug {
   cursor: pointer;
   padding: 2px 1px;
 }
+.sigfig-select option {
+  background: var(--surface);
+  color: var(--text);
+}
 .sigfig-select:focus {
   outline: none;
 }
