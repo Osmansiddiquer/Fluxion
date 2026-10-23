@@ -84,6 +84,9 @@ export function ResultsProvider({ children }: { children: ReactNode }) {
       const res = results.get(entry.id);
       if (!res || !entry.visible) continue;
       if (res.curve.segments.length === 0) continue;
+      // A phase-plane ODE is drawn as a parametric curve in state space: its
+      // (t, y) features and intersections would sit in the wrong coordinates.
+      if (res.ode?.phase) continue;
       if (res.parsed.kind === 'function' || res.parsed.kind === 'ode' || res.parsed.kind === 'fndef') {
         const feats = computeFeatures(res.curve, viewport);
         // Removable holes / undefined points (sin(t)/t at 0) need the symbolic

@@ -19,6 +19,8 @@ import { boxOutside, parametricBox, polarBox } from './math/bounds';
 import { specNodes, type PointSpec } from './math/points';
 import { PathBuilder, flattenOps, type Pt } from './geom/path';
 import { getFrameSequence } from './frames/assets';
+import { buildOdeInfo, familyGhosts, pruneOdeCaches, type Ghost, type OdeInfo, type SolvedGroup } from './ode/overlays';
+import { groupLeader, groupView, phaseRange, PHASE_SAMPLES } from './ode/view';
 import type { Entry, Viewport } from '../store/types';
 
 export interface CurveResult {
@@ -51,6 +53,10 @@ export interface CurveResult {
   /** Smooth point paths: the exact path as ops (lib/geom/path, Script mode's
    * format) in data coordinates; `curve` holds its flattened polyline. */
   path?: number[];
+  /** ODE qualitative view: phase plane, field, equilibria, extra solutions (lib/ode). */
+  ode?: OdeInfo;
+  /** Parameter-family ghost curves (a slider's `family` switch). */
+  ghosts?: Ghost[];
 }
 
 type OdeParsed = Extract<Parsed, { kind: 'ode' }>;
@@ -71,7 +77,7 @@ const RESULT_CACHE = new Map<string, { key: string; result: CurveResult }>();
 // ODE integration is cached per coupling-group (keyed by the group's member ids).
 const ODE_GROUP_CACHE = new Map<
   string,
-  { key: string; curves: Map<string, SampledCurve>; errors: Map<string, string> }
+  { key: string; curves: Map<string, SampledCurve>; errors: Map<string, string>; solved?: SolvedGroup }
 >();
 
 /** Max total copies a `for` repeat may draw. */
@@ -667,6 +673,7 @@ export function computeAll(
 
   const odeCurve = new Map<string, SampledCurve>();
   const odeError = new Map<string, string>();
+  const solvedGroups: SolvedGroup[] = [];
   for (const idxs of groups.values()) {
     const members = idxs.map((i) => odes[i]);
     // Cache the (expensive) RK4 integration: a group re-integrates only when a
@@ -681,13 +688,31 @@ export function computeAll(
       .map((m) => `${m.entry.id}:${m.entry.raw}:${m.entry.t0 ?? ''}:${m.entry.ic?.join('_') ?? ''}`)
       .join(';');
     const fnSig = members.some((m) => callsUser(m.parsed)) ? ectx.fnKey : '';
-    const gkey = `${memberSig}|${depSig}|${tMin}|${tMax}|${samples}|${fnSig}`;
+    // Phase plane: integrate a fixed window around t0 (the axes are state
+    // variables, so the viewport's x-range isn't a time range).
+    const view = groupView(
+      members.map((m) => m.entry),
+      members.flatMap((m) => m.parsed.stateSymbols),
+    );
+    const groupT0 = groupLeader(members.map((m) => m.entry), entries).t0 ?? 0;
+    const range = view.phase ? phaseRange(groupT0) : { tMin, tMax };
+    const steps = view.phase ? PHASE_SAMPLES : samples;
+    const gkey = `${memberSig}|${depSig}|${range.tMin}|${range.tMax}|${steps}|${fnSig}|${view.key}`;
     const cached = ODE_GROUP_CACHE.get(cacheId);
     if (cached && cached.key === gkey) {
       for (const [id, c] of cached.curves) odeCurve.set(id, c);
       for (const [id, e] of cached.errors) odeError.set(id, e);
+      // Non-key fields (extra solutions, field switch) are read from the live entries.
+      if (cached.solved) {
+        solvedGroups.push({
+          ...cached.solved,
+          entries: members.map((m) => m.entry),
+          leaderId: groupLeader(members.map((m) => m.entry), entries).id,
+        });
+      }
       continue;
     }
+    let solved: SolvedGroup | undefined;
     const curves = new Map<string, SampledCurve>();
     const errors = new Map<string, string>();
     try {
@@ -706,18 +731,38 @@ export function computeAll(
         const ic = resolveIC(members[b].entry.ic, block.order);
         for (let k = 0; k < block.order; k++) y0[block.offset + k] = ic[k];
       });
-      const traj = integrateSystem(system.deriv, { t0, y0, tMin, tMax, samples });
+      const traj = integrateSystem(system.deriv, { t0, y0, tMin: range.tMin, tMax: range.tMax, samples: steps });
       system.blocks.forEach((block, b) => {
         curves.set(members[b].entry.id, extractComponent(traj, block.offset));
       });
+      solved = {
+        entries: members.map((m) => m.entry),
+        parsed: members.map((m) => m.parsed),
+        system,
+        traj,
+        t0,
+        y0,
+        leaderId: groupLeader(members.map((m) => m.entry), entries).id,
+        view,
+        range,
+        steps,
+        rawSig: members.map((m) => `${m.entry.id}:${m.entry.raw}`).join(';'),
+        depSig: `${depSig}|${fnSig}`,
+        deps: [...groupDeps],
+        callsUser: !!fnSig,
+        scope,
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       for (const i of idxs) errors.set(odes[i].entry.id, msg);
     }
     for (const [id, c] of curves) odeCurve.set(id, c);
     for (const [id, e] of errors) odeError.set(id, e);
-    ODE_GROUP_CACHE.set(cacheId, { key: gkey, curves, errors });
+    ODE_GROUP_CACHE.set(cacheId, { key: gkey, curves, errors, solved });
+    if (solved) solvedGroups.push(solved);
   }
+  // Phase plane, field, equilibria, extra solutions (cached in lib/ode/overlays).
+  const odeInfo = buildOdeInfo(solvedGroups, { entries, viewport, samples });
 
   // The set of names defined anywhere folds into each entry's cache key, so a
   // definition appearing/disappearing elsewhere invalidates the cached curve.
@@ -824,7 +869,10 @@ export function computeAll(
         if (parsed.kind === 'ode') {
           const err = odeError.get(entry.id);
           if (err) return { parsed, curve: EMPTY_CURVE, error: err };
-          return { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE };
+          const ode = odeInfo.get(entry.id);
+          return ode
+            ? { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE, ode }
+            : { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE };
         }
         const sctx: SampleCtx = {
           entry,
@@ -872,8 +920,30 @@ export function computeAll(
     }
   }
 
+  // Parameter families: ghost curves for sliders with `family` on.
+  if (parsedList.some((p) => p.entry.family && p.parsed.kind === 'variable')) {
+    const ghosts = familyGhosts({
+      parsedList,
+      ectx,
+      groups: solvedGroups,
+      viewport,
+      samples,
+      definedKey,
+      ownSamples: entrySamples,
+      drawable: (id) => {
+        const r = results.get(id);
+        return !!r && !r.error && !r.undefinedVars?.length && !r.unknownFns?.length;
+      },
+    });
+    for (const [id, list] of ghosts) {
+      const r = results.get(id);
+      if (r) results.set(id, { ...r, ghosts: list });
+    }
+  }
+
   // Drop cache slots for entries that no longer exist, keeping the maps bounded.
   const liveIds = new Set(entries.map((e) => e.id));
+  pruneOdeCaches(liveIds);
   for (const id of [...RESULT_CACHE.keys()]) if (!liveIds.has(id)) RESULT_CACHE.delete(id);
   for (const gid of [...ODE_GROUP_CACHE.keys()]) {
     if (gid.split('+').some((id) => !liveIds.has(id))) ODE_GROUP_CACHE.delete(gid);

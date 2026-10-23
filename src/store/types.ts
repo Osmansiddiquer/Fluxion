@@ -85,6 +85,20 @@ export interface Entry {
   blur?: number;
   /** Name of a `name = layer(…)` row: drawn with that layer's transform and z-order. */
   layer?: string;
+
+  /** ODE qualitative view (all optional; lib/ode/view.ts). */
+  /** Slope / direction field (+ nullclines in the phase plane). Unset = automatic:
+   * shown for the graph's first first-order ODE or phase-plane system. */
+  field?: boolean;
+  /** Draw this ODE's coupled group in the phase plane (state space) instead of against t.
+   * Any member of a group switches the whole group. */
+  phase?: boolean;
+  /** Phase plane axes for a 3+-dimensional state, as state names (`x`, `z`, `y'`). */
+  phaseAxes?: [string, string];
+  /** Extra solutions added by shift-click: each `[t0, …state]` (the group's full state). */
+  extraICs?: number[][];
+  /** Variable slider: draw a family of ghost solutions across the slider's range. */
+  family?: boolean;
 }
 
 export type BlendMode = 'normal' | 'add' | 'screen' | 'multiply' | 'overlay' | 'lighten' | 'darken';
@@ -104,6 +118,8 @@ export interface FeatureToggles {
   intersections: boolean;
   /** Grid lines + axes (default shown). Off gives a clean canvas for drawings. */
   grid?: boolean;
+  /** Equilibria of autonomous ODEs with their stability (default shown). */
+  equilibria?: boolean;
   /** Display options for animations (not toggles; ride along in GraphData.features). */
   /** Fixed aspect ratio (width / height, e.g. 2.39): letterbox the plot to that frame. */
   aspect?: number;
