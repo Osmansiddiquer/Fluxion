@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AnimMode } from '../../store/types';
+import { advance } from '../../lib/anim';
+import { usePlayer } from '../../state/player';
 
 const NEXT: Record<AnimMode, AnimMode> = { loop: 'bounce', bounce: 'once', once: 'loop' };
 const MODE_TITLE: Record<AnimMode, string> = {
@@ -63,7 +65,7 @@ export function PlayButton({
   const [playing, setPlaying] = useState(false);
   const raf = useRef(0);
   const lastTs = useRef(0);
-  const dir = useRef(1);
+  const dir = useRef<1 | -1>(1);
   const st = useRef({ value, min, max, mode, onValue, speed });
   st.current = { value, min, max, mode, onValue, speed };
 
@@ -83,30 +85,10 @@ export function PlayButton({
       if (!lastTs.current) lastTs.current = now;
       const dt = Math.min(0.25, (now - lastTs.current) / 1000);
       lastTs.current = now;
-      const span = Math.max(1e-9, s.max - s.min);
-      const rate = (span * Math.max(0.05, s.speed)) / 4; // full sweep in ~4s at 1×
-      let v = s.value + dir.current * rate * dt;
-      let finished = false;
-      if (v >= s.max) {
-        if (s.mode === 'loop') v = s.min;
-        else if (s.mode === 'bounce') {
-          v = s.max;
-          dir.current = -1;
-        } else {
-          v = s.max;
-          finished = true;
-        }
-      } else if (v <= s.min) {
-        if (s.mode === 'loop') v = s.max;
-        else if (s.mode === 'bounce') {
-          v = s.min;
-          dir.current = 1;
-        } else {
-          v = s.min;
-          finished = true;
-        }
-      }
-      s.onValue(v);
+      const r = advance(s.value, dir.current, s.min, s.max, s.mode, s.speed, dt);
+      dir.current = r.dir;
+      const finished = r.finished;
+      s.onValue(r.value);
       if (finished) {
         stop();
         return;
@@ -125,6 +107,48 @@ export function PlayButton({
     >
       {playing ? PauseIcon : PlayIcon}
     </button>
+  );
+}
+
+/**
+ * Play / pause for a variable slider, driven by the shared animation clock
+ * (state/player + components/AnimationLoop) so every playing variable advances
+ * in one batched update per frame.
+ */
+export function VarPlayButton({ id, onPause }: { id: string; onPause?: () => void }) {
+  const playing = usePlayer((s) => !!s.playing[id]);
+  const toggle = usePlayer((s) => s.toggle);
+  return (
+    <button
+      className={`play-btn${playing ? ' playing' : ''}`}
+      onClick={() => {
+        if (playing) onPause?.();
+        toggle(id);
+      }}
+      title={playing ? 'Pause' : 'Play'}
+      aria-label={playing ? 'Pause' : 'Play'}
+    >
+      {playing ? PauseIcon : PlayIcon}
+    </button>
+  );
+}
+
+/** Frame-step buttons (‹ ›): nudge the value by one slider step. */
+export function StepButtons({ onStep }: { onStep: (dir: 1 | -1) => void }) {
+  const chev = (d: string) => (
+    <svg {...SVG}>
+      <path d={d} {...STROKE} />
+    </svg>
+  );
+  return (
+    <span className="step-btns">
+      <button className="play-mode" title="Step back" aria-label="Step back" onClick={() => onStep(-1)}>
+        {chev('M10 3.5 L5.5 8 L10 12.5')}
+      </button>
+      <button className="play-mode" title="Step forward" aria-label="Step forward" onClick={() => onStep(1)}>
+        {chev('M6 3.5 L10.5 8 L6 12.5')}
+      </button>
+    </span>
   );
 }
 

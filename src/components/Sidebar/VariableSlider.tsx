@@ -1,16 +1,8 @@
 import { useStore } from '../../store/useStore';
 import type { Entry } from '../../store/types';
 import NumberField from './NumberField';
-import { PlayButton, ModeButton, SpeedSlider } from './PlayControls';
-
-/**
- * A fine slider step: a power of ten about 1/1000 of the range, so a default
- * −10…10 slider steps by 0.1 and a tighter −1…1 slider by 0.01.
- */
-function fineStep(span: number): number {
-  if (!(span > 0)) return 0.01;
-  return Math.pow(10, Math.floor(Math.log10(span / 100)));
-}
+import { VarPlayButton, ModeButton, SpeedSlider, StepButtons } from './PlayControls';
+import { sliderBounds, stepValue } from '../../lib/anim';
 
 export default function VariableSlider({
   entry,
@@ -21,21 +13,15 @@ export default function VariableSlider({
 }) {
   const update = useStore((s) => s.updateEntry);
 
-  const value = entry.varValue ?? definedValue;
-  const min = entry.varMin ?? Math.min(-10, value);
-  const max = entry.varMax ?? Math.max(10, value);
-  const step = entry.varStep ?? fineStep(max - min);
+  const { value, min, max, step } = sliderBounds(entry, definedValue);
 
   return (
     <div className="var-slider">
       <div className="var-track">
-        <PlayButton
-          value={value}
-          min={min}
-          max={max}
-          mode={entry.animMode ?? 'loop'}
-          speed={entry.animSpeed ?? 1}
-          onValue={(v) => update(entry.id, { varValue: v })}
+        <VarPlayButton
+          id={entry.id}
+          // Pausing an auto-playing (demo) variable keeps it paused on reload.
+          onPause={() => entry.autoplay && update(entry.id, { autoplay: undefined })}
         />
         <NumberField
           className="var-bound"
@@ -60,6 +46,9 @@ export default function VariableSlider({
         />
       </div>
       <div className="var-controls">
+        <StepButtons
+          onStep={(dir) => update(entry.id, { varValue: stepValue(value, min, max, step, dir) })}
+        />
         <ModeButton mode={entry.animMode ?? 'loop'} onMode={(m) => update(entry.id, { animMode: m })} />
         <SpeedSlider
           speed={entry.animSpeed ?? 1}

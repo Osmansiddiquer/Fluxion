@@ -681,6 +681,13 @@ math-field.math-field::part(virtual-keyboard-toggle) {
   background: var(--accent);
   color: #fff;
 }
+.step-btns {
+  display: flex;
+  gap: 2px;
+}
+.step-btns .play-mode {
+  width: 24px;
+}
 
 /* Compact speed slider — visually distinct from the value slider: short, thin
    track, small muted thumb, in a pill with a gauge icon and the ×value. */

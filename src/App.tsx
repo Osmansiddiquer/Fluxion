@@ -9,6 +9,7 @@ import SigFigs from './components/SigFigs';
 import GraphMenu from './components/GraphMenu';
 import Tutorial from './components/Tutorial';
 import Resizer from './components/Resizer';
+import AnimationLoop from './components/AnimationLoop';
 import { ResultsProvider } from './state/results';
 import { useStore } from './store/useStore';
 import { APP_NAME } from './config';
@@ -102,6 +103,7 @@ export default function App() {
           )}
         </div>
         <Tutorial open={tour} onClose={closeTour} />
+        <AnimationLoop />
       </div>
     </ResultsProvider>
   );
