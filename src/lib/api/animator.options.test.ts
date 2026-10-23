@@ -7,6 +7,7 @@ import { makeGraph, type GraphData } from '../graphFile';
 import { advance, entriesAtTime, frameAt, valueAt } from '../anim';
 import { valuesAtFrame } from '../../state/animate';
 import type { Entry } from '../../store/types';
+import { sanitizeStored } from '../saved/library';
 
 const errs = (spec: unknown) => {
   const v = validateSpec(spec);
@@ -60,6 +61,13 @@ describe('animation options in the JSON spec', () => {
     const s = sanitizeGraph(JSON.parse(JSON.stringify(g)));
     expect(s.entries[3]).toMatchObject({ layer: 'far', samples: 64, blend: 'screen', glow: 8, blur: 1 });
     expect(s.entries[4].dots).toBe(false);
+    expect(s.features).toMatchObject({ aspect: g.features.aspect, fps: 24 });
+  });
+
+  it('saved graphs keep every animation field', () => {
+    const g = scene();
+    const s = sanitizeStored(JSON.parse(JSON.stringify(makeGraph(g))));
+    expect(s.entries.map(({ id: _i, ...e }) => e)).toEqual(g.entries.map(({ id: _i, ...e }) => e));
     expect(s.features).toMatchObject({ aspect: g.features.aspect, fps: 24 });
   });
 

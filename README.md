@@ -84,6 +84,9 @@ The expression rows can also draw and animate, without code:
 | `rotx(x, y, a)`, `roty(x, y, a)` | 2D rotation |
 | `projx(x, y, z, yaw, pitch, dist)`, `projy`, `projz` | 3D rotation + perspective projection |
 | `frames(24 T)` | Frame *i* of an imported black-and-white clip (filled contours) |
+| `… where a = …, b = …` | Local definitions for one row (computed once, even if used often) |
+| `spline((0,0), (1,2), (3,1))` | Smooth curve through points; inside a polyline also `bezier(…)` and `arc(center, angle)` |
+| `far = layer(dx, dy, scale, angle)` | A draw-time transform (parallax, shake, zoom) for rows on that layer; `camera` moves everything |
 
 Right-click an entry's colour dot for **style**: line width, solid / dashed / dotted,
 fill + opacity for closed shapes (parametric, polar, polygons, frames), and colour
@@ -91,6 +94,14 @@ fill + opacity for closed shapes (parametric, polar, polygons, frames), and colo
 `mixc(#ff0000, #0000ff, u)` — so colour and opacity animate with your variables.
 Entries draw in list order (later rows on top). Variables can play together on one
 clock (batched per frame), step frame-by-frame, and `autoplay` when a graph opens.
+For animations there is more behind the style popover's **Advanced** section and in
+links / specs (nothing changes unless you use it): gradient fills (`linear(…)`,
+`radial(…)`), blend modes, glow and blur, per-row `samples`, colours that vary per
+`for` copy, a letterboxed fixed `aspect`, deterministic `fps` playback and
+`&frame=N` links that open on an exact frame (plus `window.fluxion.setFrame / capture`
+for headless capture). Every expression is compiled to native code with
+loop-invariant terms hoisted, and off-screen shapes are skipped, so big scenes stay
+fast (`npx vite-node scripts/bench.ts`). See **Cinematic sunset** in Examples.
 **Examples** (share menu, or Script mode → Examples) are short scripts: a rotating
 Sharingan, a rotating cube, an eye → Sharingan → Mangekyō morph, a blooming mandala, a
 pendulum driven by a Graph-mode ODE, and a traced silhouette clip.
