@@ -1,5 +1,7 @@
 import { parse as mjParse, type EvalFunction } from 'mathjs';
 import { normalizeInput } from './math/normalize';
+import { calledFunctions } from './math/parse';
+import { KNOWN_FUNCTIONS } from './math/builtins';
 
 /**
  * Colour values and colour *expressions*. An entry's colour can be a literal
@@ -119,13 +121,20 @@ function rewriteHex(expr: string): string {
   });
 }
 
-const compiled = new Map<string, EvalFunction | null>();
+interface CompiledColor {
+  fn: EvalFunction;
+  /** Called names that aren't built in — must be user functions in the scope. */
+  extern: string[];
+}
+const compiled = new Map<string, CompiledColor | null>();
 
-function compileColor(expr: string): EvalFunction | null {
+function compileColor(expr: string): CompiledColor | null {
   if (compiled.has(expr)) return compiled.get(expr)!;
-  let fn: EvalFunction | null = null;
+  let fn: CompiledColor | null = null;
   try {
-    fn = mjParse(rewriteHex(normalizeInput(expr))).compile();
+    const node = mjParse(rewriteHex(normalizeInput(expr)));
+    const extern = [...calledFunctions(node)].filter((f) => !KNOWN_FUNCTIONS.has(f) && !(f in COLOR_FNS));
+    fn = { fn: node.compile(), extern };
   } catch {
     fn = null;
   }
@@ -143,12 +152,15 @@ export function evalColor(expr: string | undefined, scope: Record<string, unknow
   if (!expr || !expr.trim()) return null;
   const lit = parseColorLiteral(expr);
   if (lit) return lit;
-  const fn = compileColor(expr.trim());
-  if (!fn) return null;
+  const c = compileColor(expr.trim());
+  if (!c) return null;
+  // Colours come from untrusted links too: only built-ins, colour constructors
+  // and the graph's own user functions may be called — never mathjs internals.
+  if (c.extern.some((f) => typeof scope[f] !== 'function')) return null;
   try {
     const local = Object.create(scope) as Record<string, unknown>;
     Object.assign(local, COLOR_FNS);
-    const v = fn.evaluate(local);
+    const v = c.fn.evaluate(local);
     return isRGBA(v) ? v : null;
   } catch {
     return null;
@@ -159,6 +171,12 @@ export function evalColor(expr: string | undefined, scope: Record<string, unknow
 export function isColorExpr(expr: string): boolean {
   if (parseColorLiteral(expr)) return true;
   return compileColor(expr.trim()) !== null;
+}
+
+/** Names a colour expression calls that aren't built in (must be user functions). */
+export function colorExprCalls(expr: string): string[] {
+  if (parseColorLiteral(expr)) return [];
+  return compileColor(expr.trim())?.extern ?? [];
 }
 
 /** CSS `rgba(...)` for a colour, optionally multiplying its alpha. */

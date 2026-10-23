@@ -2,6 +2,9 @@ import { parse as mjParse, derivative, simplify, type MathNode } from 'mathjs';
 import { normalizeInput } from './normalize';
 import { parsePoints, looksLikePoints, type PointSpec } from './points';
 import { KNOWN_FUNCTIONS } from './builtins';
+import { HELPER_NAMES } from './helpers';
+
+const HELPERS_SET = new Set(HELPER_NAMES);
 
 /**
  * Parsing & classification of a single sidebar entry.
@@ -724,8 +727,16 @@ function parseRelation(lhs: string, rhs: string, F: MathNode, raw: string): Pars
 function namedValue(lhs: string, rhs: string, node: MathNode, raw: string): Parsed {
   const deps = [...freeSymbols(node)];
   const usesT = hasSymbol(node, INDEP);
-  if (!usesT && deps.length === 0) {
-    const value = (node as unknown as { evaluate: () => unknown }).evaluate();
+  // Only evaluate calls to plain mathjs functions here (links are untrusted
+  // input; scripting helpers need the scope, so those become derived values).
+  const safe = [...calledFunctions(node)].every((f) => KNOWN_FUNCTIONS.has(f) && !HELPERS_SET.has(f));
+  if (safe && !usesT && deps.length === 0) {
+    let value: unknown;
+    try {
+      value = (node as unknown as { evaluate: () => unknown }).evaluate();
+    } catch {
+      value = NaN;
+    }
     if (typeof value === 'number' && Number.isFinite(value)) {
       return { kind: 'variable', name: lhs, value, raw };
     }

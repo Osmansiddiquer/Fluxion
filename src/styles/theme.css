@@ -1,6 +1,7 @@
 /* Design tokens. Light is the default; dark is applied when data-theme="dark",
    or when the OS prefers dark and data-theme="system". */
 :root {
+  color-scheme: light;
   --bg: #f4f6f9;
   --surface: #ffffff;
   --surface-2: #f3f5f8;
@@ -47,6 +48,7 @@
 
 /* Dark token block, shared by explicit dark and system+OS-dark. */
 :root[data-theme='dark'] {
+  color-scheme: dark;
   --bg: #14171c;
   --surface: #1c2027;
   --surface-2: #232831;
@@ -75,6 +77,7 @@
 
 @media (prefers-color-scheme: dark) {
   :root[data-theme='system'] {
+    color-scheme: dark;
     --bg: #14171c;
     --surface: #1c2027;
     --surface-2: #232831;

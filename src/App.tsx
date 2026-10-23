@@ -13,6 +13,7 @@ import AnimationLoop from './components/AnimationLoop';
 import { ResultsProvider } from './state/results';
 import { useStore } from './store/useStore';
 import { APP_NAME } from './config';
+import { hasUrlPayload } from './lib/api/url';
 import './App.css';
 
 export default function App() {
@@ -24,8 +25,12 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // The getting-started tour auto-opens once per browser; the ? button reopens it.
+  // Not over a graph someone linked you to (share / API link) — show the graph.
   const [tour, setTour] = useState(
-    () => typeof localStorage !== 'undefined' && !localStorage.getItem('fluxion-tour-seen'),
+    () =>
+      typeof localStorage !== 'undefined' &&
+      !localStorage.getItem('fluxion-tour-seen') &&
+      !hasUrlPayload(location.hash, location.search),
   );
   const closeTour = () => {
     try {

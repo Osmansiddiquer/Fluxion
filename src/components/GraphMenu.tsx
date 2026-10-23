@@ -1,8 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { makeGraph, encodeGraph, decodeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
+import { makeGraph, encodeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
+import { loadFromUrl, sanitizeGraph } from '../lib/api/load';
+import { stripApiParams } from '../lib/api/url';
+import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
 import { registerAssets } from '../lib/frames/assets';
 import { DEMOS } from '../lib/demos';
+
+const isPlainSpecLike = (x: unknown) => !!x && typeof x === 'object' && 'expressions' in x;
 
 const ShareIcon = (
   <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -13,25 +18,64 @@ const ShareIcon = (
   </svg>
 );
 
-/** Share-link / export-to-file / import-from-file menu, and one-time import of a
- * graph encoded in the page URL (#g=…). */
+interface Toast {
+  msg: string;
+  error?: boolean;
+  /** The graph an example replaced — offered back via an Undo button. */
+  undo?: GraphData;
+}
+
+/** Share-link / export-to-file / import-from-file menu, examples, and one-time
+ * import of a graph carried by the page URL — a legacy share link (#g=…) or the
+ * agent-facing URL API (#expr=…, #spec=…, #z=…; see lib/api and public/llms.txt). */
 export default function GraphMenu() {
   const loadGraph = useStore((s) => s.loadGraph);
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState<Toast | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Import a graph carried in the URL fragment, then strip it from the address bar.
+  // Every load path goes through here: frame-sequence assets must be registered
+  // before the entries that reference them are computed.
+  const applyGraph = (g: GraphData) => {
+    registerAssets(g.assets);
+    loadGraph(g);
+  };
+  const applyRef = useRef(applyGraph);
+  applyRef.current = applyGraph;
+
+  const toastTimer = useRef(0);
+  const flash = (msg: string, error = false, undo?: GraphData) => {
+    setToast({ msg, error, undo });
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), error || undo ? 6000 : 2200);
+  };
+  const flashRef = useRef(flash);
+  flashRef.current = flash;
+
+  // Import a graph carried in the URL, then strip it from the address bar — on
+  // load, and when a link is pasted into an already-open tab (only the hash
+  // changes, so there's no reload). Only the live effect run applies it
+  // (StrictMode mounts effects twice in dev).
   useEffect(() => {
-    const m = location.hash.match(/^#g=(.+)$/);
-    if (!m) return;
-    const g = decodeGraph(m[1]);
-    if (g) {
-      registerAssets(g.assets);
-      loadGraph(g);
-    }
-    history.replaceState(null, '', location.pathname + location.search);
+    let live = true;
+    const importFromUrl = () => {
+      const { hash, search, pathname } = location;
+      loadFromUrl(hash, search).then((r) => {
+        if (!r) return;
+        if (live) {
+          if (r.graph) applyRef.current(r.graph);
+          if (r.message) flashRef.current(r.message, r.tone === 'error');
+        }
+        history.replaceState(null, '', pathname + stripApiParams(search));
+      });
+    };
+    importFromUrl();
+    window.addEventListener('hashchange', importFromUrl);
+    return () => {
+      live = false;
+      window.removeEventListener('hashchange', importFromUrl);
+    };
   }, [loadGraph]);
 
   useEffect(() => {
@@ -43,31 +87,16 @@ export default function GraphMenu() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  // A toast may carry an Undo (restores the graph an example replaced).
-  const [undo, setUndo] = useState<GraphData | null>(null);
-  const toastTimer = useRef(0);
-  const flash = (msg: string, restore: GraphData | null = null, ms = 2200) => {
-    setToast(msg);
-    setUndo(restore);
-    window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => {
-      setToast('');
-      setUndo(null);
-    }, ms);
-  };
+  const current = () => makeGraph(useStore.getState());
 
   const openDemo = (id: string) => {
     setOpen(false);
     const demo = DEMOS.find((d) => d.id === id);
     if (!demo) return;
     const prev = current();
-    const g = demo.build();
-    registerAssets(g.assets);
-    loadGraph(g);
-    flash(`Opened “${demo.title}”`, prev, 6000);
+    applyGraph(demo.build());
+    flash(`Opened “${demo.title}”`, false, prev);
   };
-
-  const current = () => makeGraph(useStore.getState());
 
   const share = async () => {
     setOpen(false);
@@ -75,6 +104,18 @@ export default function GraphMenu() {
     try {
       await navigator.clipboard.writeText(url);
       flash('Share link copied to clipboard');
+    } catch {
+      flash('Could not copy — clipboard blocked');
+    }
+  };
+
+  // A readable FluxionSpec of the current graph — paste it to an AI assistant to
+  // have it edit the graph and hand back a link.
+  const copySpec = async () => {
+    setOpen(false);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(graphToSpec(current()), null, 2));
+      flash('Graph JSON copied to clipboard');
     } catch {
       flash('Could not copy — clipboard blocked');
     }
@@ -94,13 +135,29 @@ export default function GraphMenu() {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    const g = parseGraphFile(await f.text());
+    const text = await f.text();
+    const g = parseGraphFile(text);
     if (g) {
-      registerAssets(g.assets);
-      loadGraph(g);
+      applyGraph(sanitizeGraph(g));
       flash('Graph loaded');
+      return;
+    }
+    // Also accept a FluxionSpec JSON file (what "Copy as JSON spec" produces).
+    let spec: unknown;
+    try {
+      spec = JSON.parse(text);
+    } catch {
+      /* not JSON */
+    }
+    const v = spec === undefined ? null : validateSpec(spec);
+    if (v?.ok) {
+      applyGraph(specToGraph(v.spec));
+      flash('Graph loaded');
+    } else if (v && !v.ok && isPlainSpecLike(spec)) {
+      const e = v.errors[0];
+      flash(`Invalid graph spec — ${e.path ? e.path + ': ' : ''}${e.message}`, true);
     } else {
-      flash('That file is not a Fluxion graph');
+      flash('That file is not a Fluxion graph', true);
     }
   };
 
@@ -117,6 +174,9 @@ export default function GraphMenu() {
       {open && (
         <div className="graph-menu-pop" role="menu">
           <button onClick={share}>Copy share link</button>
+          <button onClick={copySpec} title="A readable spec an AI assistant can edit (see llms.txt)">
+            Copy as JSON spec
+          </button>
           <button onClick={exportFile}>Export to file…</button>
           <button onClick={() => fileRef.current?.click()}>Import from file…</button>
           <div className="graph-menu-sep" role="separator" />
@@ -129,16 +189,14 @@ export default function GraphMenu() {
         </div>
       )}
       {toast && (
-        <div className="graph-toast" role="status">
-          {toast}
-          {undo && (
+        <div className={toast.error ? 'graph-toast error' : 'graph-toast'} role={toast.error ? 'alert' : 'status'}>
+          {toast.msg}
+          {toast.undo && (
             <button
               className="graph-toast-undo"
               onClick={() => {
-                registerAssets(undo.assets);
-                loadGraph(undo);
-                setToast('');
-                setUndo(null);
+                applyGraph(toast.undo!);
+                setToast(null);
               }}
             >
               Undo

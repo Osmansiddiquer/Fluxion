@@ -1,4 +1,5 @@
-import { hasSymbol, type Parsed } from './math/parse';
+import { calledFunctions, hasSymbol, type Parsed } from './math/parse';
+import { KNOWN_FUNCTIONS } from './math/builtins';
 import { compileNode } from './math/compileCache';
 import { HELPERS } from './math/helpers';
 import type { Entry } from '../store/types';
@@ -96,7 +97,17 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[]): Eva
     if (parsed.kind !== 'fndef' || fnNames.has(parsed.name) || varNames.has(parsed.name)) continue;
     fnNames.add(parsed.name);
     fnDefs.push(parsed);
-    scope[parsed.name] = makeUserFn(parsed, scope, depth);
+  }
+  // Links are untrusted: a body may only call known functions and other user
+  // functions — never mathjs internals like evaluate / createUnit.
+  const callsOk = (node: Parameters<typeof calledFunctions>[0]) =>
+    [...calledFunctions(node)].every((f) => KNOWN_FUNCTIONS.has(f) || fnNames.has(f));
+  for (const def of fnDefs) {
+    scope[def.name] = callsOk(def.node)
+      ? makeUserFn(def, scope, depth)
+      : () => {
+          throw new Error(`${def.name} calls an unknown function`);
+        };
   }
 
   // Derived values, resolved in dependency order by repeated passes (each pass
@@ -120,6 +131,10 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[]): Eva
       if (deps.some((d) => derivedNames.has(d) && !(d in scope))) {
         next.push(it);
         continue;
+      }
+      if (!callsOk(it.parsed.node)) {
+        derivedErrors.set(it.entry.id, 'Unknown function');
+        continue; // never evaluated (compute's validation names the function)
       }
       try {
         const v = compileNode(it.parsed.node).evaluate(scope);

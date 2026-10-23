@@ -30,7 +30,7 @@ export function makeGraph(s: {
     sigFigs: s.sigFigs,
   };
   // Carry referenced frame sequences along so an exported file is self-contained.
-  const assets = assetsFor(s.entries.map((e) => e.frames));
+  const assets = assetsFor(s.entries.map((e) => e?.frames));
   if (Object.keys(assets).length) g.assets = assets;
   return g;
 }

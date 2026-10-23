@@ -68,6 +68,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
 | Chrome | `App.tsx`, `Tutorial.tsx`, `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
 | Tokens | `styles/theme.css` (all `--var`s, light+dark), `styles/global.css` |
+| URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
 
 ## Conventions & gotchas (hard-won — don't relearn these)
 
@@ -170,6 +171,41 @@ Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU
    focus). The canonical seed + a full checklist live in **`docs/AGENTIC-TESTS.md`**
    ("run the agentic tests").
 3. The user cares about aesthetics — verify look in **both light and dark** themes.
+
+## URL API for LLM agents (`src/lib/api`)
+
+Static site, so the "API" is the link: `#expr=…&ic=…&xmin=…` (params; options attach to
+the latest `expr`), `#spec=<JSON | base64url>`, `#z=<deflate-raw+base64url>`, plus
+legacy `#g=` share links. `GraphMenu` loads them on mount *and* on `hashchange`, then
+strips them; bad links show an error toast and keep the current graph.
+
+- **FluxionSpec** (`spec.ts`) is the stable external format, decoupled from `Entry`.
+  `validateSpec` is strict (unknown keys → did-you-mean errors, bounded numbers,
+  constants like `"2pi"`); `specToGraph`/`graphToSpec` are the only bridges. If you add an
+  `Entry` field users should be able to set from a link, add it to the spec, the schema
+  (`public/fluxion-spec.schema.json`), the params table in `url.ts`, and `llms.txt`
+  (`docs.test.ts` fails if the schema and validator drift).
+- **Untrusted input**: specs never reach anything but the mathjs pipeline, and calls to
+  functions outside `KNOWN_FUNCTIONS` are never *evaluated* (guards in `parse.ts`
+  variable branch, `compute.ts` pointvar resolution, `evalConstant`). Legacy graphs go
+  through `sanitizeGraph`. Limits live in `LIMITS` (100 exprs, θ-span ≤ 50 turns, …).
+  The scripting layer follows the same rule: user-function bodies and derived values
+  may only call `KNOWN_FUNCTIONS` + the graph's own functions (`scope.ts`), and colour
+  expressions only built-ins, colour constructors and user functions (`evalColor`).
+- **Scripting fields over links**: `sanitizeGraph` keeps the style fields (bounded),
+  `autoplay`, `frames` (asset-id shaped), `features.grid`, and `GraphData.assets`
+  (`sanitizeAssets`: referenced only, id must equal the content hash, must parse as a
+  clip, size-capped). The spec exposes `lineWidth`, `lineStyle`, `fill`, `fillOpacity`,
+  `colorExpr`, `fillColor`, `autoplay` and `features.grid` (not frames — clips come from
+  files). **Every load path calls `registerAssets(g.assets)` before `loadGraph`**
+  (`GraphMenu.applyGraph`).
+- **`public/llms.txt` is tested**: every line of a `fluxion` code block (`expr  # kind`), pitfall
+  (`wrong => right`), prose link, JSON block and the JS/Python snippets are executed by
+  `src/lib/api/docs.test.ts`. Change syntax → update the examples.
+- **CLI**: `npm run fluxion -- link|check|decode` (vite-node; I/O injected, tested in
+  `src/cli/fluxion.test.ts`).
+- The plot keeps a square grid: only xmin/xmax are exact; `checkSpec` warns when a
+  requested y-range can't be honoured.
 
 ## Project state & backlog
 

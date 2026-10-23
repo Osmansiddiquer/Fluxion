@@ -468,6 +468,8 @@ export function computeAll(
   const pointvarNames = new Set<string>();
   for (const { parsed } of parsedList) {
     if (parsed.kind !== 'pointvar') continue;
+    // Never evaluate calls to unknown functions (links are untrusted input).
+    if ([...callsOf(parsed)].some((f) => !KNOWN_FUNCTIONS.has(f) && !fnNames.has(f))) continue;
     pointvarNames.add(parsed.name);
     try {
       const t = compileNode(parsed.tNode).evaluate(scope);

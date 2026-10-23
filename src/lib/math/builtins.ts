@@ -33,6 +33,10 @@ export const UNICODE_MAP: [RegExp, string][] = [
   [/²/g, '^2'],
   [/³/g, '^3'],
   [/∞/g, 'Infinity'],
+  [/≤/g, '<='],
+  [/≥/g, '>='],
+  [/″/g, "''"], // double prime (before ′)
+  [/′/g, "'"], // prime: y′ = y
 ];
 
 /** Base trig names whose `^-1` means the inverse (arc) function. */
