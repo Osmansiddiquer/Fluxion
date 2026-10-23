@@ -233,7 +233,8 @@ math-field.math-field::part(virtual-keyboard-toggle) {
   background: var(--surface-2);
   color: var(--text-muted);
 }
-.badge-ode {
+.badge-ode,
+.badge-condition {
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -862,4 +863,49 @@ math-field.math-field::part(virtual-keyboard-toggle) {
 .add-plus {
   font-size: 16px;
   line-height: 1;
+}
+
+/* ODE numerics (IVPControls): Conditions switch, typed conditions, the
+   collapsed Numerics disclosure (solver, Show steps). ------------------------ */
+.num-label {
+  width: 62px;
+}
+.num-note {
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.num-mono {
+  font-family: var(--mono);
+  color: var(--text);
+}
+.num-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: flex-start;
+  font-size: 11.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.num-check input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+.seg-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.ivp-row-typed .ivp-label {
+  color: var(--text-faint);
+}
+.ivp-row-typed .ivp-range:disabled {
+  opacity: 0.4;
+}
+.ivp-num-typed {
+  display: block;
+  border-style: dashed;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
