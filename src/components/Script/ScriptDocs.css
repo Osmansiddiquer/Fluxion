@@ -154,6 +154,7 @@
   white-space: nowrap;
 }
 .sd-btn {
+  text-decoration: none;
   padding: 4px 10px;
   border-radius: 6px;
   font-size: 11.5px;
@@ -209,4 +210,20 @@
 .sd-pre .tok-punctuation,
 .sd-pre .tok-operator {
   color: var(--code-punct);
+}
+
+/* Mounted in the documentation page: no inner search / nav / scroll box. */
+.sd.sd-standalone {
+  background: transparent;
+}
+.sd-standalone .sd-scroll {
+  overflow: visible;
+  padding: 0;
+}
+.sd-standalone .sd-section:first-child {
+  padding-top: 0;
+}
+.sd-standalone .sd-h {
+  font-size: 17px;
+  margin-top: 18px;
 }

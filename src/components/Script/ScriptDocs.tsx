@@ -2,14 +2,19 @@ import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from '
 import { highlightCode, classHighlighter } from '@lezer/highlight';
 import { javascriptLanguage } from '@codemirror/lang-javascript';
 import type { DocEntry, DocSection } from './docsContent';
-import { insertSnippet, trySnippet } from './scriptBus';
+import { APP_FROM_DOCS, isScriptApp } from './scriptHost';
 import './ScriptDocs.css';
 
 /**
  * The Scripting reference: getting started, every API function with a
- * runnable snippet ("Try it" replaces the script, "Insert" adds at the cursor),
- * animation, sliders, reading ODE solutions, clips and tips. Self-contained
- * (no props) and loads its content lazily, so it can be mounted anywhere.
+ * runnable snippet, animation, sliders, reading ODE solutions, clips and tips.
+ * Self-contained (no props) and loads its content lazily, so it can be mounted
+ * anywhere:
+ * - in Script mode, "Try it" replaces the script (Ctrl+Z undoes it) and "Insert"
+ *   adds the snippet at the cursor;
+ * - on the standalone docs page (no app store or editor), "Try it" is a link that
+ *   opens the app in a new tab with the snippet as its script, and there is no
+ *   "Insert".
  */
 export default function ScriptDocs() {
   const [docs, setDocs] = useState<DocSection[] | null>(null);
@@ -63,8 +68,12 @@ export default function ScriptDocs() {
 
   if (!docs) return <div className="sd-loading">Loading the reference…</div>;
 
+  // On the docs page, the page has its own search and navigation: just flow.
+  const standalone = !isScriptApp();
+
   return (
-    <div className="sd">
+    <div className={`sd${standalone ? ' sd-standalone' : ''}`}>
+      {!standalone && (
       <div className="sd-top">
         <input
           className="sd-search"
@@ -82,6 +91,7 @@ export default function ScriptDocs() {
           ))}
         </nav>
       </div>
+      )}
       <div className="sd-scroll" ref={scroller}>
         {shown.length === 0 && <p className="sd-empty">Nothing matches “{query}”.</p>}
         {shown.map((s) => (
@@ -124,31 +134,69 @@ function Entry({ e }: { e: DocEntry }) {
             ) : e.clip ? (
               <span className="sd-needs">needs a clip named “apple”</span>
             ) : null}
-            <button
-              className="sd-btn"
-              onClick={() => {
-                insertSnippet(e.code!, e.needs);
-                setDone('insert');
-              }}
-              title="Insert at the cursor"
-            >
-              {done === 'insert' ? 'Inserted' : 'Insert'}
-            </button>
-            <button
-              className="sd-btn primary"
-              onClick={() => {
-                trySnippet(e.code!, e.needs);
-                setDone('try');
-              }}
-              title="Replace the script with this example and run it (Ctrl+Z in the editor undoes it)"
-            >
-              {done === 'try' ? 'Running' : 'Try it'}
-            </button>
+            {isScriptApp() ? (
+              <>
+                <button
+                  className="sd-btn"
+                  onClick={() => {
+                    void import('./scriptBus').then((m) => m.insertSnippet(e.code!, e.needs));
+                    setDone('insert');
+                  }}
+                  title="Insert at the cursor"
+                >
+                  {done === 'insert' ? 'Inserted' : 'Insert'}
+                </button>
+                <button
+                  className="sd-btn primary"
+                  onClick={() => {
+                    void import('./scriptBus').then((m) => m.trySnippet(e.code!, e.needs));
+                    setDone('try');
+                  }}
+                  title="Replace the script with this example and run it (Ctrl+Z in the editor undoes it)"
+                >
+                  {done === 'try' ? 'Running' : 'Try it'}
+                </button>
+              </>
+            ) : (
+              <TryLink e={e} />
+            )}
           </div>
         </div>
       )}
     </article>
   );
+}
+
+/** Outside the app: a link that opens Fluxion in Script mode with this snippet. */
+function TryLink({ e }: { e: DocEntry }) {
+  const [href, setHref] = useState<string | null>(null);
+  useEffect(() => {
+    let live = true;
+    void scriptLink(e).then((h) => live && setHref(h));
+    return () => {
+      live = false;
+    };
+  }, [e]);
+  return (
+    <a
+      className="sd-btn primary"
+      href={href ?? APP_FROM_DOCS}
+      target="_blank"
+      rel="noopener"
+      title="Open this example in Fluxion (Script mode) in a new tab"
+      aria-disabled={!href}
+    >
+      Try it ↗
+    </a>
+  );
+}
+
+/** A `#z=` link to the app with the snippet as its script (plus the Graph-mode
+ * expressions it reads). */
+export async function scriptLink(e: Pick<DocEntry, 'code' | 'needs'>, base = APP_FROM_DOCS): Promise<string> {
+  const { buildLink } = await import('../../lib/api/url');
+  const expressions = (e.needs?.entries ?? []).map((n) => (n.ic ? { expr: n.raw, ic: n.ic } : n.raw));
+  return buildLink({ expressions, script: e.code ?? '' }, { base, format: 'z' });
 }
 
 /** Syntax-highlighted, read-only code (lezer classes styled in ScriptDocs.css). */

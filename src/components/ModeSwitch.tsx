@@ -21,9 +21,10 @@ export default function ModeSwitch() {
         className={`mode-seg-btn${mode === 'graph' ? ' active' : ''}`}
         onClick={() => setMode('graph')}
         title="Graph mode: type expressions and ODEs"
+        aria-label="Graph mode"
       >
         <GraphGlyph />
-        Graph
+        <span className="mode-seg-label">Graph</span>
       </button>
       <button
         role="tab"
@@ -31,9 +32,10 @@ export default function ModeSwitch() {
         className={`mode-seg-btn${mode === 'script' ? ' active' : ''}`}
         onClick={() => setMode('script')}
         title="Script mode: draw and animate with JavaScript"
+        aria-label="Script mode"
       >
         <CodeGlyph />
-        Script
+        <span className="mode-seg-label">Script</span>
       </button>
     </div>
   );

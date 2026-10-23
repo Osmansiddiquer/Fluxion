@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import { DOCS_HREF } from '../config';
 import './HelpMenu.css';
 
 export interface HelpMenuHandle {
@@ -8,17 +9,18 @@ export interface HelpMenuHandle {
 
 /**
  * The header ? button: a small menu with "Take the tour" (the getting-started
- * carousel) and "Documentation" (the docs panel). Keyboard: Enter/Space/↓ opens
- * and focuses the first item, ↑/↓ move, Esc closes and returns focus.
+ * carousel) and "Documentation" (the docs page, in a new tab). Keyboard:
+ * Enter/Space/↓ opens and focuses the first item, ↑/↓ move, Esc closes and
+ * returns focus.
  */
-const HelpMenu = forwardRef<HelpMenuHandle, { onTour: () => void; onDocs: () => void }>(function HelpMenu(
-  { onTour, onDocs },
+const HelpMenu = forwardRef<HelpMenuHandle, { onTour: () => void }>(function HelpMenu(
+  { onTour },
   ref,
 ) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
-  const itemsRef = useRef<(HTMLButtonElement | null)[]>([]);
+  const itemsRef = useRef<(HTMLElement | null)[]>([]);
   const focusOnOpen = useRef(false);
 
   useImperativeHandle(ref, () => ({ focus: () => btnRef.current?.focus() }), []);
@@ -48,8 +50,8 @@ const HelpMenu = forwardRef<HelpMenuHandle, { onTour: () => void; onDocs: () => 
   };
 
   const onMenuKey = (e: React.KeyboardEvent) => {
-    const items = itemsRef.current.filter(Boolean) as HTMLButtonElement[];
-    const i = items.indexOf(document.activeElement as HTMLButtonElement);
+    const items = itemsRef.current.filter(Boolean) as HTMLElement[];
+    const i = items.indexOf(document.activeElement as HTMLElement);
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
       const d = e.key === 'ArrowDown' ? 1 : -1;
@@ -103,15 +105,24 @@ const HelpMenu = forwardRef<HelpMenuHandle, { onTour: () => void; onDocs: () => 
               <span className="help-menu-sub">A one-minute introduction</span>
             </span>
           </button>
-          <button ref={(el) => (itemsRef.current[1] = el)} role="menuitem" onClick={() => pick(onDocs)}>
+          <a
+            ref={(el) => (itemsRef.current[1] = el)}
+            role="menuitem"
+            href={DOCS_HREF}
+            target="_blank"
+            rel="noopener"
+            onClick={() => setOpen(false)}
+          >
             <span className="help-menu-ico" aria-hidden="true">
               <BookIcon />
             </span>
             <span className="help-menu-text">
-              <span className="help-menu-title">Documentation</span>
+              <span className="help-menu-title">
+                Documentation <span className="help-menu-ext" aria-hidden="true">↗</span>
+              </span>
               <span className="help-menu-sub">Every feature, with examples</span>
             </span>
-          </button>
+          </a>
         </div>
       )}
     </div>

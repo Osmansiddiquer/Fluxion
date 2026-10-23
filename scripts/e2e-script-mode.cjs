@@ -299,6 +299,46 @@ async function inked(page) {
   if (shots) await page.screenshot({ path: path.join(shots, 'clip-playing.png') });
   fs.unlinkSync(videoPath);
 
+  // 9. Phone header: switch, ? and bug-report button all visible, no overflow.
+  const phone = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  await open(phone, `${base}#example=sharingan`);
+  await settle(phone);
+  const hdr = await phone.evaluate(() => {
+    const bar = document.querySelector('.topbar');
+    const vis = (sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.left >= 0 && r.right <= window.innerWidth && getComputedStyle(el).display !== 'none';
+    };
+    return {
+      overflow: bar.scrollWidth - bar.clientWidth,
+      switch: vis('.mode-seg'),
+      bug: vis('a.report-bug'),
+      help: vis('.topbar [aria-label*="elp"], .topbar [title*="elp"], .topbar [aria-label*="tour" i]'),
+    };
+  });
+  check('390 px header: no overflow', hdr.overflow <= 0, `overflow ${hdr.overflow}px`);
+  check('390 px header: mode switch, ? and bug button visible', hdr.switch && hdr.bug && hdr.help, JSON.stringify(hdr));
+  if (shots) await phone.screenshot({ path: path.join(shots, 'phone-390.png') });
+  await phone.close();
+
+  // 10. The docs page's Scripting section mounts the reference; its Try links
+  // open the app with the snippet as the script.
+  await page.goto(new URL('docs/#scripting', base).href);
+  await page.waitForSelector('#scripting .sd-entry', { timeout: 15000 });
+  const tries = await page.$$eval('#scripting a.sd-btn.primary', (as) => as.map((a) => a.getAttribute('href')));
+  const inserts = await page.$$('#scripting .sd-actions button');
+  check('docs page shows the Script reference with Try links', tries.length > 30 && tries.every((h) => /^\.\.\/#z=/.test(h)), `${tries.length} links`);
+  check('docs page reference has no Insert buttons', inserts.length === 0);
+  if (shots) await page.screenshot({ path: path.join(shots, 'docs-page-scripting.png') });
+  const [popup] = await Promise.all([page.waitForEvent('popup'), page.click('#scripting a.sd-btn.primary')]);
+  await popup.waitForSelector('.cm-content', { timeout: 15000 });
+  await popup.waitForFunction(() => /\d+ shapes?/.test(document.querySelector('.sp-console')?.textContent ?? ''), null, { timeout: 10000 });
+  const popupCode = await popup.$eval('.cm-content', (e) => e.textContent);
+  check('a docs Try link opens the app in Script mode with the snippet', /Hello, Fluxion/.test(popupCode), popupCode.slice(0, 60));
+  await popup.close();
+
   check('no uncaught page errors', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));
   await browser.close();
   const failed = results.filter((r) => !r.ok);

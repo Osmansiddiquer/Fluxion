@@ -1,5 +1,5 @@
-// "Open this graph, and offer Undo" — a tiny channel so any part of the UI (the
-// docs' "Try it" buttons, the Examples menu) can replace the current graph through
+// "Open this graph, and offer Undo" — a tiny channel so any part of the UI (Script
+// mode's Examples menu) can replace the current graph through
 // the one place that knows how: GraphMenu, which registers assets, loads the
 // graph and shows the toast with an Undo button restoring the previous graph.
 import type { GraphData } from './graphFile';

@@ -7,8 +7,11 @@ import type { SliderDecl } from '../../lib/script/protocol';
 import CodeEditor from './CodeEditor';
 import { focusLine, trySnippet } from './scriptBus';
 import { DOCS_PAGE, DOCS_SIDE_MIN, DOCS_W, SCRIPT_PANEL_W } from './layout';
+import { markScriptApp } from './scriptHost';
 import './ScriptPanel.css';
 
+// The reference shown here drives the editor (not the docs page's link mode).
+markScriptApp();
 const ScriptDocs = lazy(() => import('./ScriptDocs'));
 const ClipImporter = lazy(() => import('./ClipImporter'));
 
@@ -95,8 +98,8 @@ export default function ScriptPanel({ open = false }: { open?: boolean }) {
           <section className="sp-docs" aria-label="Scripting reference">
             <div className="sp-docs-head">
               <span className="sp-docs-title">Scripting reference</span>
-              <a className="sp-docs-full" href={DOCS_PAGE} title="Open the full documentation">
-                Full docs
+              <a className="sp-docs-full" href={DOCS_PAGE} target="_blank" rel="noopener" title="Open the full documentation in a new tab">
+                Full docs ↗
               </a>
               <button className="icon-btn" title="Close the reference" aria-label="Close the reference" onClick={() => setDocsOpen(false)}>
                 ✕

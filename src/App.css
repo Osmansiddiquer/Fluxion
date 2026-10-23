@@ -312,20 +312,27 @@ a.report-bug {
     margin-left: 0;
   }
   .mode-seg-btn {
-    padding: 0 9px;
-  }
-  .mode-seg-btn svg {
-    display: none;
-  }
-  .brand-name,
-  .beta-tag {
-    display: none;
+    padding: 0 10px;
   }
 }
 @media (max-width: 480px) {
-  /* Make room for the Graph | Script switch on phones. */
+  /* Phones: an icon-only Graph | Script switch, and no sig-figs selector or
+     wordmark, so every header button (?, bug report, share, theme, reset) keeps
+     its place without overflowing. */
+  .topbar {
+    gap: 6px;
+  }
+  .mode-seg-btn {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+  .mode-seg-label {
+    display: none;
+  }
   .topbar .sigfig,
-  .topbar a.report-bug {
+  .brand-name,
+  .beta-tag {
     display: none;
   }
 }

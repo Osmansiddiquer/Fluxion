@@ -4,7 +4,7 @@ export const DOCS_W = 400;
 /** Below this window width the reference is a tab in the panel (Code | Reference)
  * instead of a column beside the editor, so it never squeezes the graph. */
 export const DOCS_SIDE_MIN = 1440;
-/** The Scripting section of the full in-app documentation. */
-export const DOCS_PAGE = '#docs/scripting';
+/** The Scripting section of the documentation page (dist/docs/, next to the app). */
+export const DOCS_PAGE = 'docs/#scripting';
 /** Default editor panel width. */
 export const SCRIPT_PANEL_W = 500;

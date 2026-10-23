@@ -1,4 +1,4 @@
-import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import PlotCanvas from './components/Plot/PlotCanvas';
 import Sidebar from './components/Sidebar/Sidebar';
 import RightPanel from './components/Projections/RightPanel';
@@ -9,7 +9,7 @@ import SigFigs from './components/SigFigs';
 import GraphMenu from './components/GraphMenu';
 import Tutorial from './components/Tutorial';
 import HelpMenu, { type HelpMenuHandle } from './components/HelpMenu';
-import { docsHash, parseDocsHash, type DocsRoute } from './components/Docs/hash';
+import { parseDocsHash } from './components/Docs/hash';
 import Resizer from './components/Resizer';
 import AnimationLoop from './components/AnimationLoop';
 import ModeSwitch from './components/ModeSwitch';
@@ -19,8 +19,8 @@ import { APP_NAME } from './config';
 import { hasUrlPayload } from './lib/api/url';
 import './App.css';
 
-// The docs (content + panel) are a separate chunk, fetched the first time they open.
-const DocsPanel = lazy(() => import('./components/Docs/DocsPanel'));
+// `?tour` opens the getting-started tour (the docs page's "Take the tour" link).
+const wantsTour = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('tour');
 // Script mode (editor, reference, sandbox runtime) loads on demand, so Graph mode's
 // first load doesn't pay for it.
 const ScriptPanel = lazy(() => import('./components/Script/ScriptPanel'));
@@ -36,22 +36,17 @@ export default function App() {
   // docked and this flag is irrelevant. Closed by default so the graph leads.
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Documentation panel: open at a section, or null. Deep-linkable as #docs/<id>
-  // (see components/Docs/hash.ts; never collides with the URL API's key=value).
-  const [docs, setDocs] = useState<DocsRoute | null>(() =>
-    typeof location !== 'undefined' ? parseDocsHash(location.hash) : null,
-  );
   const helpRef = useRef<HelpMenuHandle>(null);
 
   // The getting-started tour auto-opens once per browser; the ? menu reopens it.
-  // Not over a graph someone linked you to (share / API link) — show the graph —
-  // nor over a docs link.
+  // Not over a graph someone linked you to (share / API link) — show the graph.
   const [tour, setTour] = useState(
     () =>
-      typeof localStorage !== 'undefined' &&
-      !localStorage.getItem('fluxion-tour-seen') &&
-      !hasUrlPayload(location.hash, location.search) &&
-      !parseDocsHash(location.hash),
+      wantsTour() ||
+      (typeof localStorage !== 'undefined' &&
+        !localStorage.getItem('fluxion-tour-seen') &&
+        !hasUrlPayload(location.hash, location.search) &&
+        !parseDocsHash(location.hash)),
   );
   const closeTour = () => {
     try {
@@ -60,27 +55,15 @@ export default function App() {
       /* private mode — fine, it just reopens next visit */
     }
     setTour(false);
-  };
-
-  // Keep the address bar in step with the open docs section (replaceState: no
-  // history spam, no hashchange); clear it on close. A pasted/clicked #docs link
-  // opens the panel.
-  const openDocs = useCallback((section?: string) => {
-    setDocs({ section });
-    history.replaceState(null, '', location.pathname + location.search + docsHash(section));
-  }, []);
-  const closeDocs = useCallback(() => {
-    setDocs(null);
-    if (parseDocsHash(location.hash)) history.replaceState(null, '', location.pathname + location.search);
     helpRef.current?.focus();
-  }, []);
+  };
+  // Drop `?tour` from the address bar once honoured (keep any other params).
   useEffect(() => {
-    const onHash = () => {
-      const route = parseDocsHash(location.hash);
-      if (route) setDocs(route);
-    };
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    if (!wantsTour()) return;
+    const q = new URLSearchParams(location.search);
+    q.delete('tour');
+    const rest = q.toString();
+    history.replaceState(null, '', location.pathname + (rest ? `?${rest}` : '') + location.hash);
   }, []);
 
   // Apply the theme during render (before child effects read CSS vars), so canvases
@@ -107,7 +90,7 @@ export default function App() {
           </div>
           <ModeSwitch />
           <div className="topbar-spacer" />
-          <HelpMenu ref={helpRef} onTour={() => setTour(true)} onDocs={() => openDocs(docs?.section)} />
+          <HelpMenu ref={helpRef} onTour={() => setTour(true)} />
           <a
             className="icon-btn report-bug"
             href="https://github.com/Osmansiddiquer/Fluxion/issues"
@@ -149,24 +132,7 @@ export default function App() {
             />
           )}
         </div>
-        {docs && (
-          <Suspense fallback={null}>
-            <DocsPanel
-              section={docs.section}
-              onNavigate={openDocs}
-              onClose={closeDocs}
-              onTour={() => setTour(true)}
-            />
-          </Suspense>
-        )}
-        <Tutorial
-          open={tour}
-          onClose={closeTour}
-          onDocs={() => {
-            closeTour();
-            openDocs();
-          }}
-        />
+        <Tutorial open={tour} onClose={closeTour} />
         <AnimationLoop />
         {(hasScript || mode === 'script') && (
           <Suspense fallback={null}>

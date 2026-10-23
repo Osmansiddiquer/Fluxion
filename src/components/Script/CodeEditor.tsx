@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { EditorState, type Extension } from '@codemirror/state';
+import { EditorState, StateEffect, type Extension } from '@codemirror/state';
 import {
   EditorView,
   keymap,
@@ -28,7 +28,7 @@ import {
   type Completion,
   type CompletionContext,
 } from '@codemirror/autocomplete';
-import { linter, lintGutter, setDiagnostics, type Diagnostic } from '@codemirror/lint';
+import { linter, lintGutter, type Diagnostic } from '@codemirror/lint';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { tags as t } from '@lezer/highlight';
 import { API_NAMES, API_SIGNATURES } from '../../lib/script/api';
@@ -127,23 +127,43 @@ function fluxionCompletions(ctx: CompletionContext) {
   return { from: word.from, options: API_OPTIONS, validFor: /^[\w$]*$/ };
 }
 
-/** Syntax errors from the editor's own parser (engines don't report where). */
-const syntaxLinter = linter(
-  (view) => {
-    const out: Diagnostic[] = [];
-    syntaxTree(view.state).iterate({
-      enter(n) {
-        if (n.type.isError && out.length < 1) {
-          const from = Math.max(0, Math.min(n.from, view.state.doc.length));
-          const to = Math.min(view.state.doc.length, Math.max(from + 1, n.to));
-          out.push({ from, to, severity: 'error', message: 'Syntax error: check the brackets, commas and quotes here.' });
-        }
-      },
-    });
-    return out;
-  },
-  { delay: 400 },
-);
+/** The runtime error currently shown (1-based line), per editor view. */
+type RuntimeError = { line?: number; message: string } | null;
+/** Dispatched when the runtime error changes, to re-run the linter. */
+const runtimeErrorChanged = StateEffect.define<null>();
+
+/**
+ * One linter for both kinds of error, so neither clears the other: syntax
+ * errors from the editor's own parser (engines don't report where), and the
+ * script's last runtime error on its line.
+ */
+function makeLinter(runtime: { current: RuntimeError }) {
+  return linter(
+    (view) => {
+      const out: Diagnostic[] = [];
+      syntaxTree(view.state).iterate({
+        enter(n) {
+          if (n.type.isError && out.length < 1) {
+            const from = Math.max(0, Math.min(n.from, view.state.doc.length));
+            const to = Math.min(view.state.doc.length, Math.max(from + 1, n.to));
+            out.push({ from, to, severity: 'error', message: 'Syntax error: check the brackets, commas and quotes here.' });
+          }
+        },
+      });
+      const err = runtime.current;
+      if (err?.line && err.line <= view.state.doc.lines) {
+        const line = view.state.doc.line(err.line);
+        const indent = line.text.length - line.text.trimStart().length;
+        out.push({ from: line.from + indent, to: Math.max(line.from + indent + 1, line.to), severity: 'error', message: err.message });
+      }
+      return out;
+    },
+    {
+      delay: 400,
+      needsRefresh: (u) => u.transactions.some((tr) => tr.effects.some((e) => e.is(runtimeErrorChanged))),
+    },
+  );
+}
 
 export interface CodeEditorProps {
   value: string;
@@ -157,6 +177,7 @@ export interface CodeEditorProps {
 export default function CodeEditor({ value, onChange, onRun, error, ariaLabel = 'Script editor' }: CodeEditorProps) {
   const host = useRef<HTMLDivElement>(null);
   const view = useRef<EditorView | null>(null);
+  const runtimeError = useRef<RuntimeError>(error);
   const cb = useRef({ onChange, onRun });
   cb.current = { onChange, onRun };
 
@@ -178,7 +199,7 @@ export default function CodeEditor({ value, onChange, onRun, error, ariaLabel = 
       javascriptLanguage.data.of({ autocomplete: localCompletionSource }),
       autocompletion({ override: [fluxionCompletions, localCompletionSource], icons: true, activateOnTypingDelay: 80 }),
       syntaxHighlighting(highlight),
-      syntaxLinter,
+      makeLinter(runtimeError),
       theme,
       EditorState.tabSize.of(2),
       EditorView.lineWrapping,
@@ -237,22 +258,10 @@ export default function CodeEditor({ value, onChange, onRun, error, ariaLabel = 
     }
   }, [value]);
 
-  // Runtime error marker on its line. (Errors without a line — syntax errors —
-  // are left to the editor's own linter, which knows where they are.)
-  const marked = useRef(false);
+  // Runtime error marker on its line (through the shared linter).
   useEffect(() => {
-    const v = view.current;
-    if (!v) return;
-    if (!error?.line && !marked.current) return;
-    marked.current = !!error?.line;
-    const diags: Diagnostic[] = [];
-    if (error?.line && error.line <= v.state.doc.lines) {
-      const line = v.state.doc.line(error.line);
-      const text = line.text;
-      const indent = text.length - text.trimStart().length;
-      diags.push({ from: line.from + indent, to: Math.max(line.from + indent + 1, line.to), severity: 'error', message: error.message });
-    }
-    v.dispatch(setDiagnostics(v.state, diags));
+    runtimeError.current = error;
+    view.current?.dispatch({ effects: runtimeErrorChanged.of(null) });
   }, [error]);
 
   return <div className="code-editor" ref={host} />;

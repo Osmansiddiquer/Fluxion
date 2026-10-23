@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en" data-theme="system">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fluxion documentation — every feature, with examples</title>
+    <meta
+      name="description"
+      content="How to use Fluxion, the browser grapher for differential equations: functions and curves, ODEs and systems, sliders and animation, inspecting graphs, drawing and styling, clips, sharing and links for AI agents."
+    />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#14171c" media="(prefers-color-scheme: dark)" />
+    <!--docs-head-->
+    <script>
+      // Before first paint: follow the app's saved theme (the persisted store blob
+      // `ode-plotter`, field state.theme), else the docs' own choice, else the OS.
+      (function () {
+        var d = document.documentElement;
+        d.setAttribute('data-js', '');
+        try {
+          var raw = sessionStorage.getItem('ode-plotter') || localStorage.getItem('ode-plotter');
+          var t = raw ? JSON.parse(raw).state.theme : null;
+          t = t || localStorage.getItem('fluxion-docs-theme');
+          if (t === 'light' || t === 'dark' || t === 'system') d.setAttribute('data-theme', t);
+        } catch (e) {}
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="docs-root"><!--docs-body--></div>
+    <!--docs-data-->
+    <script type="module" src="/src/docs-page/main.tsx"></script>
+  </body>
+</html>

@@ -98,8 +98,8 @@ export default function GraphMenu() {
 
   const current = () => makeGraph(useStore.getState());
 
-  // Replace the graph, keeping the old one for the toast's Undo. Shared with the
-  // docs' "Try it" buttons via lib/openGraph.
+  // Replace the graph, keeping the old one for the toast's Undo. Shared with
+  // Script mode's Examples menu via lib/openGraph.
   const openWithUndo = (g: GraphData, title: string) => {
     const prev = current();
     applyGraph(g);
