@@ -177,3 +177,41 @@ describe('silhouette clip', () => {
     expect(r.curve.segments.length).toBeGreaterThan(0);
   });
 });
+
+describe('circle helper', () => {
+  it('parenthesises a compound radius', async () => {
+    const { circle } = await import('./common');
+    expect(circle(2)).toBe('(2 cos(t), 2 sin(t))');
+    expect(circle('4.4 s')).toBe('(4.4 s cos(t), 4.4 s sin(t))');
+    expect(circle('0.5 + 0.1 sin(w)')).toBe('((0.5 + 0.1 sin(w))*cos(t), (0.5 + 0.1 sin(w))*sin(t))');
+    expect(circle('-r')).toBe('(-r cos(t), -r sin(t))');
+  });
+});
+
+describe('mandala loops seamlessly', () => {
+  it('scale, rotation and hue return to their start at T = 12', async () => {
+    const { mandalaDemo } = await import('./mandala');
+    const g = mandalaDemo();
+    const clock = g.entries[0];
+    expect(clock.varMin).toBe(0);
+    expect(clock.varMax).toBe(12);
+    // Every colour expression is a function of 30·T (degrees): 360° per loop.
+    for (const e of g.entries) {
+      for (const c of [e.colorExpr, e.fillColor]) if (c && /T/.test(c)) expect(c).toMatch(/30 T/);
+    }
+    const res0 = computeAll(at(g.entries, 'T', 0), g.viewport, 400);
+    const res12 = computeAll(at(g.entries, 'T', 12), g.viewport, 400);
+    const petals = g.entries.filter((e) => /for k/.test(e.raw));
+    expect(petals.length).toBe(4);
+    for (const e of petals) {
+      const a = res0.get(e.id)!.curve.segments;
+      const b = res12.get(e.id)!.curve.segments;
+      expect(b.length).toBe(a.length);
+      // Rings turn by whole symmetry steps, so each copy at T = 12 coincides
+      // (point for point, same t samples) with some copy at T = 0.
+      const same = (p: [number, number][], q: [number, number][]) =>
+        p.length === q.length && p.every(([x, y], i) => Math.hypot(x - q[i][0], y - q[i][1]) < 1e-6);
+      for (const seg of b) expect(a.some((s0) => same(seg, s0))).toBe(true);
+    }
+  });
+});

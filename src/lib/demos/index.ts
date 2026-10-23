@@ -3,6 +3,7 @@ import { sharinganDemo } from './sharingan';
 import { cubeDemo } from './cube';
 import { mangekyoDemo } from './mangekyo';
 import { silhouetteDemo } from './silhouette';
+import { mandalaDemo } from './mandala';
 
 export interface Demo {
   id: string;
@@ -30,6 +31,12 @@ export const DEMOS: Demo[] = [
     title: 'Eye → Sharingan → Mangekyō',
     blurb: 'One clock T, keyframed with skeys: colour, growth, spin and a shape morph.',
     build: mangekyoDemo,
+  },
+  {
+    id: 'mandala',
+    title: 'Mandala bloom',
+    blurb: 'Three rings of repeated petals counter-rotate while one clock eases the bloom and cycles hsv colours.',
+    build: mandalaDemo,
   },
   {
     id: 'silhouette',
