@@ -1,4 +1,5 @@
 import type { AnimMode, Entry } from '../store/types';
+import { parseEntry } from './math/parse';
 
 /** One animation step of a slider value across [min, max]. */
 export function advance(
@@ -61,4 +62,57 @@ export function stepValue(value: number, min: number, max: number, step: number,
   // Snap onto the step grid so repeated steps land on exact frames.
   const k = Math.round((value - min) / s) + dir;
   return Math.min(max, Math.max(min, min + k * s));
+}
+
+/**
+ * Deterministic clock: a slider's value `seconds` after it started at `start`,
+ * as a pure function (no accumulated floating-point drift, and a bounce reflects
+ * any overshoot). `advance` integrated over the same time gives the same value
+ * up to rounding. Also returns the direction and whether a "once" run ended.
+ */
+export function valueAt(
+  start: number,
+  min: number,
+  max: number,
+  mode: AnimMode,
+  speed: number,
+  seconds: number,
+): { value: number; dir: 1 | -1; finished: boolean } {
+  const span = Math.max(1e-9, max - min);
+  const rate = (span * Math.max(1e-4, speed)) / 4;
+  const s = Math.max(0, seconds);
+  const off = Math.min(max, Math.max(min, start)) - min + rate * s;
+  if (mode === 'loop') {
+    const m = off % span;
+    return { value: min + (m < 0 ? m + span : m), dir: 1, finished: false };
+  }
+  if (mode === 'bounce') {
+    const p = off % (2 * span);
+    return p <= span ? { value: min + p, dir: 1, finished: false } : { value: max - (p - span), dir: -1, finished: false };
+  }
+  return off >= span ? { value: max, dir: 1, finished: true } : { value: min + off, dir: 1, finished: false };
+}
+
+/** The frame number shown at `seconds` for a fixed `fps` (frame N spans [N/fps, (N+1)/fps)). */
+export function frameAt(seconds: number, fps: number): number {
+  return Math.floor(seconds * fps + 1e-9);
+}
+
+/**
+ * A graph at a given time: every `autoplay` slider set to its value `seconds`
+ * after the graph opened (from its stored value), and paused. Used by the
+ * `time=` / `frame=` link options to render one frame without any animation
+ * loop — so headless capture works even in throttled background tabs.
+ */
+export function entriesAtTime(entries: Entry[], seconds: number): Entry[] {
+  return entries.map((e) => {
+    if (!e.autoplay) return e;
+    const p = parseEntry(e.raw);
+    if (p.kind !== 'variable') return e;
+    const { value, min, max } = sliderBounds(e, p.value);
+    const r = valueAt(value, min, max, e.animMode ?? 'loop', e.animSpeed ?? 1, seconds);
+    const out: Entry = { ...e, varValue: r.value };
+    delete out.autoplay;
+    return out;
+  });
 }
