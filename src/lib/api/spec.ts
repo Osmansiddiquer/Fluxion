@@ -8,6 +8,8 @@ import { isColorExpr } from '../color';
 import { SCRIPT_LIMITS } from '../script/protocol';
 import { BLEND_MODES } from '../style';
 import { entriesAtTime } from '../anim';
+import { SOLVER_METHODS, type SolverMethod } from '../solver/integrate';
+import { STEP_METHODS, MIN_STEP_SIZE, MAX_STEP_SIZE, type StepMethod } from '../solver/methods';
 import type {
   AnimMode,
   BlendMode,
@@ -128,6 +130,14 @@ export interface ExpressionSpec {
   blur?: number;
   /** Name of a `name = layer(…)` row this expression is drawn on. */
   layer?: string;
+  /** ODE numerics: the integrator (default "rk4"). */
+  solver?: SolverMethod;
+  /** ODE: draw the steps of Euler / Heun / RK4 with step size `h` over the solution. */
+  steps?: StepMethod;
+  h?: NumLike;
+  /** 2nd-order ODE: "boundary" solves y(a) = α, y(b) = β by shooting, with bc = [a, α, b, β]. */
+  conditions?: 'initial' | 'boundary';
+  bc?: NumLike[];
 }
 
 export interface ViewportSpec {
@@ -198,6 +208,11 @@ export interface NormalizedExpression {
   glow?: number;
   blur?: number;
   layer?: string;
+  solver?: SolverMethod;
+  steps?: StepMethod;
+  h?: number;
+  conditions?: 'initial' | 'boundary';
+  bc?: number[];
 }
 
 export interface NormalizedSpec {
@@ -255,6 +270,7 @@ export const ANIM_MODES: readonly AnimMode[] = ['loop', 'bounce', 'once'];
 export const POINT_DIRS: readonly PointDir[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 export const DRAG_MODES: readonly DragMode[] = ['auto', 'off', 'x', 'y', 'both'];
 export const LINE_STYLES: readonly LineStyle[] = ['solid', 'dashed', 'dotted'];
+export const CONDITION_MODES = ['initial', 'boundary'] as const;
 /** A layer name (a `name = layer(…)` row). */
 export const LAYER_NAME = /^[A-Za-z]\w*$/;
 /** Frames per second assumed by `frame` when the graph sets no `fps`. */
@@ -304,6 +320,11 @@ export const EXPRESSION_KEYS = [
   'glow',
   'blur',
   'layer',
+  'solver',
+  'steps',
+  'h',
+  'conditions',
+  'bc',
 ] as const;
 export const VIEWPORT_KEYS = ['xmin', 'xmax', 'ymin', 'ymax'] as const;
 /** Feature toggles a spec may set; `grid` (grid lines + axes) defaults to shown. */
@@ -355,6 +376,13 @@ const KEY_ALIASES: Record<string, string> = {
   view: 'viewport',
   sigfigs: 'sigFigs',
   precision: 'sigFigs',
+  integrator: 'solver',
+  method: 'solver',
+  stepsize: 'h',
+  showsteps: 'steps',
+  boundary: 'bc',
+  bcs: 'bc',
+  boundaryconditions: 'bc',
 };
 
 function editDistance(a: string, b: string): number {
@@ -645,6 +673,25 @@ function validateExpression(
     } else out.layer = obj.layer;
   }
 
+  // ODE numerics.
+  if (obj.solver !== undefined) out.solver = c.oneOf(obj.solver, SOLVER_METHODS, `${path}.solver`);
+  if (obj.steps !== undefined) out.steps = c.oneOf(obj.steps, STEP_METHODS, `${path}.steps`);
+  if (obj.h !== undefined) {
+    out.h = c.num(obj.h, `${path}.h`, { min: MIN_STEP_SIZE, max: MAX_STEP_SIZE });
+  }
+  if (obj.conditions !== undefined) out.conditions = c.oneOf(obj.conditions, CONDITION_MODES, `${path}.conditions`);
+  if (obj.bc !== undefined) {
+    if (!Array.isArray(obj.bc) || obj.bc.length !== 4) {
+      c.error(`${path}.bc`, `must be [a, alpha, b, beta] (y(a) = alpha, y(b) = beta), got ${describe(obj.bc)}`);
+    } else {
+      const vals = obj.bc.map((v, i) => c.num(v, `${path}.bc[${i}]`));
+      if (vals.every((v): v is number => v !== undefined)) {
+        if (vals[0] === vals[2]) c.error(`${path}.bc`, 'a and b must differ');
+        else out.bc = vals;
+      }
+    }
+  }
+
   // Drop keys whose value failed validation (left as undefined above).
   for (const k of Object.keys(out) as (keyof typeof out)[]) if (out[k] === undefined) delete out[k];
   return out;
@@ -867,6 +914,11 @@ export function specToGraph(spec: NormalizedSpec): GraphData {
     if (e.glow !== undefined) entry.glow = e.glow;
     if (e.blur !== undefined) entry.blur = e.blur;
     if (e.layer !== undefined) entry.layer = e.layer;
+    if (e.solver !== undefined) entry.solver = e.solver;
+    if (e.steps !== undefined) entry.steps = e.steps;
+    if (e.h !== undefined) entry.stepSize = e.h;
+    if (e.conditions !== undefined) entry.conditions = e.conditions;
+    if (e.bc !== undefined) entry.bc = e.bc.slice();
     return entry;
   });
   const g: GraphData = {
@@ -941,6 +993,11 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
     if (e.glow) x.glow = e.glow;
     if (e.blur) x.blur = e.blur;
     if (e.layer) x.layer = e.layer;
+    if (e.solver !== undefined) x.solver = e.solver;
+    if (e.steps !== undefined) x.steps = e.steps;
+    if (e.stepSize !== undefined) x.h = e.stepSize;
+    if (e.conditions !== undefined) x.conditions = e.conditions;
+    if (e.bc !== undefined && e.bc.length) x.bc = e.bc.slice();
     // A slider's current value lives in varValue; fold it back into the text.
     if (e.varValue !== undefined) {
       const m = e.raw.match(/^\s*([A-Za-z]\w*)\s*=/);

@@ -1,0 +1,67 @@
+{
+  "version": 1,
+  "expressions": [
+    {
+      "expr": "m y'' + c y' + k y = J delta(t - T), y(0) = 0, y'(0) = 0",
+      "color": "#2d70b3"
+    },
+    {
+      "expr": "x = T",
+      "color": "#98a2af",
+      "lineWidth": 1.5,
+      "lineStyle": "dashed"
+    },
+    {
+      "expr": "m = 1",
+      "color": "#000000",
+      "min": 0.2,
+      "max": 4,
+      "step": 0.1
+    },
+    {
+      "expr": "c = 0.3",
+      "color": "#000000",
+      "min": 0,
+      "max": 3,
+      "step": 0.05
+    },
+    {
+      "expr": "k = 4",
+      "color": "#000000",
+      "min": 0.5,
+      "max": 10,
+      "step": 0.1
+    },
+    {
+      "expr": "J = 3",
+      "color": "#000000",
+      "min": -6,
+      "max": 6,
+      "step": 0.1
+    },
+    {
+      "expr": "T = 1.5",
+      "color": "#000000",
+      "min": 0,
+      "max": 10,
+      "step": 0.1,
+      "anim": "bounce"
+    }
+  ],
+  "viewport": {
+    "xmin": -1,
+    "xmax": 11,
+    "ymin": -4.5,
+    "ymax": 4.5
+  },
+  "features": {
+    "xIntercepts": false,
+    "yIntercept": false,
+    "discontinuities": false,
+    "intersections": false
+  },
+  "panels": {
+    "right": false,
+    "bottom": false
+  }
+}

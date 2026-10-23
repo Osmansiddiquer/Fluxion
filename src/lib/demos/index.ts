@@ -5,6 +5,7 @@ import { mangekyoDemo } from './mangekyo';
 import { silhouetteDemo } from './silhouette';
 import { mandalaDemo } from './mandala';
 import { sunsetDemo } from './sunset';
+import { impulseDemo } from './impulse';
 import { cubeScript, mandalaScript, mangekyoScript, pendulumScript, sharinganScript, silhouetteScript } from './scripted';
 
 export interface Demo {
@@ -58,6 +59,12 @@ export const DEMOS: Demo[] = [
     title: 'Cinematic sunset',
     blurb: 'Graph mode: a gradient sky, sun glow and god-rays, parallax layers, spline silhouettes, letterboxed at 24 fps.',
     build: sunsetDemo,
+  },
+  {
+    id: 'impulse',
+    title: 'Spring hit by a hammer',
+    blurb: "Graph mode: m y'' + c y' + k y = J delta(t - T) with y(0) = 0, y'(0) = 0 typed inline: the impulse at t = T kicks the spring, which rings down.",
+    build: impulseDemo,
   },
 ];
 
