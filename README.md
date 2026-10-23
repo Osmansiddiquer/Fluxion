@@ -81,7 +81,12 @@ browser storage separately from your per-tab graph state.
 - **Animatable sliders** — play / loop / bounce / once with a speed control.
 - **Linked projection panels** — per-curve cross-sections onto the y- and t-axes,
   with cut lines you drag on the graph (and that you can drive with a variable).
-- **Share & save** — export/import a graph file, or copy a shareable link.
+- **Saved graphs** — name and save graphs (Ctrl/⌘+S), then reopen, rename, duplicate,
+  export or share them from **My graphs**, with thumbnails and search. Unsaved work from
+  every tab is kept automatically under *Recent*, so closing a tab never loses it, and two
+  tabs editing the same graph warn instead of overwriting each other. Stored in the
+  browser (IndexedDB); nothing is uploaded.
+- **Share & export** — export/import a graph file, or copy a shareable link.
 - **Built-in help** — the **?** button offers a short tour and full in-app
   documentation (every feature, searchable, with a *Try it* button on each example;
   deep-linkable as `#docs/<section>`, e.g. `#docs/odes`).

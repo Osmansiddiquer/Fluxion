@@ -67,6 +67,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls`, `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
 | Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
 | Chrome | `App.tsx`, `Tutorial.tsx`, `HelpMenu.tsx` (the ? menu), `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
+| Saved graphs | `lib/saved/` (`kv.ts` IndexedDB→localStorage→memory, `library.ts`, `thumbnail.ts`, `channel.ts`, `session.ts`), `state/savedGraphs.ts` (per-tab controller), `components/Graphs/` (header chip, share-menu items, My graphs sheet) |
 | Docs (in-app) | `components/Docs/` — `content.ts` (all docs as data), `examples.ts` (example type + the tour's 4 examples), `DocsPanel.tsx` + `Docs.css` (lazy chunk), `search.ts`, `hash.ts` (`#docs/<id>`), `docs.test.ts`; `lib/openGraph.ts` ("Try it" → GraphMenu's load + Undo toast) |
 | Tokens | `styles/theme.css` (all `--var`s, light+dark), `styles/global.css` |
 | URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
@@ -105,7 +106,8 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
   menu) so it rides in `GraphData.features` with no store/graph-file change.
 - **Per-tab state**: `useStore` persist uses `sessionStorage` (per tab) mirrored to
   `localStorage` (so a fresh tab inherits your last graph and work survives restart). Two
-  open tabs are independent. Persist key `ode-plotter`, `version: 2`.
+  open tabs are independent. Persist key `ode-plotter`, `version: 2`. Named graphs and
+  recent autosaves live separately in IndexedDB; see "Saved graphs" below.
 
 ## Scripting layer (issue #2) — how it fits together
 
@@ -203,6 +205,38 @@ chunk is fetched on first open). The bug-report link sits next to it, untouched.
   built in `feat/script-mode`) exists, it shows a "Script mode is coming" note. To wire it,
   change the one line `const SCRIPT_DOCS … = null;` to
   `const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = () => import('../Script/ScriptDocs');`.
+
+## Saved graphs (`src/lib/saved`, `state/savedGraphs.ts`, `components/Graphs`)
+
+- **Storage**: IndexedDB db `fluxion` (stores `graphs`, `recent`, `assets`) behind the tiny
+  `KV` interface in `kv.ts`; falls back to localStorage (`fluxion-lib:*` keys), then memory
+  (the sheet then warns that nothing persists). Quota errors become `StorageFullError`
+  with a user-facing message; a save retries once without its thumbnail, and Recent evicts
+  its oldest items before giving up.
+- **Records** store the whole `GraphData` minus `assets` (so new top-level fields such as
+  `script` round-trip); clip payloads are content-addressed in `assets` and referenced by
+  `assetIds`, and `gcAssets()` runs on startup. Loading goes through `sanitizeStored` (=
+  `sanitizeGraph` + unknown top-level fields carried through) and then GraphMenu's
+  `applyGraph` (via `lib/openGraph` `applyGraphDirect`), which calls `registerAssets` before
+  `loadGraph`.
+- **Content hash** (`graphHash`): stable-stringified graph minus entry `id` / `expanded` /
+  `assets`. It drives the Saved / Unsaved indicator, Recent dedupe, and re-linking a fresh
+  tab (or an Undo) to the saved graph it matches.
+- **Per tab**: `sessionStorage` `fluxion-doc` holds `{docId, name, baseRev, savedHash}`.
+  Recent is one slot per working session (new per page load, New graph and Open), capped at
+  10, deduped by content, skipping trivial graphs and graphs identical to a saved one.
+  It flushes 2.5 s after an edit, on tab hide, and before any graph replaces the current
+  one: GraphMenu.applyGraph calls `notifyBeforeGraphReplace()`. **Any new load path must go
+  through applyGraph**, or the outgoing work won't reach Recent.
+- **Multi-tab**: each content save bumps `rev`; saving with a stale `baseRev` throws
+  `GraphConflictError` inside one atomic KV `update` (no silent overwrite), and the UI offers
+  Save as copy / Overwrite / Open theirs. Renames don't bump `rev`. Tabs notify each other
+  over the `fluxion-library` BroadcastChannel (falling back to a localStorage ping), which
+  refreshes lists and flags "Changed / Deleted in another tab".
+- **UI**: a name + status chip next to the brand (hidden ≤760 px, where the share button
+  shows a dot instead), Save / Save as copy / New graph / My graphs at the top of the share
+  menu, and the My graphs sheet. Ctrl/Cmd+S is a capture-phase listener in `SavedGraphs.tsx`.
+- Tests: `lib/saved/*.test.ts` (fake-indexeddb + injected KV adapters).
 
 ## URL API for LLM agents (`src/lib/api`)
 
