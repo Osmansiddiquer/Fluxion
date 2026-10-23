@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { useStore } from '../store/useStore';
-import { encodeGraph, makeGraph, type GraphData } from '../lib/graphFile';
+import { makeGraph, type GraphData } from '../lib/graphFile';
+import { buildShareLink } from '../lib/api/url';
+import { copyPendingText } from '../lib/saved/clipboard';
 import { registerAssets } from '../lib/frames/assets';
 import { DEFAULT_VIEWPORT } from '../lib/api/spec';
-import { applyGraphDirect, setBeforeGraphReplace } from '../lib/openGraph';
+import { applyGraphDirect, setBeforeGraphReplace } from '../lib/saved/applyHook';
 import { openBestKV, StorageFullError, type KVKind } from '../lib/saved/kv';
 import {
   GraphConflictError,
@@ -556,16 +558,19 @@ export async function exportGraph(kind: 'saved' | 'recent', id: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-export async function copyLink(kind: 'saved' | 'recent', id: string) {
-  const r = await graphOf(kind, id);
-  if (!r) return;
-  const url = `${location.origin}${location.pathname}#g=${encodeGraph(r.g)}`;
-  try {
-    await navigator.clipboard.writeText(url);
-    flash('Share link copied to clipboard');
-  } catch {
-    flash('Could not copy — clipboard blocked', { error: true });
-  }
+/** Copy a compact share link (lib/api buildShareLink) for a saved / recent graph. Not async
+ * up front: the clipboard gets a pending item during the click (Safari), filled once the
+ * graph is read and the link compressed. */
+export function copyLink(kind: 'saved' | 'recent', id: string) {
+  const base = `${location.origin}${location.pathname}`;
+  const link = graphOf(kind, id).then((r) => {
+    if (!r) throw new Error('That graph no longer exists');
+    return buildShareLink(r.g, base);
+  });
+  return copyPendingText(link).then(
+    () => flash('Share link copied to clipboard'),
+    () => flash('Could not copy — clipboard blocked', { error: true }),
+  );
 }
 
 /** Conflict prompt answers. */

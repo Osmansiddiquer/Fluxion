@@ -8,6 +8,7 @@ import { docsHash, parseDocsHash } from './hash';
 import { computeAll } from '../../lib/compute';
 import { parseEntry } from '../../lib/math/parse';
 import { HELPER_NAMES } from '../../lib/math/helpers';
+import { isDerived } from '../../lib/scope';
 import { COLOR_FUNCTION_NAMES, isColorExpr } from '../../lib/color';
 import { hasUrlPayload, readUrlPayload } from '../../lib/api/url';
 import { DEMOS } from '../../lib/demos';
@@ -67,8 +68,8 @@ describe('docs content structure', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
-  it('every internal #docs/ link points at a real section', () => {
-    const links = [...ALL_TEXT.matchAll(/\]\(#docs\/([a-z0-9-]+)\)/g)].map((m) => m[1]);
+  it('every in-page #section link points at a real section', () => {
+    const links = [...ALL_TEXT.matchAll(/\]\(#([a-z0-9-]+)\)/g)].map((m) => m[1]);
     expect(links.length).toBeGreaterThan(3);
     for (const id of links) expect(findSection(id), id).toBeDefined();
   });
@@ -120,6 +121,9 @@ describe('every docs example parses as documented and computes', () => {
         if (e.colorExpr) expect(isColorExpr(e.colorExpr), e.colorExpr).toBe(true);
         if (e.fillColor) expect(isColorExpr(e.fillColor), e.fillColor).toBe(true);
         if (r.curve.segments.length || r.points?.length || r.inequality) drawn++;
+        // The "derived" tag is exactly the derived values (a named function of no x/t).
+        const line = example.lines[g.entries.indexOf(e)];
+        if (line) expect(!!line.derived, `${e.raw} derived tag`).toBe(isDerived(r.parsed));
       }
       // Something visible, unless the snippet is a lone slider/definition row
       // or a clip row with no clip attached (only a file can carry one).

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { makeGraph, encodeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
+import { makeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
 import { loadFromUrl, sanitizeGraph } from '../lib/api/load';
-import { stripApiParams } from '../lib/api/url';
+import { buildShareLink, stripApiParams } from '../lib/api/url';
 import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
 import { registerAssets } from '../lib/frames/assets';
 import { DEMOS } from '../lib/demos';
-import { notifyBeforeGraphReplace, setApplyGraphHandler, setOpenGraphHandler } from '../lib/openGraph';
+import { notifyBeforeGraphReplace, setApplyGraphHandler } from '../lib/saved/applyHook';
 import SavedMenuItems from './Graphs/SavedMenuItems';
 import { SavedDot } from './Graphs/GraphsTitle';
 
@@ -93,30 +93,31 @@ export default function GraphMenu() {
 
   const current = () => makeGraph(useStore.getState());
 
-  // Replace the graph, keeping the old one for the toast's Undo. Shared with the
-  // docs' "Try it" buttons via lib/openGraph.
-  const openWithUndo = (g: GraphData, title: string) => {
-    const prev = current();
-    applyGraph(g);
-    flash(`Opened “${title}”`, false, prev);
-  };
-  const openWithUndoRef = useRef(openWithUndo);
-  openWithUndoRef.current = openWithUndo;
-  useEffect(() => setOpenGraphHandler((g, title) => openWithUndoRef.current(g, title)), []);
+  // Saved graphs loads through applyGraph too (see lib/saved/applyHook).
   useEffect(() => setApplyGraphHandler((g) => applyRef.current(g)), []);
 
   const openDemo = (id: string) => {
     setOpen(false);
     const demo = DEMOS.find((d) => d.id === id);
     if (!demo) return;
-    openWithUndo(demo.build(), demo.title);
+    const prev = current();
+    applyGraph(demo.build());
+    flash(`Opened “${demo.title}”`, false, prev);
   };
 
   const share = async () => {
     setOpen(false);
-    const url = `${location.origin}${location.pathname}#g=${encodeGraph(current())}`;
+    const link = buildShareLink(current(), `${location.origin}${location.pathname}`);
     try {
-      await navigator.clipboard.writeText(url);
+      // The link is built asynchronously (compression). Hand the clipboard a
+      // pending item so Safari keeps the click's user activation; fall back to
+      // writeText where ClipboardItem promises aren't supported.
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+        const blob = link.then((url) => new Blob([url], { type: 'text/plain' }));
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+      } else {
+        await navigator.clipboard.writeText(await link);
+      }
       flash('Share link copied to clipboard');
     } catch {
       flash('Could not copy — clipboard blocked');

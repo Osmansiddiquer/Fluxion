@@ -18,7 +18,9 @@ wsl -d Ubuntu -- bash -lc '. ~/.nvm/nvm.sh && cd /home/nimda/repos/ODE-plotter &
 - `npm run build` — typecheck + production build (the canonical "does it compile" check;
   ~5 s). Grep its output for `error TS` / `✓ built`.
 - `npm run dev` — Vite dev server on `http://localhost:5173/` (HMR). Used for browser
-  verification. Start detached: `(npm run dev &)`.
+  verification. Start detached: `(npm run dev &)`. The docs page is at `/docs/`.
+- `npm run build` also builds the **docs page** (`npm run build:docs`: a second Vite build
+  with `vite.docs.config.mjs` into `dist/docs/`, then `scripts/prerender-docs.ts`).
 - The repo lives at `/home/nimda/repos/ODE-plotter` (WSL) = `\\wsl.localhost\Ubuntu\...`
   (Windows). Edit via the Windows path; run via WSL.
 
@@ -67,10 +69,11 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls`, `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
 | Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
 | Chrome | `App.tsx`, `Tutorial.tsx`, `HelpMenu.tsx` (the ? menu), `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
-| Saved graphs | `lib/saved/` (`kv.ts` IndexedDB→localStorage→memory, `library.ts`, `thumbnail.ts`, `channel.ts`, `session.ts`), `state/savedGraphs.ts` (per-tab controller), `components/Graphs/` (header chip, share-menu items, My graphs sheet) |
-| Docs (in-app) | `components/Docs/` — `content.ts` (all docs as data), `examples.ts` (example type + the tour's 4 examples), `DocsPanel.tsx` + `Docs.css` (lazy chunk), `search.ts`, `hash.ts` (`#docs/<id>`), `docs.test.ts`; `lib/openGraph.ts` ("Try it" → GraphMenu's load + Undo toast) |
+| Saved graphs | `lib/saved/` (`kv.ts` IndexedDB→localStorage→memory, `library.ts`, `thumbnail.ts`, `channel.ts`, `session.ts`, `clipboard.ts`, `applyHook.ts`), `state/savedGraphs.ts` (per-tab controller), `components/Graphs/` (header chip, share-menu items, My graphs sheet) |
+| Docs content | `components/Docs/` — `content.ts` (all docs as data), `examples.ts` (example type + the tour's 4 examples), `search.ts`, `hash.ts` (legacy `#docs/<id>` redirect), `docs.test.ts` |
+| Docs page | `src/docs-page/` — `index.html` (template), `DocsPage.tsx` (the page), `main.tsx` (hydrate), `prerender.ts` + `scripts/prerender-docs.ts` (static HTML), `links.ts` (Try links), `tex.ts`, `theme.ts`, `docs-page.css`, `docs-page.test.ts`; `vite.docs.config.mjs` |
 | Tokens | `styles/theme.css` (all `--var`s, light+dark), `styles/global.css` |
-| URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
+| URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode; `buildShareLink` = the share button: compressed spec `#z=`, or `#gz=` deflated graph when it carries frame clips; old `#g=` still loads), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
 
 ## Conventions & gotchas (hard-won — don't relearn these)
 
@@ -175,36 +178,50 @@ Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU
    ("run the agentic tests").
 3. The user cares about aesthetics — verify look in **both light and dark** themes.
 
-## In-app documentation (`src/components/Docs`)
+## Documentation page (`/docs/`)
 
-The header **?** opens `HelpMenu`: *Take the tour* (`Tutorial.tsx`, unchanged carousel;
-still auto-opens on first visit, skipped for URL-payload and `#docs` links) and
-*Documentation* (`DocsPanel`, lazy-loaded via `React.lazy` in `App.tsx`, so the docs
-chunk is fetched on first open). The bug-report link sits next to it, untouched.
+The docs are a separate static page at `/Fluxion/docs/`, not part of the app. The header
+**?** opens `HelpMenu`: *Take the tour* (`Tutorial.tsx`, the unchanged carousel; still
+auto-opens on first visit, skipped for URL-payload links) and *Documentation*, a plain
+`<a href="docs/" target="_blank">` (`DOCS_HREF` in `config.ts`); the tour's last card links
+there too. The bug-report link sits next to ?, untouched. Old `#docs/<id>` app links
+redirect to `docs/#<id>` (`main.tsx`); `?tour` opens the tour (the docs' "Take the tour").
 
-- **Content is data**: `content.ts` `SECTIONS` (learning order) → blocks (`p`, `h`, `list`,
-  `steps`, `syntax` rows, `table`, `example`, `math`, `tip`, `tour`, `script-docs`). Inline
-  markup: `` `code` ``, `**bold**`, `$TeX$` (KaTeX), `[label](href)`; `#docs/<id>` hrefs
-  navigate in-panel. **To add a section**: write a `DocSection` in `content.ts`, add it to
-  `SECTIONS` in order, run `npm test`.
-- **Every snippet is executable**: each `example` and each `syntax` row (plus its `with`
-  rows) has *Try it*, which builds a graph (`exampleGraph`, or a demo via `demo: '<id>'`)
-  and calls `openGraphWithUndo` → `GraphMenu` loads it and shows the Undo toast.
-- **`docs.test.ts` keeps docs and app in sync**: every example/row must parse as its
-  documented kind and compute with no errors; the docs must cover **every `Parsed` kind**
-  (read from the union in `parse.ts`), **every `HELPER_NAMES` helper** and every colour
-  function, every demo title, every Points-menu toggle and share-menu item. A new parse
-  kind or helper fails the suite until it's documented. Also tests search, deep links
-  (`#docs/...` never matches `hasUrlPayload`, and API fragments never parse as docs) and
-  that the tour's examples are the same objects the docs show (`examples.ts`).
-- **Deep links**: `#docs` / `#docs/<section-id>` (no `=`, so it can't collide with
-  `#expr=`/`#spec=`/`#z=`/`#g=`/`#example=`). `App` mirrors the open section into the hash
-  with `replaceState` and clears it on close.
+- **Build**: `vite.docs.config.mjs` builds `src/docs-page/index.html` into `dist/docs/`
+  (own bundle: React + content, no parser, no KaTeX JS; `publicDir: false`). Vite mirrors
+  the source path, so `scripts/prerender-docs.ts` moves the page to `dist/docs/index.html`
+  (rewriting `../../assets/` → `./assets/`), renders `DocsPage` with `renderToString`,
+  and fills the template markers (`<!--docs-head-->`, `-body-`, `-data-`). In dev,
+  `vite.config.mjs` serves the template at `/docs/` and `main.tsx` renders client-side.
+- **Static first**: the page reads fine with JS off (search and the theme switch hide;
+  the OS theme applies). The client hydrates using the embedded JSON (`#docs-data`: Try
+  links + KaTeX HTML from `tex.ts`, so KaTeX's JS never ships). Anything rendered must be
+  deterministic from `content.ts` + that data, or hydration breaks.
+- **Try it** links are built at build time with the URL API (`links.ts`: `buildLink` →
+  `../#z=…`, or `../#example=<id>` for demos) and open the app in a new tab.
+- **Theme** follows the app: `theme.ts` reads `state.theme` from the persisted
+  `ode-plotter` blob (inline script in `index.html` applies it before paint); the page's
+  toggle writes it back (or `fluxion-docs-theme` when no app state exists).
+- **Content is data**: `components/Docs/content.ts` `SECTIONS` (learning order) → blocks
+  (`p`, `h`, `list`, `steps`, `syntax` rows, `table`, `example`, `math`, `tip`, `tour`,
+  `script-docs`). Inline markup: `` `code` ``, `**bold**`, `$TeX$`, `[label](href)`; `#<id>`
+  hrefs are in-page anchors, other hrefs are relative to `/docs/` (the app is `../`). Mark
+  derived values (`b = 2a + 1`) with `derived: true`. **To add a section**: write a
+  `DocSection`, add it to `SECTIONS`, run `npm test`.
+- **Tests keep docs and app in sync**: `components/Docs/docs.test.ts`: every
+  example/row parses as its documented kind and computes cleanly; the docs cover **every
+  `Parsed` kind** (read from the union in `parse.ts`), **every `HELPER_NAMES` helper**,
+  every colour function, demo, Points-menu toggle and share-menu item (a new kind or
+  helper fails until documented); search; legacy hash parsing; the tour and docs share
+  example objects. `src/docs-page/docs-page.test.ts`: the pre-render contains every
+  section, heading and snippet; every Try link decodes (`readUrlPayload`/`loadFromUrl`) to
+  a graph that computes with no errors; the build wiring; and, after `npm run build`, the
+  real `dist/docs/index.html`.
 - **Script mode hook**: the *Scripting* section renders `ScriptDocsSlot` in
-  `DocsPanel.tsx`. Until `src/components/Script/ScriptDocs.tsx` (default export, no props;
-  built in `feat/script-mode`) exists, it shows a "Script mode is coming" note. To wire it,
-  change the one line `const SCRIPT_DOCS … = null;` to
-  `const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = () => import('../Script/ScriptDocs');`.
+  `src/docs-page/DocsPage.tsx`: the static HTML shows "Script mode is coming"; after
+  hydration it mounts `src/components/Script/ScriptDocs.tsx` (default export, no props;
+  built in `feat/script-mode`) client-side, if wired. To wire it, change the one line to
+  `const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = () => import('../components/Script/ScriptDocs');`.
 
 ## Saved graphs (`src/lib/saved`, `state/savedGraphs.ts`, `components/Graphs`)
 
@@ -217,7 +234,7 @@ chunk is fetched on first open). The bug-report link sits next to it, untouched.
   `script` round-trip); clip payloads are content-addressed in `assets` and referenced by
   `assetIds`, and `gcAssets()` runs on startup. Loading goes through `sanitizeStored` (=
   `sanitizeGraph` + unknown top-level fields carried through) and then GraphMenu's
-  `applyGraph` (via `lib/openGraph` `applyGraphDirect`), which calls `registerAssets` before
+  `applyGraph` (via `lib/saved/applyHook.ts` `applyGraphDirect`), which calls `registerAssets` before
   `loadGraph`.
 - **Content hash** (`graphHash`): stable-stringified graph minus entry `id` / `expanded` /
   `assets`. It drives the Saved / Unsaved indicator, Recent dedupe, and re-linking a fresh
@@ -284,7 +301,7 @@ strips them; bad links show an error toast and keep the current graph.
 
 All planned features are shipped (ODEs/systems, functions, implicit, polar, inequalities
 incl. polar/compound, points/lines, animatable sliders, projection panels, trace,
-discontinuities, sharing/export, per-tab state, x/t interchange, tutorial, in-app docs, compute
+discontinuities, sharing/export, per-tab state, x/t interchange, tutorial, docs page, compute
 caches, and the scripting layer: parametric curves, derived values, user functions,
 for-repeats, keyframes, 3D projection, styling/fills/colour expressions, shared
 animation clock, frame sequences + importer, demo graphs). Open: full "Bad Apple!!"

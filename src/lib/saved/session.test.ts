@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { applyRemote, docStatus, fileNameFor, matchesQuery, relativeTime, type DocLink } from './session';
 import { makeThumbnail, thumbnailOfPlot, THUMB_H, THUMB_W } from './thumbnail';
 import { openLibraryChannel, type LibraryMessage } from './channel';
+import { copyPendingText } from './clipboard';
+import { GraphLibrary } from './library';
+import { memoryKV } from './kv';
+import { buildShareLink } from '../api/url';
+import { loadFromUrl } from '../api/load';
+import { encodeClip } from '../frames/codec';
+import { assetId } from '../frames/assets';
+import type { GraphData } from '../graphFile';
 
 const link: DocLink = { docId: 'g1', name: 'A', baseRev: 2, savedHash: 'h' };
 
@@ -104,5 +112,57 @@ describe('library channel', () => {
     a.close();
     b.close();
     expect(got).toEqual([{ type: 'saved', id: 'g1', rev: 2, from: 'tabA' }]);
+  });
+});
+
+describe('copy share link (saved / recent)', () => {
+  it('hands the clipboard a pending ClipboardItem (Safari user activation)', async () => {
+    const written: unknown[] = [];
+    class FakeItem {
+      constructor(readonly items: Record<string, Promise<Blob>>) {}
+    }
+    let resolve!: (s: string) => void;
+    const text = new Promise<string>((r) => (resolve = r));
+    const p = copyPendingText(text, {
+      navigator: { clipboard: { write: async (items: ClipboardItems) => void written.push(...items) } },
+      ClipboardItem: FakeItem as unknown as typeof ClipboardItem,
+    });
+    // Written synchronously, before the link exists.
+    expect(written).toHaveLength(1);
+    resolve('https://x/#z=abc');
+    await p;
+    const blob = await (written[0] as FakeItem).items['text/plain'];
+    expect(await blob.text()).toBe('https://x/#z=abc');
+  });
+  it('falls back to writeText, and fails without a clipboard', async () => {
+    let got = '';
+    await copyPendingText(Promise.resolve('L'), { navigator: { clipboard: { writeText: async (s: string) => void (got = s) } } });
+    expect(got).toBe('L');
+    await expect(copyPendingText(Promise.resolve('L'), {})).rejects.toThrow();
+  });
+  it('a saved graph (with a clip) round-trips through buildShareLink', async () => {
+    const l = new GraphLibrary(memoryKV());
+    const clip = encodeClip({ w: 4, h: 4, fps: 12, box: [-1, -1, 1, 1], frames: [[[[0, 0], [3, 0], [3, 3]]]] });
+    const id = assetId(clip);
+    const g: GraphData = {
+      v: 1,
+      entries: [
+        { id: 'a', raw: 'y = k*sin(t)', color: '#c74440', visible: true, expanded: true },
+        { id: 'b', raw: 'k=2', color: '#2d70b3', visible: true, expanded: true, frames: id },
+      ],
+      viewport: { tMin: -3, tMax: 3, yMin: -2, yMax: 2 },
+      features: { extrema: true, xIntercepts: true, yIntercept: true, endpoints: false, discontinuities: true, intersections: true },
+      projections: { rightOpen: true, bottomOpen: true, sliceT: 0, sliceY: 1 },
+      sigFigs: 4,
+      assets: { [id]: clip },
+    };
+    const rec = await l.save({ name: 'Share me', graph: g });
+    const url = await buildShareLink(await l.toGraph(rec), 'https://fluxion.test/');
+    expect(url.startsWith('https://fluxion.test/#')).toBe(true);
+    expect(url).not.toContain('#g=');
+    const back = await loadFromUrl(url.slice(url.indexOf('#')), '');
+    expect(back?.graph?.entries.map((e) => e.raw)).toEqual(['y = k*sin(t)', 'k=2']);
+    expect(back?.graph?.viewport).toEqual(g.viewport);
+    expect(back?.graph?.assets?.[id]).toBe(clip);
   });
 });
