@@ -10,6 +10,7 @@ import {
   DEFAULT_VIEWPORT,
   DRAG_MODES,
   FEATURE_KEYS,
+  LAYER_NAME,
   LIMITS,
   LINE_STYLES,
   POINT_DIRS,
@@ -20,6 +21,7 @@ import {
 } from './spec';
 import { readUrlPayload } from './url';
 import { isColorExpr } from '../color';
+import { BLEND_MODES } from '../style';
 import { assetId } from '../frames/assets';
 import { parseHeader } from '../frames/codec';
 import { SCRIPT_LIMITS } from '../script/protocol';
@@ -98,6 +100,15 @@ export function sanitizeGraph(g: GraphData): GraphData {
         }
       }
       if (typeof e.frames === 'string' && ASSET_ID.test(e.frames)) out.frames = e.frames;
+      // Animation & rendering options (bounded; all optional).
+      if (finite(e.samples)) out.samples = Math.round(Math.min(LIMITS.maxSamples, Math.max(LIMITS.minSamples, e.samples)));
+      if (typeof e.dots === 'boolean') out.dots = e.dots;
+      const blend = oneOf(e.blend, BLEND_MODES);
+      if (blend) out.blend = blend;
+      for (const k of ['glow', 'blur'] as const) {
+        if (finite(e[k])) out[k] = Math.min(LIMITS.maxEffectPx, Math.max(0, e[k]!));
+      }
+      if (typeof e.layer === 'string' && e.layer.length <= LIMITS.maxLayerName && LAYER_NAME.test(e.layer)) out.layer = e.layer;
       if (typeof e.pointLabel === 'string') out.pointLabel = e.pointLabel.slice(0, LIMITS.maxLabelLength);
       const dir = oneOf(e.pointLabelDir, POINT_DIRS);
       if (dir) out.pointLabelDir = dir;
@@ -122,6 +133,8 @@ export function sanitizeGraph(g: GraphData): GraphData {
   const features: FeatureToggles = { ...DEFAULT_FEATURES };
   const f = (g.features ?? {}) as Partial<FeatureToggles>;
   for (const k of FEATURE_KEYS) if (typeof f[k] === 'boolean') features[k] = f[k]!;
+  if (finite(f.aspect) && f.aspect >= LIMITS.minAspect && f.aspect <= LIMITS.maxAspect) features.aspect = f.aspect;
+  if (finite(f.fps) && f.fps >= 1 && f.fps <= LIMITS.maxFps) features.fps = f.fps;
 
   const p = (g.projections ?? {}) as Partial<Projections>;
   const projections: Projections = {

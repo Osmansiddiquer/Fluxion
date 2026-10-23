@@ -54,6 +54,10 @@
       }
     },
     "sigFigs": { "$ref": "#/$defs/number", "description": "Significant figures in labels, 1 to 12.", "default": 3 },
+    "aspect": { "$ref": "#/$defs/number", "description": "Fixed aspect ratio (width / height, 0.1 to 10, e.g. 2.39 or \"16/9\"): the plot is letterboxed to that frame (black bars), and x from xmin to xmax spans the frame exactly, so the composition is the same on every screen." },
+    "fps": { "$ref": "#/$defs/number", "description": "Fixed playback rate, 1 to 240: sliders advance in whole frames, and frame N is a pure function of N (deterministic playback)." },
+    "time": { "$ref": "#/$defs/number", "description": "Open paused at this time in seconds: every autoplay slider is set to its value that long after the start. For rendering one exact frame (also as &time= after any link)." },
+    "frame": { "$ref": "#/$defs/number", "description": "Like time, in frames at fps (default 30): time = floor(frame) / fps. Also as &frame= after any link." },
     "script": {
       "type": "string",
       "maxLength": 100000,
@@ -120,7 +124,13 @@
         "fillOpacity": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fill opacity (default 0.4 for shapes, 0.16 for regions)." },
         "colorExpr": { "type": "string", "maxLength": 600, "description": "Colour expression over sliders, overriding color: rgb(r,g,b) 0-255, rgba(r,g,b,a), hsv(h,s,v) / hsl(h,s,l) with h in degrees, e.g. \"hsv(360*a, 0.8, 1)\"." },
         "fillColor": { "type": "string", "maxLength": 600, "description": "Fill colour (hex or colour expression); defaults to the line colour." },
-        "autoplay": { "type": "boolean", "description": "Slider: start playing when the graph opens." }
+        "autoplay": { "type": "boolean", "description": "Slider: start playing when the graph opens." },
+        "samples": { "$ref": "#/$defs/number", "description": "Own sample count, 8 to 20000 (function / parametric / polar curves; grid cells across x for implicit curves and regions). Raise it for smooth hero shapes, lower it for cheap background ones." },
+        "dots": { "type": "boolean", "description": "Polylines: show (true) or hide (false) the vertex dots. Default: shown on plain polylines, hidden on filled, repeated and smooth paths." },
+        "blend": { "enum": ["normal", "add", "screen", "multiply", "overlay", "lighten", "darken"], "description": "Blend mode for this expression's fill and line (add = additive light, screen = soft light)." },
+        "glow": { "$ref": "#/$defs/number", "description": "Glow radius in px, 0 to 50 (a soft halo in the line / fill colour). Costly on big shapes." },
+        "blur": { "$ref": "#/$defs/number", "description": "Gaussian blur radius in px, 0 to 50. Costly on big shapes." },
+        "layer": { "type": "string", "maxLength": 32, "pattern": "^[A-Za-z]\\w*$", "description": "Draw this expression on the layer defined by a row `name = layer(dx, dy, scale, angle, cx, cy)`: moved by that transform and drawn at the layer row's position (z-order). A layer named camera moves everything." }
       }
     }
   }

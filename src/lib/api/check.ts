@@ -53,7 +53,10 @@ function summarize(p: Parsed): string {
       return 'polar curve r(θ)';
     case 'inequality':
       return p.polar ? 'shaded polar region' : 'shaded region';
+    case 'layer':
+      return `layer ${p.name} (a shared transform for entries with "layer": "${p.name}")`;
     case 'points':
+      if (p.smooth) return 'smooth path (spline / bezier / arc)';
       return p.polyline
         ? `polyline through ${p.points.length} points`
         : `${p.points.length} point${p.points.length === 1 ? '' : 's'}`;
@@ -75,10 +78,25 @@ function summarize(p: Parsed): string {
 }
 
 /** Does any part of the result fall inside the viewport? */
-function anyVisible(r: CurveResult, vp: Viewport): boolean {
+function anyVisible(r: CurveResult, vp: Viewport, filled = false): boolean {
   const inside = (t: number, y: number) => t >= vp.tMin && t <= vp.tMax && y >= vp.yMin && y <= vp.yMax;
   if (r.points?.some(([t, y]) => inside(t, y))) return true;
   for (const seg of r.curve.segments) for (const [t, y] of seg) if (inside(t, y)) return true;
+  // A filled shape bigger than the view (a sky, a backdrop) covers its centre.
+  if (filled) {
+    const cx = (vp.tMin + vp.tMax) / 2;
+    const cy = (vp.yMin + vp.yMax) / 2;
+    for (const seg of r.curve.segments) {
+      if (seg.length < 3) continue;
+      let inPoly = false;
+      for (let i = 0, j = seg.length - 1; i < seg.length; j = i++) {
+        const [xi, yi] = seg[i];
+        const [xj, yj] = seg[j];
+        if (yi > cy !== yj > cy && cx < ((xj - xi) * (cy - yi)) / (yj - yi) + xi) inPoly = !inPoly;
+      }
+      if (inPoly) return true;
+    }
+  }
   if (r.inequality) {
     // Probe a coarse grid for any shaded cell.
     const N = 24;
@@ -102,6 +120,9 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
   const vp = g.viewport;
   const fnNames = new Set(
     g.entries.map((e) => parseEntry(e.raw)).flatMap((p) => (p.kind === 'fndef' ? [p.name] : [])),
+  );
+  const layerNames = new Set(
+    g.entries.map((e) => parseEntry(e.raw)).flatMap((p) => (p.kind === 'layer' ? [p.name] : [])),
   );
 
   g.entries.forEach((entry, i) => {
@@ -175,6 +196,22 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
       const missing = colorExprCalls(v).filter((f) => !fnNames.has(f));
       if (missing.length) errors.push({ path: `${path}.${k}`, message: `unknown function ${missing.join(', ')} in "${v}"` });
     }
+    // Animation options.
+    if (entry.layer && !layerNames.has(entry.layer)) {
+      warnings.push({
+        path: `${path}.layer`,
+        message: `no layer called "${entry.layer}": add a row like "${entry.layer} = layer(0, 0)"; drawn without a transform`,
+      });
+    }
+    if (entry.samples !== undefined && !['function', 'parametric', 'polar', 'implicit', 'inequality', 'points', 'fndef'].includes(body.kind)) {
+      warnings.push({ path: `${path}.samples`, message: `samples only apply to curves and regions; ignored for this ${parsed.kind} expression` });
+    }
+    if (entry.dots !== undefined && !(body.kind === 'points' && body.polyline)) {
+      warnings.push({ path: `${path}.dots`, message: 'dots only apply to polylines and paths; ignored' });
+    }
+    if ((entry.glow ?? 0) + (entry.blur ?? 0) > 30 && (res?.copies ?? 1) > 50) {
+      warnings.push({ path, message: 'glow / blur on many copies is slow to draw; consider fewer copies or a smaller radius' });
+    }
     if (parsed.kind === 'ode' && entry.ic && entry.ic.length > parsed.order) {
       warnings.push({
         path: `${path}.ic`,
@@ -190,11 +227,12 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
 
     // Derived values (b = 2a) and helper definitions (f(u, v) = …) draw nothing by design.
     const plottable =
-      !['empty', 'variable', 'error'].includes(parsed.kind) &&
+      !['empty', 'variable', 'error', 'layer'].includes(parsed.kind) &&
       res?.value === undefined &&
       !(parsed.kind === 'fndef' && !isPlottableFnDef(parsed));
-    if (plottable && res && !res.error && !res.undefinedVars?.length && entry.visible) {
-      rep.visible = anyVisible(res, vp);
+    // (Entries on a layer are moved at draw time, so their data position isn't where they show.)
+    if (plottable && res && !res.error && !res.undefinedVars?.length && entry.visible && !entry.layer) {
+      rep.visible = anyVisible(res, vp, !!entry.fill);
       if (!rep.visible) {
         warnings.push({
           path,
