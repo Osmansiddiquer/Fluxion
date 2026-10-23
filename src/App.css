@@ -119,6 +119,15 @@ a.report-bug {
   font-weight: 550;
   box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.2));
 }
+/* Problems loading a link: themed surface with a danger accent, wraps long text. */
+.graph-toast.error {
+  max-width: min(440px, calc(100vw - 32px));
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--danger);
+  line-height: 1.4;
+}
 
 .body {
   flex: 1;

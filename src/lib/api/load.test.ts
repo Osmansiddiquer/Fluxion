@@ -51,6 +51,7 @@ describe('loadFromUrl', () => {
     expect(r).toMatchObject({ tone: 'error' });
     expect(r?.graph).toBeUndefined();
     expect(r?.message).toMatch(/invalid — expressions\[0\]\.colour: unknown key.*\(\+1 more\)/);
+    expect(r?.message).not.toMatch(/Allowed/);
   });
 
   it('reports undecodable links', async () => {

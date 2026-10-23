@@ -133,7 +133,9 @@ export async function loadFromUrl(hash: string, search: string): Promise<LoadOut
     const first = v.errors[0];
     const where = first.path ? `${first.path}: ` : '';
     const more = v.errors.length > 1 ? ` (+${v.errors.length - 1} more)` : '';
-    return { tone: 'error', message: `This link's graph is invalid — ${where}${first.message}${more}` };
+    // The 'Allowed: …' key list helps agents (CLI / checkSpec) but is noise in a toast.
+    const msg = first.message.replace(/\. Allowed: .*$/, '');
+    return { tone: 'error', message: `This link's graph is invalid — ${where}${msg}${more}` };
   }
   const graph = specToGraph(v.spec);
   const bad = graph.entries.filter((e) => parseEntry(e.raw).kind === 'error').length;
