@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { makeGraph, encodeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
+import { makeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
 import { loadFromUrl, sanitizeGraph } from '../lib/api/load';
-import { stripApiParams } from '../lib/api/url';
+import { buildShareLink, stripApiParams } from '../lib/api/url';
 import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
 import { registerAssets } from '../lib/frames/assets';
 import { DEMOS } from '../lib/demos';
@@ -110,9 +110,17 @@ export default function GraphMenu() {
 
   const share = async () => {
     setOpen(false);
-    const url = `${location.origin}${location.pathname}#g=${encodeGraph(current())}`;
+    const link = buildShareLink(current(), `${location.origin}${location.pathname}`);
     try {
-      await navigator.clipboard.writeText(url);
+      // The link is built asynchronously (compression). Hand the clipboard a
+      // pending item so Safari keeps the click's user activation; fall back to
+      // writeText where ClipboardItem promises aren't supported.
+      if (typeof ClipboardItem !== 'undefined' && navigator.clipboard.write) {
+        const blob = link.then((url) => new Blob([url], { type: 'text/plain' }));
+        await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]);
+      } else {
+        await navigator.clipboard.writeText(await link);
+      }
       flash('Share link copied to clipboard');
     } catch {
       flash('Could not copy — clipboard blocked');
