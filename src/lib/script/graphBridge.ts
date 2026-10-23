@@ -20,7 +20,7 @@ import type { GraphEntryData } from './protocol';
 import type { GraphBridge } from './runtime';
 
 /** Step of the on-demand integrator (t units). */
-export const ODE_STEP = 0.005;
+export const ODE_STEP = 0.01;
 /** Furthest an ODE is integrated from its t0 (|t − t0|). */
 export const ODE_MAX_SPAN = 2_000;
 const BLOWUP = 1e9;

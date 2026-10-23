@@ -1,0 +1,426 @@
+/* Script mode panel: toolbar, editor, sliders, clock, console, reference. */
+.script-panel {
+  position: relative;
+  background: var(--surface);
+  min-width: 0;
+}
+.sp-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+.sp-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Toolbar */
+.sp-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-sunken);
+  flex-wrap: wrap;
+}
+.sp-spacer {
+  flex: 1;
+}
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: var(--radius-sm);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  transition: background 0.12s var(--ease), color 0.12s var(--ease), box-shadow 0.12s var(--ease);
+}
+.sp-btn.primary {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: var(--shadow-sm);
+}
+.sp-btn.primary:hover {
+  background: var(--accent-hover);
+}
+.sp-btn.danger {
+  background: var(--danger);
+  color: #fff;
+}
+.sp-btn.ghost {
+  color: var(--text-muted);
+}
+.sp-btn.ghost:hover,
+.sp-btn.ghost.on {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.sp-btn.ghost.on {
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+.sp-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 4px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.sp-toggle input {
+  accent-color: var(--accent);
+}
+
+/* Examples menu */
+.sp-menu {
+  position: relative;
+}
+.sp-menu-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 45;
+  width: min(320px, calc(100vw - 24px));
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+}
+.sp-menu-pop button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+.sp-menu-pop button:hover {
+  background: var(--surface-hover);
+}
+.sp-menu-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sp-menu-blurb {
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+
+/* Banner */
+.sp-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border);
+}
+.sp-banner span {
+  flex: 1;
+}
+.sp-banner button {
+  font-weight: 650;
+  font-size: 12px;
+  color: var(--accent);
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.sp-banner button.dim {
+  color: var(--text-muted);
+}
+
+/* Editor */
+.sp-editor {
+  position: relative;
+  flex: 1;
+  min-height: 160px;
+  overflow: hidden;
+}
+.code-editor {
+  position: absolute;
+  inset: 0;
+}
+.code-editor .cm-editor {
+  height: 100%;
+}
+
+/* Empty state */
+.sp-starters {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 16px;
+  padding: 14px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-sunken);
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.sp-starters-title {
+  font-size: 13.5px;
+  font-weight: 650;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+.sp-starters p {
+  margin: 0 0 10px;
+}
+.sp-starters-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.sp-chip {
+  padding: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+.sp-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.sp-chip.accent {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Sliders */
+.sp-sliders {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+  max-height: 34%;
+  overflow-y: auto;
+}
+.sp-slider {
+  display: grid;
+  grid-template-columns: minmax(48px, auto) 1fr 52px;
+  align-items: center;
+  gap: 10px;
+  min-height: 28px;
+  font-size: 12.5px;
+}
+.sp-slider-name {
+  font-family: var(--mono);
+  color: var(--text);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sp-slider-val {
+  font-family: var(--mono);
+  color: var(--text-muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Clock */
+.sp-clock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-top: 1px solid var(--border);
+}
+.sp-play {
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+  font-size: 11px;
+  letter-spacing: -1px;
+  box-shadow: var(--shadow-sm);
+}
+.sp-play:hover {
+  background: var(--accent-hover);
+}
+.sp-play:disabled {
+  opacity: 0.4;
+}
+.sp-play.ghost {
+  width: 26px;
+  height: 26px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  box-shadow: none;
+}
+.sp-play.ghost:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+.sp-time {
+  flex-shrink: 0;
+  min-width: 64px;
+  text-align: right;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Console / status strip */
+.sp-console {
+  border-top: 1px solid var(--border);
+  background: var(--surface-sunken);
+  font-size: 12px;
+}
+.sp-console.error {
+  background: var(--danger-soft);
+}
+.sp-console-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  padding: 6px 12px;
+}
+.sp-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #3fa45b;
+}
+.sp-dot.error {
+  background: var(--danger);
+}
+.sp-dot.idle {
+  background: var(--text-faint);
+}
+.sp-console-msg {
+  flex: 1;
+  min-width: 0;
+  color: var(--text-muted);
+  text-align: left;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.sp-console.error .sp-console-msg {
+  color: var(--text);
+}
+.sp-console-msg.link {
+  cursor: pointer;
+  text-decoration: underline dotted var(--danger);
+  text-underline-offset: 3px;
+}
+.sp-badge {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.sp-badge.warn {
+  background: var(--warning);
+}
+.sp-console-toggle {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 5px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+.sp-console-toggle:hover {
+  background: var(--surface-hover);
+}
+.sp-logs {
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 6px 12px 10px 28px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Reference column */
+.sp-docs {
+  width: 400px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-left: 1px solid var(--border);
+  background: var(--surface-sunken);
+}
+.sp-docs-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 47px;
+  padding: 0 8px 0 14px;
+  border-bottom: 1px solid var(--border);
+}
+.sp-docs-title {
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--text);
+}
+.sp-docs-loading {
+  padding: 20px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+/* Narrow: the reference covers the editor. */
+.script-panel.docs-overlay .sp-docs {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  z-index: 30;
+  border-left: none;
+}
+
+/* Phones: the panel is a full-width drawer. */
+@media (max-width: 760px) {
+  .script-panel.sidebar {
+    width: 100vw !important;
+  }
+  .sp-btn-label {
+    display: none;
+  }
+  .sp-btn.primary .sp-btn-label,
+  .sp-menu .sp-btn-label {
+    display: inline;
+  }
+}

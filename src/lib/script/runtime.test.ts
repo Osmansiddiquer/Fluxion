@@ -50,6 +50,12 @@ describe('compile', () => {
     expect(r.error?.line).toBe(3);
     expect(r.frame.items).toHaveLength(1); // drawn before the error
   });
+  it('lets scripts declare names that shadow the API', () => {
+    const r = runHeadless('const scale = 2, E = 3, view = 1, line = [0, 1]\nfunction text() { return 5 }\nprint(scale * E, view, line, text())\ncircle(0, 0, 1)');
+    expect(r.error).toBeUndefined();
+    expect(r.frame.logs[0]).toBe('6 1 [0,1] 5');
+    expect(runHeadless('\n\nnope()').error?.line).toBe(3);
+  });
   it('detects clock use', () => {
     expect(usesClock('circle(cos(time), 0, 1)')).toBe(true);
     expect(usesClock('const f = frame % 60')).toBe(true);

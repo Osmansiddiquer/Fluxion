@@ -62,6 +62,8 @@ export interface AppState {
   scriptAutoRun?: boolean;
   /** Script mode: reference panel open. */
   scriptDocsOpen?: boolean;
+  /** Script mode: editor panel width (px). */
+  scriptPanelWidth?: number;
 
   addEntry: () => void;
   addAssignment: (name: string) => void;
@@ -96,6 +98,7 @@ export interface AppState {
   removeScriptClip: (name: string) => void;
   setScriptAutoRun: (on: boolean) => void;
   setScriptDocsOpen: (open: boolean) => void;
+  setScriptPanelWidth: (w: number) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -187,6 +190,7 @@ export const useStore = create<AppState>()(
         }),
       setScriptAutoRun: (scriptAutoRun) => set({ scriptAutoRun }),
       setScriptDocsOpen: (scriptDocsOpen) => set({ scriptDocsOpen }),
+      setScriptPanelWidth: (w) => set({ scriptPanelWidth: Math.round(Math.max(340, Math.min(1100, w))) }),
       setSigFigs: (n) => {
         const v = Math.max(1, Math.min(12, Math.round(n)));
         applySigFigs(v);
@@ -229,6 +233,7 @@ export const useStore = create<AppState>()(
         mode: s.mode,
         scriptAutoRun: s.scriptAutoRun,
         scriptDocsOpen: s.scriptDocsOpen,
+        scriptPanelWidth: s.scriptPanelWidth,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.sigFigs) applySigFigs(state.sigFigs);
