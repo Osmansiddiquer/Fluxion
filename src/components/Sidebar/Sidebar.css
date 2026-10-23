@@ -473,6 +473,56 @@ math-field.math-field::part(virtual-keyboard-toggle) {
   border-color: var(--danger);
 }
 
+/* Advanced (animation & rendering) options, collapsed by default ---------- */
+.adv-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.adv-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  align-self: flex-start;
+  padding: 0;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: none;
+}
+.adv-toggle:hover {
+  color: var(--text);
+}
+.adv-caret {
+  display: inline-block;
+  font-size: 9px;
+  transition: transform 0.15s var(--ease);
+}
+.adv-caret.open {
+  transform: rotate(90deg);
+}
+.adv-body {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+.adv-label {
+  width: 46px;
+}
+.adv-num {
+  width: 80px;
+  flex: 0 0 auto;
+}
+.adv-select {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 3px 6px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
 /* Point options (inside the colour popover) ------------------------------ */
 .point-opts {
   margin-top: 10px;

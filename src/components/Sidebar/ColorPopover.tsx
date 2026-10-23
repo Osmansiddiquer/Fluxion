@@ -1,15 +1,19 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useStore } from '../../store/useStore';
 import { useEntryResult } from '../../state/results';
 import { PALETTE } from '../../utils/colors';
-import type { Entry, LineStyle, PointDir } from '../../store/types';
+import type { BlendMode, Entry, LineStyle, PointDir } from '../../store/types';
 import {
   canFillShape,
   isRegion,
   DEFAULT_LINE_WIDTH,
   DEFAULT_REGION_OPACITY,
   DEFAULT_SHAPE_OPACITY,
+  BLEND_MODES,
+  MAX_EFFECT_PX,
 } from '../../lib/style';
+import { MAX_SAMPLES, MIN_SAMPLES } from '../../lib/compute';
+import { LAYER_NAME } from '../../lib/api/spec';
 import { isColorExpr } from '../../lib/color';
 
 const DIR_CELLS: (PointDir | 'c')[] = ['nw', 'n', 'ne', 'w', 'c', 'e', 'sw', 's', 'se'];
@@ -69,6 +73,155 @@ function ExprField({
   );
 }
 
+const BLEND_LABEL: Record<BlendMode, string> = {
+  normal: 'Normal',
+  add: 'Add (light)',
+  screen: 'Screen',
+  multiply: 'Multiply',
+  overlay: 'Overlay',
+  lighten: 'Lighten',
+  darken: 'Darken',
+};
+
+/**
+ * Animation & rendering options, collapsed under "Advanced" (open by default
+ * only when one is already set), so the everyday popover is unchanged.
+ */
+function AdvancedOptions({
+  entry,
+  polyline,
+  sampled,
+  update,
+}: {
+  entry: Entry;
+  polyline: boolean;
+  sampled: boolean;
+  update: (id: string, patch: Partial<Entry>) => void;
+}) {
+  const used =
+    entry.samples !== undefined ||
+    entry.dots !== undefined ||
+    (entry.blend !== undefined && entry.blend !== 'normal') ||
+    !!entry.glow ||
+    !!entry.blur ||
+    !!entry.layer;
+  const [open, setOpen] = useState(used);
+  const glow = entry.glow ?? 0;
+  const blur = entry.blur ?? 0;
+  return (
+    <div className="adv-opts">
+      <button className="adv-toggle" aria-expanded={open} onClick={() => setOpen(!open)}>
+        <span className={`adv-caret${open ? ' open' : ''}`} aria-hidden="true">▸</span>
+        Advanced
+      </button>
+      {open && (
+        <div className="adv-body">
+          {sampled && (
+            <div className="point-opt-row">
+              <span className="point-opt-label adv-label">Samples</span>
+              <input
+                className="point-label-input adv-num"
+                type="number"
+                min={MIN_SAMPLES}
+                max={MAX_SAMPLES}
+                step={1}
+                placeholder="auto"
+                title="This row's own resolution (8 to 20000); empty = automatic"
+                value={entry.samples ?? ''}
+                onChange={(e) => {
+                  const n = e.target.value === '' ? undefined : Number(e.target.value);
+                  update(entry.id, { samples: n === undefined || !Number.isFinite(n) ? undefined : n });
+                }}
+              />
+            </div>
+          )}
+          {polyline && (
+            <div className="point-opt-row">
+              <span className="point-opt-label adv-label">Dots</span>
+              <div className="seg">
+                {(
+                  [
+                    [undefined, 'Auto'],
+                    [true, 'On'],
+                    [false, 'Off'],
+                  ] as const
+                ).map(([v, label]) => (
+                  <button
+                    key={label}
+                    className={`seg-btn${entry.dots === v ? ' active' : ''}`}
+                    title={`Vertex dots: ${label.toLowerCase()}`}
+                    onClick={() => update(entry.id, { dots: v })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="point-opt-row">
+            <span className="point-opt-label adv-label">Blend</span>
+            <select
+              className="adv-select"
+              value={entry.blend ?? 'normal'}
+              aria-label="Blend mode"
+              onChange={(e) => {
+                const v = e.target.value as BlendMode;
+                update(entry.id, { blend: v === 'normal' ? undefined : v });
+              }}
+            >
+              {BLEND_MODES.map((m) => (
+                <option key={m} value={m}>
+                  {BLEND_LABEL[m]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="point-opt-row">
+            <span className="point-opt-label adv-label">Glow</span>
+            <input
+              className="range"
+              type="range"
+              min={0}
+              max={MAX_EFFECT_PX}
+              step={1}
+              value={glow}
+              aria-label="Glow radius"
+              onChange={(e) => update(entry.id, { glow: Number(e.target.value) || undefined })}
+            />
+            <span className="style-val">{glow ? `${glow}px` : 'off'}</span>
+          </div>
+          <div className="point-opt-row">
+            <span className="point-opt-label adv-label">Blur</span>
+            <input
+              className="range"
+              type="range"
+              min={0}
+              max={MAX_EFFECT_PX}
+              step={0.5}
+              value={blur}
+              aria-label="Blur radius"
+              onChange={(e) => update(entry.id, { blur: Number(e.target.value) || undefined })}
+            />
+            <span className="style-val">{blur ? `${blur}px` : 'off'}</span>
+          </div>
+          <div className="point-opt-row">
+            <span className="point-opt-label adv-label">Layer</span>
+            <input
+              className={`point-label-input style-expr${!entry.layer || LAYER_NAME.test(entry.layer) ? '' : ' style-expr-bad'}`}
+              placeholder="e.g. far (a far = layer(…) row)"
+              title="Draw on a layer: moved by its transform and at its row's depth"
+              spellCheck={false}
+              maxLength={32}
+              value={entry.layer ?? ''}
+              onChange={(e) => update(entry.id, { layer: e.target.value.trim() || undefined })}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const DRAG_OPTS: {
   value: 'auto' | 'off' | 'x' | 'y' | 'both';
   label: ReactNode;
@@ -110,6 +263,9 @@ export default function ColorPopover({
   const region = isRegion(res);
   const fillable = region || canFillShape(res);
   const isFrames = kind === 'frames';
+  const body = res?.parsed.kind === 'repeat' ? res.parsed.body : res?.parsed;
+  const polyline = body?.kind === 'points' && body.polyline;
+  const sampled = !!body && ['function', 'parametric', 'polar', 'implicit', 'inequality', 'points', 'fndef'].includes(body.kind);
   const fillOn = entry.fill ?? (region || isFrames);
   const width = entry.lineWidth ?? (isFrames ? 0 : DEFAULT_LINE_WIDTH);
   const opacity =
@@ -232,6 +388,7 @@ export default function ColorPopover({
               />
             </div>
           )}
+          <AdvancedOptions entry={entry} polyline={polyline} sampled={sampled} update={update} />
         </div>
       )}
 
