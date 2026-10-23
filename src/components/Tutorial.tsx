@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import katex from 'katex';
 import { useStore } from '../store/useStore';
 import { TOUR_EXAMPLES, exampleGraph, type DocExample } from './Docs/examples';
-import { APP_NAME } from '../config';
+import { APP_NAME, DOCS_HREF } from '../config';
 import './Tutorial.css';
 
 /* A small inline KaTeX chip — used for the syntax examples. */
@@ -35,16 +35,7 @@ const INSPECT: { icon: string; text: string }[] = [
   { icon: '✦', text: 'Animated drawings: open the Examples in the share menu (Sharingan, cube, …).' },
 ];
 
-export default function Tutorial({
-  open,
-  onClose,
-  onDocs,
-}: {
-  open: boolean;
-  onClose: () => void;
-  /** Open the documentation (the last card's "Read the docs →"). */
-  onDocs?: () => void;
-}) {
+export default function Tutorial({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [step, setStep] = useState(0);
   const loadGraph = useStore((s) => s.loadGraph);
   const sigFigs = useStore((s) => s.sigFigs);
@@ -151,11 +142,9 @@ export default function Tutorial({
                   </button>
                 ))}
               </div>
-              {onDocs && (
-                <button className="tut-docs-link" onClick={onDocs}>
-                  Read the docs <span aria-hidden="true">→</span>
-                </button>
-              )}
+              <a className="tut-docs-link" href={DOCS_HREF} target="_blank" rel="noopener">
+                Read the docs <span aria-hidden="true">→</span>
+              </a>
             </section>
           )}
         </div>
