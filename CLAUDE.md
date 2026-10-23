@@ -66,7 +66,8 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Store | `store/useStore.ts` (Zustand+persist), `store/types.ts` (`Entry`, `Viewport`, …), `state/signature.ts` (`computeSignature`) |
 | Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls`, `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
 | Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
-| Chrome | `App.tsx`, `Tutorial.tsx`, `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
+| Chrome | `App.tsx`, `Tutorial.tsx`, `HelpMenu.tsx` (the ? menu), `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
+| Docs (in-app) | `components/Docs/` — `content.ts` (all docs as data), `examples.ts` (example type + the tour's 4 examples), `DocsPanel.tsx` + `Docs.css` (lazy chunk), `search.ts`, `hash.ts` (`#docs/<id>`), `docs.test.ts`; `lib/openGraph.ts` ("Try it" → GraphMenu's load + Undo toast) |
 | Tokens | `styles/theme.css` (all `--var`s, light+dark), `styles/global.css` |
 | URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
 
@@ -172,6 +173,37 @@ Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU
    ("run the agentic tests").
 3. The user cares about aesthetics — verify look in **both light and dark** themes.
 
+## In-app documentation (`src/components/Docs`)
+
+The header **?** opens `HelpMenu`: *Take the tour* (`Tutorial.tsx`, unchanged carousel;
+still auto-opens on first visit, skipped for URL-payload and `#docs` links) and
+*Documentation* (`DocsPanel`, lazy-loaded via `React.lazy` in `App.tsx`, so the docs
+chunk is fetched on first open). The bug-report link sits next to it, untouched.
+
+- **Content is data**: `content.ts` `SECTIONS` (learning order) → blocks (`p`, `h`, `list`,
+  `steps`, `syntax` rows, `table`, `example`, `math`, `tip`, `tour`, `script-docs`). Inline
+  markup: `` `code` ``, `**bold**`, `$TeX$` (KaTeX), `[label](href)`; `#docs/<id>` hrefs
+  navigate in-panel. **To add a section**: write a `DocSection` in `content.ts`, add it to
+  `SECTIONS` in order, run `npm test`.
+- **Every snippet is executable**: each `example` and each `syntax` row (plus its `with`
+  rows) has *Try it*, which builds a graph (`exampleGraph`, or a demo via `demo: '<id>'`)
+  and calls `openGraphWithUndo` → `GraphMenu` loads it and shows the Undo toast.
+- **`docs.test.ts` keeps docs and app in sync**: every example/row must parse as its
+  documented kind and compute with no errors; the docs must cover **every `Parsed` kind**
+  (read from the union in `parse.ts`), **every `HELPER_NAMES` helper** and every colour
+  function, every demo title, every Points-menu toggle and share-menu item. A new parse
+  kind or helper fails the suite until it's documented. Also tests search, deep links
+  (`#docs/...` never matches `hasUrlPayload`, and API fragments never parse as docs) and
+  that the tour's examples are the same objects the docs show (`examples.ts`).
+- **Deep links**: `#docs` / `#docs/<section-id>` (no `=`, so it can't collide with
+  `#expr=`/`#spec=`/`#z=`/`#g=`/`#example=`). `App` mirrors the open section into the hash
+  with `replaceState` and clears it on close.
+- **Script mode hook**: the *Scripting* section renders `ScriptDocsSlot` in
+  `DocsPanel.tsx`. Until `src/components/Script/ScriptDocs.tsx` (default export, no props;
+  built in `feat/script-mode`) exists, it shows a "Script mode is coming" note. To wire it,
+  change the one line `const SCRIPT_DOCS … = null;` to
+  `const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = () => import('../Script/ScriptDocs');`.
+
 ## URL API for LLM agents (`src/lib/api`)
 
 Static site, so the "API" is the link: `#expr=…&ic=…&xmin=…` (params; options attach to
@@ -218,7 +250,7 @@ strips them; bad links show an error toast and keep the current graph.
 
 All planned features are shipped (ODEs/systems, functions, implicit, polar, inequalities
 incl. polar/compound, points/lines, animatable sliders, projection panels, trace,
-discontinuities, sharing/export, per-tab state, x/t interchange, tutorial, compute
+discontinuities, sharing/export, per-tab state, x/t interchange, tutorial, in-app docs, compute
 caches, and the scripting layer: parametric curves, derived values, user functions,
 for-repeats, keyframes, 3D projection, styling/fills/colour expressions, shared
 animation clock, frame sequences + importer, demo graphs). Open: full "Bad Apple!!"
