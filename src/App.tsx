@@ -7,6 +7,8 @@ import Logo from './components/Logo';
 import ThemeToggle from './components/ThemeToggle';
 import SigFigs from './components/SigFigs';
 import GraphMenu from './components/GraphMenu';
+import GraphsTitle from './components/Graphs/GraphsTitle';
+import SavedGraphs from './components/Graphs/SavedGraphs';
 import Tutorial from './components/Tutorial';
 import HelpMenu, { type HelpMenuHandle } from './components/HelpMenu';
 import { docsHash, parseDocsHash, type DocsRoute } from './components/Docs/hash';
@@ -98,6 +100,7 @@ export default function App() {
             <span className="brand-name">{APP_NAME}</span>
             <span className="beta-tag">beta</span>
           </div>
+          <GraphsTitle />
           <div className="topbar-spacer" />
           <HelpMenu ref={helpRef} onTour={() => setTour(true)} onDocs={() => openDocs(docs?.section)} />
           <a
@@ -154,6 +157,7 @@ export default function App() {
           }}
         />
         <AnimationLoop />
+        <SavedGraphs />
       </div>
     </ResultsProvider>
   );

@@ -6,7 +6,9 @@ import { stripApiParams } from '../lib/api/url';
 import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
 import { registerAssets } from '../lib/frames/assets';
 import { DEMOS } from '../lib/demos';
-import { setOpenGraphHandler } from '../lib/openGraph';
+import { notifyBeforeGraphReplace, setApplyGraphHandler, setOpenGraphHandler } from '../lib/openGraph';
+import SavedMenuItems from './Graphs/SavedMenuItems';
+import { SavedDot } from './Graphs/GraphsTitle';
 
 const isPlainSpecLike = (x: unknown) => !!x && typeof x === 'object' && 'expressions' in x;
 
@@ -39,6 +41,7 @@ export default function GraphMenu() {
   // Every load path goes through here: frame-sequence assets must be registered
   // before the entries that reference them are computed.
   const applyGraph = (g: GraphData) => {
+    notifyBeforeGraphReplace(); // saved graphs: file the outgoing work in Recent
     registerAssets(g.assets);
     loadGraph(g);
   };
@@ -100,6 +103,7 @@ export default function GraphMenu() {
   const openWithUndoRef = useRef(openWithUndo);
   openWithUndoRef.current = openWithUndo;
   useEffect(() => setOpenGraphHandler((g, title) => openWithUndoRef.current(g, title)), []);
+  useEffect(() => setApplyGraphHandler((g) => applyRef.current(g)), []);
 
   const openDemo = (id: string) => {
     setOpen(false);
@@ -175,14 +179,17 @@ export default function GraphMenu() {
     <div className="graph-menu" ref={rootRef}>
       <button
         className="icon-btn"
-        title="Share / save graph"
-        aria-label="Share or save graph"
+        title="Save / share graph"
+        aria-label="Save or share graph"
         onClick={() => setOpen((o) => !o)}
       >
         {ShareIcon}
+        <SavedDot />
       </button>
       {open && (
         <div className="graph-menu-pop" role="menu">
+          <SavedMenuItems onPick={() => setOpen(false)} />
+          <div className="graph-menu-sep" role="separator" />
           <button onClick={share}>Copy share link</button>
           <button onClick={copySpec} title="A readable spec an AI assistant can edit (see llms.txt)">
             Copy as JSON spec
