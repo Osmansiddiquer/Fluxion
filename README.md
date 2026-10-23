@@ -82,9 +82,10 @@ browser storage separately from your per-tab graph state.
 - **Linked projection panels** — per-curve cross-sections onto the y- and t-axes,
   with cut lines you drag on the graph (and that you can drive with a variable).
 - **Share & save** — export/import a graph file, or copy a shareable link.
-- **Built-in help** — the **?** button offers a short tour and full in-app
-  documentation (every feature, searchable, with a *Try it* button on each example;
-  deep-linkable as `#docs/<section>`, e.g. `#docs/odes`).
+- **Built-in help** — the **?** button offers a short tour and the
+  [documentation](https://osmansiddiquer.github.io/Fluxion/docs/): a static page
+  covering every feature, searchable, with a *Try it* link on each example
+  (deep links like `docs/#odes`).
 - **URL API for AI agents** — build a graph from a link (see below and `llms.txt`).
 - **Polished UX** — light/dark/system themes, configurable significant figures,
   drag-to-reorder, resizable sidebar and panels, equal-aspect grid, power-notation
@@ -133,7 +134,7 @@ https://osmansiddiquer.github.io/Fluxion/#z=<compressed JSON spec>
 ```bash
 npm install
 npm run dev        # local dev server
-npm run build      # static production build into dist/
+npm run build      # static production build into dist/ (app + pre-rendered docs in dist/docs/)
 npm test           # Vitest suites (src/**/*.test.ts)
 npm run preview    # serve the production build locally
 ```
