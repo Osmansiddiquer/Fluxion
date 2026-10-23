@@ -21,7 +21,9 @@ export function computeSignature(entries: Entry[]): string {
       `${F}${e.varValue ?? ''}${F}${e.thetaMin ?? ''}${F}${e.thetaMax ?? ''}${F}${e.frames ?? ''}` +
       // Animation options that change what is sampled (resolution; off-screen
       // culling depends on the layer and on glow / blur spread).
-      `${F}${e.samples ?? ''}${F}${e.layer ?? ''}${F}${e.glow ?? ''}${F}${e.blur ?? ''}${R}`;
+      `${F}${e.samples ?? ''}${F}${e.layer ?? ''}${F}${e.glow ?? ''}${F}${e.blur ?? ''}` +
+      // ODE numerics: integrator, shown steps, boundary-value mode.
+      `${F}${e.solver ?? ''}${F}${e.steps ?? ''}${F}${e.stepSize ?? ''}${F}${e.conditions ?? ''}${F}${e.bc?.join(',') ?? ''}${R}`;
   }
   return s;
 }

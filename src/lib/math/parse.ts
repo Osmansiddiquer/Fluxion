@@ -1,7 +1,7 @@
 import { parse as mjParse, derivative, simplify, type MathNode } from 'mathjs';
-import { normalizeInput } from './normalize';
+import { normalizeInput, usesLeibnizX } from './normalize';
 import { parsePoints, looksLikePoints, specNodes, specRefs, type PointSpec } from './points';
-import { KNOWN_FUNCTIONS } from './builtins';
+import { KNOWN_FUNCTIONS, SOFT_FUNCTIONS } from './builtins';
 import { HELPER_NAMES } from './helpers';
 
 const HELPERS_SET = new Set(HELPER_NAMES);
@@ -47,6 +47,27 @@ export type Parsed =
       stateSymbols: string[];
       lhs: string;
       rhs: string;
+      raw: string;
+      /** Initial / boundary conditions typed after a comma: `y'' = -y, y(0) = 1`. */
+      conds?: CondSpec[];
+      /** `dy/dx`: x is the independent variable (rewritten to t in `node`). */
+      indep?: 'x';
+      /** Prime notation using x but not t (`y' = x*y`): the same equation with x
+       * as the independent variable — used when no ODE or slider defines x. */
+      xAlt?: OdeCore;
+      /** delta(t − a) forcing: applied by the integrator as jumps. */
+      impulses?: ImpulseSpec[];
+      /** Arguments of step functions (heaviside / H / u / step): the integrator
+       * splits the step where they cross 0. */
+      breaks?: MathNode[];
+    }
+  | {
+      /** Conditions on their own row: `y(0) = 2`, `y'(0) = 0`, `y(0) = 0, y(pi) = 0`.
+       * They set the initial (or boundary) values of the ODE in that variable. */
+      kind: 'condition';
+      depVar: string;
+      conds: CondSpec[];
+      deps: string[];
       raw: string;
     }
   | {
@@ -140,6 +161,29 @@ export type Parsed =
       deps: string[];
       raw: string;
     };
+
+/** A typed condition `y^(k)(at) = value` (at / value: constants or slider expressions). */
+export interface CondSpec {
+  depVar: string;
+  /** Derivative order: 0 for y(a), 1 for y′(a), … */
+  k: number;
+  at: MathNode;
+  value: MathNode;
+  /** As typed (normalised), for display: `y'(0) = 1`. */
+  text: string;
+}
+
+/** A delta(arg) term: arg is linear in t (slope `slope`); the state's highest
+ * component jumps by coef(t = a, state) / |slope| at the root a of arg. */
+export interface ImpulseSpec {
+  arg: MathNode;
+  slope: MathNode;
+  coef: MathNode;
+}
+
+type OdeParsedFull = Extract<Parsed, { kind: 'ode' }>;
+/** An ODE parse without its alternative reading (see `xAlt`). */
+export type OdeCore = Omit<OdeParsedFull, 'xAlt' | 'conds'>;
 
 /** One loop of a repeat: name runs from..to (inclusive) in steps of `step`. */
 export interface LoopSpec {
@@ -454,7 +498,9 @@ function parseFnDef(lhs: string, rhs: string, raw: string): Parsed | null {
   const m = FNDEF_LHS.exec(lhs);
   if (!m) return null;
   const name = m[1];
-  if (FN_RESERVED.has(name) || KNOWN_FUNCTIONS.has(name) || DERIV_TOKEN.test(name)) return null;
+  if (FN_RESERVED.has(name) || (KNOWN_FUNCTIONS.has(name) && !SOFT_FUNCTIONS.has(name)) || DERIV_TOKEN.test(name)) {
+    return null;
+  }
   const params = m[2].split(',').map((p) => p.trim());
   if (new Set(params).size !== params.length) {
     return { kind: 'error', message: `Repeated parameter in ${name}(…)` };
@@ -650,6 +696,13 @@ function parseEntryUncached(raw: string): Parsed {
     const fndef = parseFnDef(early[0], early[1], raw);
     if (fndef) return fndef;
   }
+  // Conditions: `y(0) = 2`, `y'(0) = 0`, `y(0) = 0, y(pi) = 0` (own row), or
+  // after a comma on an ODE row: `y'' = -y, y(0) = 1, y'(0) = 0`.
+  const condRow = parseConditionRow(normalized, raw);
+  if (condRow) return condRow;
+  const withConds = splitOdeConditions(normalized, trimmed, raw);
+  if (withConds) return withConds;
+
   const ineq = normalized.includes('?') ? null : parseInequality(normalized);
   if (ineq) {
     try {
@@ -768,7 +821,7 @@ function parseEntryUncached(raw: string): Parsed {
   if (high === 'ambiguous') {
     return { kind: 'error', message: 'Ambiguous: isolate one derivative on a side' };
   }
-  if (high) return parseODE(high.depVar, high.order, combined, lhs, rhs, raw);
+  if (high) return parseODE(high.depVar, high.order, combined, lhs, rhs, raw, usesLeibnizX(trimmed));
 
   // x as the independent (e.g. y = x², x² + y² = 9): canonicalise x → t. Skipped
   // for ODEs above, where x may be a coupled dependent variable.
@@ -792,7 +845,46 @@ function parseODE(
   lhs: string,
   rhs: string,
   raw: string,
+  leibnizX = false,
 ): Parsed {
+  if (leibnizX) {
+    // dy/dx: x is the independent variable, exactly like y = f(x).
+    if (depVar === 'x') return { kind: 'error', message: "x is the variable in d/dx; it can't also be solved for" };
+    if (hasSymbol(combined, 't')) {
+      return { kind: 'error', message: "With dy/dx the variable is x, so t can't appear too" };
+    }
+    const core = solveODE(depVar, order, rewriteXtoT(combined), lhs, rhs, raw);
+    return core.kind === 'error' ? core : { ...core, indep: 'x' };
+  }
+  const core = solveODE(depVar, order, combined, lhs, rhs, raw);
+  if (core.kind === 'error') return core;
+  // Prime notation with x but no t (y' = x·y): x may be the independent variable,
+  // or a dependent variable of a coupled system (x' = −y, y' = x) defined on
+  // another row — compute decides (see `xAlt`).
+  const hasDx = [...freeSymbols(combined)].some((n) => DERIV_TOKEN.exec(n)?.[2] === 'x');
+  if (depVar !== 'x' && !hasDx && hasSymbol(combined, 'x') && !hasSymbol(combined, 't')) {
+    const alt = solveODE(depVar, order, rewriteXtoT(combined), lhs, rhs, raw);
+    if (alt.kind === 'ode') return { ...core, xAlt: { ...alt, indep: 'x' } };
+  }
+  return core;
+}
+
+const DELTA_FNS = new Set(['delta']);
+const STEP_FNS = new Set(['heaviside', 'H', 'u', 'step']);
+
+function fnNameOf(n: MathNode): string | undefined {
+  if ((n as { type: string }).type !== 'FunctionNode') return undefined;
+  return (n as unknown as { fn: { name?: string } }).fn?.name;
+}
+
+function solveODE(
+  depVar: string,
+  order: number,
+  combined: MathNode,
+  lhs: string,
+  rhs: string,
+  raw: string,
+): OdeCore | Extract<Parsed, { kind: 'error' }> {
   const H = `D${order}_${depVar}`;
   try {
     const a = simplify(derivative(combined, H));
@@ -803,14 +895,188 @@ function parseODE(
       return { kind: 'error', message: `Could not solve for ${depVar}${'′'.repeat(order)}` };
     }
     const b = simplify(zeroOut(combined, H));
-    const solved = simplify(mjParse(`-(${b.toString()})/(${a.toString()})`));
+    let solved = simplify(mjParse(`-(${b.toString()})/(${a.toString()})`));
     const stateSymbols = stateSymbolsFor(depVar, order);
     const stateSet = new Set(stateSymbols);
+    const dependsOnState = (n: MathNode) =>
+      stateSymbols.some((sym) => hasSymbol(n, sym)) || hasSymbol(n, 'y') ||
+      [...freeSymbols(n)].some((sym) => DERIV_TOKEN.test(sym));
+
+    // delta(t − a): pull each impulse out as a coefficient; the smooth part is
+    // what the integrator evaluates (the impulses become jumps).
+    const impulses: ImpulseSpec[] = [];
+    if ([...calledFunctions(solved)].some((f) => DELTA_FNS.has(f))) {
+      const args: MathNode[] = [];
+      const marked = solved.transform((n: MathNode) => {
+        const name = fnNameOf(n);
+        if (!name || !DELTA_FNS.has(name)) return n;
+        const fnArgs = (n as unknown as { args: MathNode[] }).args;
+        if (fnArgs.length !== 1) throw new Error('delta takes one argument, like delta(t - 1)');
+        if ([...calledFunctions(fnArgs[0])].some((f) => DELTA_FNS.has(f))) {
+          throw new Error("delta(…) can't contain another delta");
+        }
+        args.push(fnArgs[0]);
+        return mjParse(`__imp${args.length - 1}`);
+      });
+      let smooth = marked;
+      for (let i = 0; i < args.length; i++) {
+        const sym = `__imp${i}`;
+        const coef = simplify(derivative(marked, sym));
+        if (simplify(derivative(coef, sym)).toString() !== '0') {
+          return { kind: 'error', message: 'delta(…) must appear as a plain term, like 2·delta(t − 1)' };
+        }
+        for (let j = 0; j < args.length; j++) {
+          if (j !== i && hasSymbol(coef, `__imp${j}`)) {
+            return { kind: 'error', message: "delta(…) can't be multiplied by another delta" };
+          }
+        }
+        const arg = args[i];
+        if (dependsOnState(arg)) return { kind: 'error', message: 'delta(…) must be a function of t only' };
+        const slope = simplify(derivative(arg, 't'));
+        if (simplify(derivative(slope, 't')).toString() !== '0' || slope.toString() === '0') {
+          return { kind: 'error', message: 'delta needs an argument like t − a' };
+        }
+        impulses.push({ arg, slope, coef });
+        smooth = zeroOut(smooth, sym);
+      }
+      solved = simplify(smooth);
+    }
+
+    // Step functions: split the integration where their argument crosses 0.
+    const breaks: MathNode[] = [];
+    solved.traverse((n: MathNode) => {
+      const name = fnNameOf(n);
+      if (!name || !STEP_FNS.has(name)) return;
+      const arg = (n as unknown as { args: MathNode[] }).args[0];
+      if (!arg || dependsOnState(arg)) return;
+      try {
+        const slope = simplify(derivative(arg, 't'));
+        if (simplify(derivative(slope, 't')).toString() === '0' && slope.toString() !== '0') breaks.push(arg);
+      } catch {
+        /* not differentiable: no break (the adaptive step still copes) */
+      }
+    });
+
     const deps = [...freeSymbols(solved)].filter((s) => s !== INDEP && !stateSet.has(s));
-    return { kind: 'ode', depVar, order, node: solved, deps, stateSymbols, lhs, rhs, raw };
+    for (const imp of impulses) {
+      for (const n of [imp.arg, imp.coef]) {
+        for (const s of freeSymbols(n)) if (s !== INDEP && !stateSet.has(s) && !deps.includes(s)) deps.push(s);
+      }
+    }
+    return {
+      kind: 'ode',
+      depVar,
+      order,
+      node: solved,
+      deps,
+      stateSymbols,
+      lhs,
+      rhs,
+      raw,
+      ...(impulses.length ? { impulses } : {}),
+      ...(breaks.length ? { breaks } : {}),
+    };
   } catch (err) {
     return { kind: 'error', message: friendlyError(err) };
   }
+}
+
+// ── conditions ──────────────────────────────────────────────────────────────
+
+/** Index of the `)` matching the `(` at `open`, or -1. */
+function closeParen(s: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === '(') depth++;
+    else if (s[i] === ')') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+const COND_HEAD = /^\s*(?:D(\d+)_)?([A-Za-z]\w*)\s*\(/;
+const COND_RESERVED = new Set(['t', 'r', 'e', 'pi', 'tau', 'phi', 'i', 'frames', 'layer']);
+
+/** One clause `y(a) = v` / `D1_y(a) = v` (normalised text), or null if it isn't one. */
+export function parseCondition(clause: string): CondSpec | null {
+  const m = COND_HEAD.exec(clause);
+  if (!m) return null;
+  const name = m[2];
+  const k = m[1] ? Number(m[1]) : 0;
+  if (COND_RESERVED.has(name)) return null;
+  // A known function (sin(0) = …) is never a condition; u / H may be dependent variables.
+  if (KNOWN_FUNCTIONS.has(name) && !SOFT_FUNCTIONS.has(name)) return null;
+  const open = m[0].length - 1;
+  const close = closeParen(clause, open);
+  if (close < 0) return null;
+  const rest = clause.slice(close + 1);
+  const eq = /^\s*=(?!=)\s*(.+)$/.exec(rest);
+  if (!eq || /[=<>]/.test(eq[1])) return null;
+  const atText = clause.slice(open + 1, close).trim();
+  const valueText = eq[1].trim();
+  if (!atText || !valueText) return null;
+  const lhs = clause.slice(0, close + 1).trim();
+  // `f(a) = 2` defines a function (unless f is y / x or a derivative token).
+  if (!m[1] && FNDEF_LHS.test(lhs) && !FN_RESERVED.has(name)) return null;
+  try {
+    const at = mjParse(atText);
+    const value = mjParse(valueText);
+    // The point and value are numbers (or slider expressions), never functions of t / x / y.
+    for (const n of [at, value]) {
+      if (['t', 'x', 'y'].some((v) => hasSymbol(n, v)) || [...freeSymbols(n)].some((s) => DERIV_TOKEN.test(s))) {
+        return null;
+      }
+    }
+    return { depVar: name, k, at, value, text: `${lhs} = ${valueText}` };
+  } catch {
+    return null;
+  }
+}
+
+function conditionDeps(conds: CondSpec[]): string[] {
+  const deps = new Set<string>();
+  for (const c of conds) for (const n of [c.at, c.value]) for (const s of freeSymbols(n)) deps.add(s);
+  return [...deps];
+}
+
+/** A row made only of conditions, all for one variable. */
+function parseConditionRow(normalized: string, raw: string): Parsed | null {
+  const clauses = splitTopChar(normalized, ',').map((c) => c.trim());
+  if (!clauses.length || clauses.some((c) => !c)) return null;
+  const conds: CondSpec[] = [];
+  for (const c of clauses) {
+    const cond = parseCondition(c);
+    if (!cond) return null;
+    conds.push(cond);
+  }
+  const vars = new Set(conds.map((c) => c.depVar));
+  if (vars.size > 1) return { kind: 'error', message: 'Put the conditions for each variable on its own row' };
+  return { kind: 'condition', depVar: conds[0].depVar, conds, deps: conditionDeps(conds), raw };
+}
+
+/** `ODE, cond, cond…` → the ODE with its conditions attached (null if not that shape). */
+function splitOdeConditions(normalized: string, trimmed: string, raw: string): Parsed | null {
+  const clauses = splitTopChar(normalized, ',').map((c) => c.trim());
+  if (clauses.length < 2) return null;
+  const conds: CondSpec[] = [];
+  for (const c of clauses.slice(1)) {
+    const cond = parseCondition(c);
+    if (!cond) return null;
+    conds.push(cond);
+  }
+  // Parse the equation from its typed text when the split lines up (dy/dx detection).
+  const rawClauses = splitTopChar(trimmed, ',');
+  const head = parseEntryUncached(rawClauses.length === clauses.length ? rawClauses[0] : clauses[0]);
+  if (head.kind !== 'ode') return null;
+  if (conds.some((c) => c.depVar !== head.depVar)) {
+    return { kind: 'error', message: `Conditions on this row must be for ${head.depVar}` };
+  }
+  const cdeps = conditionDeps(conds);
+  const deps = [...new Set([...head.deps, ...cdeps])];
+  const xAlt = head.xAlt ? { ...head.xAlt, deps: [...new Set([...head.xAlt.deps, ...cdeps])] } : undefined;
+  return { ...head, deps, raw, conds, ...(xAlt ? { xAlt } : {}) };
 }
 
 const IDENT = /^[A-Za-z]\w*$/;

@@ -85,6 +85,18 @@ export interface Entry {
   blur?: number;
   /** Name of a `name = layer(…)` row: drawn with that layer's transform and z-order. */
   layer?: string;
+
+  /** ODE numerics (all optional; the expanded row's collapsed Numerics section).
+   * Integrator: undefined = the default (lib/solver/integrate DEFAULT_SOLVER). */
+  solver?: 'auto' | 'rk45' | 'rk4' | 'euler';
+  /** Show the discrete steps of this textbook method over the solution. */
+  steps?: 'euler' | 'heun' | 'rk4';
+  /** Step size h of the shown steps (default 0.5). */
+  stepSize?: number;
+  /** 2nd-order ODE: solve as a boundary-value problem (by shooting) … */
+  conditions?: 'initial' | 'boundary';
+  /** … with y(a) = α, y(b) = β: [a, α, b, β]. */
+  bc?: number[];
 }
 
 export type BlendMode = 'normal' | 'add' | 'screen' | 'multiply' | 'overlay' | 'lighten' | 'darken';

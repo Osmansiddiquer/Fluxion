@@ -1,5 +1,5 @@
 import { parse as mjParse } from 'mathjs';
-import { hasWhere, type Parsed } from './parse';
+import { hasWhere, type CondSpec, type Parsed } from './parse';
 import { greekWordToTex } from './greek';
 import { fmtSig } from '../format';
 
@@ -14,6 +14,10 @@ function fmtNum(n: number): string {
  */
 function postTex(tex: string): string {
   let s = tex;
+  // The impulse delta(t − a) reads as δ(t − a) (latexToText maps \delta back).
+  s = s.replace(/\\mathrm\{delta\}(?=\\left\()/g, '\\delta');
+  // Step functions keep their call shape (H(t − 1), not H·(t − 1), on the way back).
+  s = s.replace(/\\mathrm\{(H|u|heaviside)\}(?=\\left\()/g, '\\operatorname{$1}');
   // mathjs wraps some symbols (e.g. `t`, which it reads as the tonne unit) in
   // \mathrm{}. Re-wrap in braces so a preceding command like \cdot can't merge
   // into it (\cdot\mathrm{t} -> \cdot{t}, never \cdott).
@@ -37,6 +41,26 @@ function texOf(src: string): string {
   }
 }
 
+/** y′(0) = 1, y(π) = 0 */
+function condsTex(conds: CondSpec[]): string {
+  return conds
+    .map((c) => {
+      const name = greekWordToTex(c.depVar) + "'".repeat(c.k);
+      return `${name}\\left(${postTex(c.at.toTex(TEX_OPTS))}\\right) = ${postTex(c.value.toTex(TEX_OPTS))}`;
+    })
+    .join(',\\ ');
+}
+
+/** An ODE's left side; `dy/dx` rows keep their Leibniz form (dy/dx, d²y/dx²). */
+function odeLhsTex(lhs: string, depVar: string, order: number, indep?: 'x'): string {
+  const bare = lhs.replace(/^\((.*)\)$/, '$1').trim();
+  if (indep === 'x' && bare === `D${order}_${depVar}`) {
+    const v = greekWordToTex(depVar);
+    return order === 1 ? `\\frac{d${v}}{dx}` : `\\frac{d^${order}${v}}{dx^${order}}`;
+  }
+  return texOf(lhs);
+}
+
 /** Build a KaTeX-ready LaTeX string for an entry, or null if not renderable.
  *  `varValue` overrides a variable's displayed value (the live slider value). */
 export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
@@ -50,7 +74,12 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
         return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
       }
       return `y = ${postTex(parsed.node.toTex(TEX_OPTS))}`;
-    case 'ode':
+    case 'ode': {
+      const conds = parsed.conds?.length ? `,\\ ${condsTex(parsed.conds)}` : '';
+      return `${odeLhsTex(parsed.lhs, parsed.depVar, parsed.order, parsed.indep)} = ${texOf(parsed.rhs)}${conds}`;
+    }
+    case 'condition':
+      return condsTex(parsed.conds);
     case 'implicit':
       return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
     case 'polar':
