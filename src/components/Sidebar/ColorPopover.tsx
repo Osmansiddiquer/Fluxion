@@ -223,10 +223,10 @@ export default function ColorPopover({
           </div>
           {fillable && fillOn && (
             <div className="point-opt-row">
-              <span className="point-opt-label">Fill</span>
+              <span className="point-opt-label" />
               <ExprField
                 value={entry.fillColor ?? ''}
-                placeholder="same as line"
+                placeholder="fill colour (= line)"
                 title="Fill colour (literal or expression); defaults to the line colour"
                 onCommit={(v) => update(entry.id, { fillColor: v })}
               />

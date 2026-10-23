@@ -111,6 +111,9 @@ a.report-bug {
   margin: 5px 4px;
   background: var(--border);
 }
+.graph-menu-pop .graph-menu-demo {
+  white-space: nowrap;
+}
 .graph-menu-label {
   padding: 4px 10px 2px;
   font-size: 10.5px;
