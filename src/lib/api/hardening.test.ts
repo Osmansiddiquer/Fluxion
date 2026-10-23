@@ -28,4 +28,9 @@ describe('parser / compute hardening', () => {
     expect(parseEntry('y ≤ x')).toMatchObject({ kind: 'inequality' });
     expect(parseEntry('x^2 + y^2 ≥ 1')).toMatchObject({ kind: 'inequality' });
   });
+  it('accepts Unicode primes (common in LLM output)', () => {
+    expect(parseEntry('y′ = -y')).toMatchObject({ kind: 'ode', depVar: 'y', order: 1 });
+    expect(parseEntry('y″ = -y')).toMatchObject({ kind: 'ode', depVar: 'y', order: 2 });
+    expect(parseEntry('y′′ + y = 0')).toMatchObject({ kind: 'ode', order: 2 });
+  });
 });
