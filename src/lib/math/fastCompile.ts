@@ -133,7 +133,8 @@ function memo(inner: Ev, syms: string[], fns: string[]): Ev {
     for (let i = 0; i < n; i++) {
       const v = s[syms[i]];
       if (v === undefined) return inner(s); // unresolved: let it throw normally
-      if (v !== lastS[i]) same = false;
+      // (0 and -0 are different inputs: atan2(0, -0) ≠ atan2(0, 0).)
+      if (v !== lastS[i] || (v === 0 && 1 / (v as number) !== 1 / (lastS[i] as number))) same = false;
     }
     if (same) {
       for (let i = 0; i < m; i++) if (s[fns[i]] !== lastF[i]) same = false;

@@ -15,6 +15,7 @@ import FeatureToggle from './FeatureToggle';
 import { resolveStyle, type ResolvedStyle } from '../../lib/style';
 import { rasterizeRegion, type Rect } from '../../lib/raster';
 import type { CurveResult } from '../../lib/compute';
+import { segmentOutside } from '../../lib/geom/cull';
 import './PlotCanvas.css';
 
 interface Size {
@@ -315,11 +316,15 @@ export default function PlotCanvas() {
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     const rasterKey = `${viewport.tMin},${viewport.tMax},${viewport.yMin},${viewport.yMax},${size.w},${size.h}`;
+    const unitsPerPx = (viewport.tMax - viewport.tMin) / size.w;
     for (const entry of entries) {
       const res = analysis.results.get(entry.id);
       if (!res || !entry.visible) continue;
       const st = styles.get(entry.id);
       if (!st) continue;
+      // Skip segments entirely off-screen (stroke half-width + slack as margin).
+      const margin = (st.lineWidth / 2 + 4) * unitsPerPx;
+      const off = (seg: [number, number][]) => segmentOutside(seg, viewport, margin);
 
       if (st.fill && st.fillMode === 'region' && res.inequality) {
         let hit = regionCache.current.get(res);
@@ -341,7 +346,7 @@ export default function PlotCanvas() {
           ctx.fill('evenodd');
         } else {
           for (const seg of res.curve.segments) {
-            if (seg.length < 3) continue;
+            if (seg.length < 3 || off(seg)) continue;
             ctx.beginPath();
             tracePath(seg);
             ctx.closePath();
@@ -369,6 +374,7 @@ export default function PlotCanvas() {
       ctx.setLineDash(st.dash);
       const closeShapes = st.fillMode === 'shape';
       for (const seg of res.curve.segments) {
+        if (off(seg)) continue;
         ctx.beginPath();
         tracePath(seg);
         if (closeShapes) ctx.closePath();

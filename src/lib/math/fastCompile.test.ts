@@ -16,10 +16,15 @@ function same(a: unknown, b: unknown): boolean {
   return a === b;
 }
 
+const compiledCache = new Map<string, { fast: ReturnType<typeof fastCompile>; slow: ReturnType<typeof fastCompile> }>();
 function evalBoth(expr: string, scope: Record<string, unknown>) {
-  const node = mjParse(normalizeInput(expr));
-  const fast = fastCompile(node);
-  const slow = node.compile();
+  let c = compiledCache.get(expr);
+  if (!c) {
+    const node = mjParse(normalizeInput(expr));
+    c = { fast: fastCompile(node), slow: node.compile() };
+    compiledCache.set(expr, c);
+  }
+  const { fast, slow } = c;
   let s: unknown;
   let f: unknown;
   let sErr: string | null = null;

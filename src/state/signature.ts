@@ -18,7 +18,10 @@ export function computeSignature(entries: Entry[]): string {
   for (const e of entries) {
     s +=
       `${e.id}${F}${e.raw}${F}${e.visible ? 1 : 0}${F}${e.t0 ?? ''}${F}${e.ic?.join(',') ?? ''}` +
-      `${F}${e.varValue ?? ''}${F}${e.thetaMin ?? ''}${F}${e.thetaMax ?? ''}${F}${e.frames ?? ''}${R}`;
+      `${F}${e.varValue ?? ''}${F}${e.thetaMin ?? ''}${F}${e.thetaMax ?? ''}${F}${e.frames ?? ''}` +
+      // Animation options that change what is sampled (resolution; off-screen
+      // culling depends on the layer and on glow / blur spread).
+      `${F}${e.samples ?? ''}${F}${e.layer ?? ''}${F}${e.glow ?? ''}${F}${e.blur ?? ''}${R}`;
   }
   return s;
 }
