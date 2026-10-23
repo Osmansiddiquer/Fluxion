@@ -40,7 +40,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 
 1. **`lib/math/parse.ts`** classifies `raw` → `Parsed` union: `function | ode | variable
    | implicit | polar | points | pointvar | inequality | parametric | fndef | repeat |
-   layer | frames | error | empty`. Normalisation
+   layer | frames | condition | error | empty`. Normalisation
    (`normalize.ts`) and LaTeX↔text bridges (`fromlatex.ts` / `tolatex.ts`) wrap it.
 2. **`lib/compute.ts` `computeAll(entries, viewport, samples)`** is the heart: builds the
    evaluation scope (`lib/scope.ts` `buildEvalContext`), groups + integrates coupled
@@ -58,7 +58,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Area | Files |
 | --- | --- |
 | Parsing | `lib/math/parse.ts` (central), `normalize.ts`, `fromlatex.ts`, `tolatex.ts`, `greek.ts`, `builtins.ts`, `points.ts`, `piFormat.ts`, `suggest.ts` (autocomplete), `compileCache.ts` |
-| Reduce / solve | `lib/math/reduce.ts` (ODE→1st-order system), `lib/solver/rk4.ts`, `integrate.ts`, `sample.ts` (function sampling + domain-edge bisection), `implicit.ts` (marching squares), `curve.ts` |
+| Reduce / solve | `lib/math/reduce.ts` (ODE→1st-order system), `lib/solver/rk4.ts`, `integrate.ts` (`integrateSystem`: solver choice, impulses, breakpoints; `solveAt`), `dopri5.ts` + `adaptive.ts` (RK45 step loop, dense output, stiffness test), `stiff.ts` (Rosenbrock / ode23s), `methods.ts` (Euler/Heun/RK4 "Show steps"), `shooting.ts` (BVP), `odeGroup.ts` (conditions, setup + cache key, `runGroup`), `sample.ts` (function sampling + domain-edge bisection), `implicit.ts` (marching squares), `curve.ts` |
 | Compute orchestration | `lib/compute.ts`, `lib/analysis/eval.ts` |
 | Analysis | `lib/analysis/features.ts` (extrema/roots/intercepts/endpoints), `singularities.ts` (removable holes vs asymptotes), `intersections.ts`, `types.ts` |
 | Geometry / format | `lib/geom/transform.ts` (data↔screen), `lib/format.ts` (`fmtSig`), `lib/graphFile.ts` (export/share), `lib/math/resolveSlice.ts` (parametric cuts) |
@@ -68,8 +68,8 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Demos | `lib/demos/scripted.ts` (Script mode programs: Sharingan, cube, Mangekyō, mandala, pendulum-from-ODE, silhouette clip) = `DEMOS` → GraphMenu "Examples", Script mode → Examples, `#example=<id>` links, `public/examples/*.json` (via `lib/api/examples.ts`). The older expression-row builders (`sharingan.ts`, `cube.ts`, …) are `EXPRESSION_DEMOS`, kept only as engine regression fixtures |
 | Script mode | `lib/script/` — `api.ts` (names + signatures), `runtime.ts` (the drawing API + executor, pure), `protocol.ts` (wire format, `sanitizeFrame`, limits), `graphBridge.ts` (`graph.value/fn/ode`), `sandbox/worker.ts` (worker entry), `sandbox/host.ts` (iframe + watchdog), `testkit.ts` (headless runs); `state/scriptRuntime.ts` (live frame / clock); `components/Script/*` (lazy: `ScriptPanel`, `CodeEditor`, `ScriptEngine`, `ScriptDocs` + `docsContent.ts`, `ClipImporter`, `scriptBus`); `components/Plot/scriptLayer.ts` (renderer), `ScriptChip.tsx`; `components/ModeSwitch.tsx`; `cli/scriptCheck.ts` |
 | Store | `store/useStore.ts` (Zustand+persist), `store/types.ts` (`Entry`, `Viewport`, …), `state/signature.ts` (`computeSignature`) |
-| Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls`, `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
-| Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
+| Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls` (+ `NumericsPanel`: Conditions switch, collapsed Numerics), `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
+| Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`, `stepsLayer.ts`), `components/Projections/*` |
 | Chrome | `App.tsx`, `Tutorial.tsx`, `HelpMenu.tsx` (the ? menu), `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
 | Saved graphs | `lib/saved/` (`kv.ts` IndexedDB→localStorage→memory, `library.ts`, `thumbnail.ts`, `channel.ts`, `session.ts`, `clipboard.ts`, `applyHook.ts`), `state/savedGraphs.ts` (per-tab controller), `components/Graphs/` (header chip, share-menu items, My graphs sheet) |
 | Docs content | `components/Docs/` — `content.ts` (all docs as data), `examples.ts` (example type + the tour's 4 examples), `search.ts`, `hash.ts` (legacy `#docs/<id>` redirect), `docs.test.ts` |
@@ -84,8 +84,11 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
   use the exported `hasSymbol` (full traverse). The x/t-independent-variable logic
   (`xIsIndependent`, `rewriteXtoT`) depends on this.
 - **x and t are interchangeable** as the independent variable: x-only → x is rewritten to
-  t; both present → t is independent and undefined `x` becomes a free variable. ODEs skip
-  the rewrite (keep `x` as a dep var for systems).
+  t; both present → t is independent and undefined `x` becomes a free variable. ODEs:
+  `dy/dx` (Leibniz in x, `usesLeibnizX`) always rewrites (`indep: 'x'`); prime notation
+  with x and no t keeps `x` but carries `xAlt` (the x→t reading), which compute uses
+  (`applyOdeNotation`) only when no ODE `x' = …` and no slider defines x — so systems
+  keep `x` as a dependent variable.
 - **Implicit-multiplication display**: `tolatex.ts` uses `TEX_OPTS = { implicit: 'hide' }`
   so `2t` renders as "2t" not "2·t" (explicit `pi*t` keeps the ·).
 - **Polar / inequality θ-convention**: position angle is `atan2(y,t) ∈ [0,2π)`. Polar
@@ -309,6 +312,43 @@ All optional; defaults render pixel-identically (verified against main in light/
   `state/frameApi.ts` installs `window.fluxion` (`setFrame`, `setTime`, `capture`,
   `info`; PlotCanvas calls `notifyDrawn`).
 - **UI**: only the style popover's collapsed **Advanced** section (`ColorPopover`).
+
+## ODE numerics & notation (issue #3)
+
+- **Notation** (`parse.ts`): conditions `y(a) = v`, `y'(a) = v` are kind `condition`
+  (own row, several comma-separated for one variable) or `ode.conds` (after commas on the
+  ODE row; `splitOdeConditions`). `f(a) = …` with an identifier argument stays a fndef
+  (except y/x/reserved names). `delta(arg)` terms are pulled out at parse time
+  (`impulses`: arg linear in t, coefficient by differentiating a marker symbol) and
+  zeroed in `node`; step functions (`H`, `u`, `heaviside`, `step`) record `breaks`.
+  `H`/`u` are `SOFT_FUNCTIONS`: built-ins a graph may redefine (`u(s) = …`) or use as
+  an ODE variable. In tolatex, delta → `\delta`, H/u → `\operatorname`, dy/dx rows keep
+  `\frac{dy}{dx}` (round-trip through latexToText is tested).
+- **Groups** (`lib/solver/odeGroup.ts`): `resolveGroupSetup` turns typed conditions
+  (they win over `ic`/`t0`; IVPControls shows them read-only), the Conditions switch
+  (`conditions: 'boundary'`, `bc = [a, α, b, β]`, order 2, single equation), solver and
+  shown steps into numbers + a `key` folded into the ODE group cache key. `runGroup`
+  shoots (BVPs), integrates, runs "Show steps" + global errors (`solveAt` reference) and
+  returns `CurveResult.numerics`. Errors (not unique / no solution / bad conditions)
+  go through the normal ODE error path.
+- **Solvers** (`integrate.ts`): `DEFAULT_SOLVER = 'rk4'`. With no impulses/breaks the
+  RK4 path is bit-identical to before (`solver/regression.test.ts` checks every shipped
+  ODE against the old integrator). Auto/RK45 sample dense output on the same t-grid;
+  `TOLERANCES` (rtol 1e-9, atol 1e-11) are tuned with `npx vite-node scripts/bench-ode.ts`.
+  Auto is not the default: it is faster and as accurate on 15 of 18 shipped graphs but
+  ~6× slower on Lorenz (where it is far more accurate); numbers in the PR.
+  Steps split at impulse/break times, and stage times at a break are nudged inside the
+  piece (`pieceDeriv`) so H(t − a) is evaluated on the right side of its jump.
+  A repeated time in a trajectory marks an impulse; `extractComponent` splits the curve
+  only where that component jumps.
+- **Fields** (`Entry`): `solver`, `steps`, `stepSize`, `conditions`, `bc` — all optional,
+  in `computeSignature`, the spec (`solver`, `steps`, `h`, `conditions`, `bc`), URL
+  params, schema, `sanitizeGraph`, `checkSpec` warnings, llms.txt and the docs.
+- **UI**: everything lives in the expanded ODE row: Conditions switch (order 2 only),
+  then the collapsed **Numerics** disclosure (open only when an option is set). Steps
+  draw in `stepsLayer.ts` after the curves; the trace tooltip's second line
+  (`stepTip`) shows the nearest step's |yₕ − y|. Example: `#example=impulse`.
+- **Browser check**: the phone sidebar is a drawer (`button[title="Show expressions"]`).
 
 ## Verifying changes
 

@@ -127,6 +127,13 @@ export const HELPERS: Record<string, Fn> = {
   ease: (u) => ease(num(u)),
   step: (x) => step(num(x)),
   pulse: (x, a, b) => pulse(num(x), num(a), num(b)),
+  // Step and impulse forcing for ODEs (Laplace-unit notation). heaviside / H / u
+  // are the unit step (1 for x ≥ 0). delta is the Dirac impulse: it can't be
+  // sampled, so it evaluates to 0 and an ODE applies it as a jump (parse.ts).
+  heaviside: (x) => step(num(x)),
+  H: (x) => step(num(x)),
+  u: (x) => step(num(x)),
+  delta: () => 0,
   keys: (T, ...pairs) => keyframes(num(T), pairs.map(num), false),
   skeys: (T, ...pairs) => keyframes(num(T), pairs.map(num), true),
   rotx: (x, y, a) => rotx(num(x), num(y), num(a)),

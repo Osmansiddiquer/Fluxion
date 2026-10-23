@@ -18,6 +18,10 @@ intersections.
 | `y' = t*y` | First-order ODE, solved from an initial condition |
 | `y'' = -y` | Higher-order ODE (reduced to a first-order system internally) |
 | `x' = x - x*y`, `y' = x*y - y` | Coupled system (equations reference each other) |
+| `dy/dx = x + y` | Leibniz notation in x: x is then the independent variable |
+| `y'' = -y, y(0) = 1, y'(0) = 0` | Initial conditions typed inline (or `y(0) = 1` on its own row) |
+| `y'' = -y, y(0) = 0, y(pi/2) = 2` | Boundary-value problem, solved by shooting |
+| `y'' + y = delta(t - 2) + H(t - 5)` | Impulse and step forcing (Laplace-unit notation; also `u(t - a)`) |
 | `y = sin(t)/t` or `sin(t)` | Plain function of `t` (holes/asymptotes handled) |
 | `t^2 + y^2 = 9` | Implicit curve (marching squares) |
 | `r = 1 + cos(theta)` | Polar curve, drawn as the (x, y) parametric overlay |
@@ -123,7 +127,12 @@ browser storage separately from your per-tab graph state.
 
 ## Highlights
 
-- **Numerical ODE engine** — any-order / coupled, RK4 with per-direction step budget.
+- **Numerical ODE engine** — any-order / coupled, RK4 with per-direction step budget
+  by default; an expanded ODE row's collapsed **Numerics** section offers adaptive
+  Dormand–Prince RK45 with dense output and a stiff (Rosenbrock) fallback, Euler, and
+  **Show steps** (Euler / Heun / RK4 with a step size h, global error in the trace).
+  Impulses split the step and jump the highest derivative; 2nd-order equations can
+  switch to boundary conditions (shooting).
 - **Inline LaTeX editing** (MathLive) with friendly names (`arctan`, `ln`), Greek
   words (`alpha`→α), and symbol autocomplete.
 - **Inspection markers** — extrema, roots, intercepts, intersections (works across

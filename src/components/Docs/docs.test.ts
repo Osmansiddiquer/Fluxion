@@ -151,7 +151,7 @@ describe('docs cover every feature', () => {
 
   it('found the parse kinds', () => {
     expect(kinds.sort()).toEqual(
-      ['fndef', 'frames', 'function', 'implicit', 'inequality', 'layer', 'ode', 'parametric', 'pointvar', 'points', 'polar', 'repeat', 'variable'].sort(),
+      ['condition', 'fndef', 'frames', 'function', 'implicit', 'inequality', 'layer', 'ode', 'parametric', 'pointvar', 'points', 'polar', 'repeat', 'variable'].sort(),
     );
   });
 

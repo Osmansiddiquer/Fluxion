@@ -90,11 +90,13 @@ describe('checkSpec', () => {
     expect(checkSpec({ expressions: ['y = a*x^2 + b', 'a = 1', 'b = -2'] }).ok).toBe(true);
   });
 
-  it('explains that ODEs use t, not x', () => {
-    const r = checkSpec({ expressions: ["y' = x*y"] });
-    expect(r.ok).toBe(false);
-    expect(r.errors[0].message).toMatch(/always use t/);
+  it('reads x as the independent variable of an x-only ODE, and explains mixing x and t', () => {
+    expect(checkSpec({ expressions: ["y' = x*y"] }).ok).toBe(true);
+    expect(checkSpec({ expressions: ['dy/dx = x*y'] }).ok).toBe(true);
     expect(checkSpec({ expressions: ["y' = t*y"] }).ok).toBe(true);
+    const r = checkSpec({ expressions: ["y' = x*t*y"] });
+    expect(r.ok).toBe(false);
+    expect(r.errors[0].message).toMatch(/also uses t/);
   });
 
   it('catches the implicit-multiplication pitfalls documented in llms.txt', () => {

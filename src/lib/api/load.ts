@@ -4,6 +4,7 @@ import type { Entry, FeatureToggles, Projections, ScriptDoc, Viewport } from '..
 import { nextColor } from '../../utils/colors';
 import {
   ANIM_MODES,
+  CONDITION_MODES,
   DEFAULT_FEATURES,
   DEFAULT_PROJECTIONS,
   DEFAULT_SIG_FIGS,
@@ -25,6 +26,8 @@ import { BLEND_MODES } from '../style';
 import { assetId } from '../frames/assets';
 import { parseHeader } from '../frames/codec';
 import { SCRIPT_LIMITS } from '../script/protocol';
+import { SOLVER_METHODS } from '../solver/integrate';
+import { STEP_METHODS, MIN_STEP_SIZE, MAX_STEP_SIZE } from '../solver/methods';
 
 /**
  * Glue between the URL API and the app: turn the current location into a graph
@@ -115,6 +118,17 @@ export function sanitizeGraph(g: GraphData): GraphData {
       if (finite(e.pointSize)) out.pointSize = Math.min(14, Math.max(2, e.pointSize));
       const drag = oneOf(e.pointDrag, DRAG_MODES);
       if (drag) out.pointDrag = drag;
+      // ODE numerics (bounded; all optional).
+      const solver = oneOf(e.solver, SOLVER_METHODS);
+      if (solver) out.solver = solver;
+      const steps = oneOf(e.steps, STEP_METHODS);
+      if (steps) out.steps = steps;
+      if (finite(e.stepSize)) out.stepSize = Math.min(MAX_STEP_SIZE, Math.max(MIN_STEP_SIZE, e.stepSize));
+      const cond = oneOf(e.conditions, CONDITION_MODES);
+      if (cond) out.conditions = cond;
+      if (Array.isArray(e.bc) && e.bc.length === 4 && e.bc.every((v) => inAbs(v)) && e.bc[0] !== e.bc[2]) {
+        out.bc = e.bc.slice();
+      }
       return out;
     });
   // Ids must be unique (they key caches and React rows).

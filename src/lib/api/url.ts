@@ -175,6 +175,11 @@ export const EXPR_PARAMS = [
   'glow',
   'blur',
   'layer',
+  'solver',
+  'steps',
+  'h',
+  'conditions',
+  'bc',
 ] as const;
 const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> = {
   color: 'color',
@@ -205,6 +210,11 @@ const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> =
   glow: 'glow',
   blur: 'blur',
   layer: 'layer',
+  solver: 'solver',
+  steps: 'steps',
+  h: 'h',
+  conditions: 'conditions',
+  bc: 'bc',
 };
 /** The marker toggles `markers=off` turns off (everything but the grid). */
 const MARKER_KEYS = ['extrema', 'xIntercepts', 'yIntercept', 'endpoints', 'discontinuities', 'intersections'] as const;
@@ -314,8 +324,8 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
       const k = PARAM_TO_KEY[key as (typeof EXPR_PARAMS)[number]];
       const rec = last as unknown as Record<string, unknown>;
       if (k === 'hidden' || k === 'fill' || k === 'autoplay' || k === 'dots') rec[k] = bool(value);
-      else if (k === 'ic') rec[k] = value.split(',').map(numish);
-      else if (['t0', 'min', 'max', 'step', 'speed', 'thetaMin', 'thetaMax', 'pointSize', 'lineWidth', 'fillOpacity', 'samples', 'glow', 'blur'].includes(k)) {
+      else if (k === 'ic' || k === 'bc') rec[k] = value.split(',').map(numish);
+      else if (['t0', 'min', 'max', 'step', 'speed', 'thetaMin', 'thetaMax', 'pointSize', 'lineWidth', 'fillOpacity', 'samples', 'glow', 'blur', 'h'].includes(k)) {
         rec[k] = numish(value);
       } else if (k === 'color' || k === 'colorExpr' || k === 'fillColor') {
         // `#` can't appear raw in a fragment; accept "c74440" and "%23c74440".
@@ -342,7 +352,7 @@ export function specToParams(spec: FluxionSpec): string | null {
     for (const p of EXPR_PARAMS) {
       const v = (e as unknown as Record<string, unknown>)[PARAM_TO_KEY[p]];
       if (v === undefined) continue;
-      if (p === 'ic') push(p, (Array.isArray(v) ? v : [v]).join(','));
+      if (p === 'ic' || p === 'bc') push(p, (Array.isArray(v) ? v : [v]).join(','));
       else if (p === 'hidden' || p === 'fill' || p === 'autoplay' || p === 'dots') push(p, v ? 1 : 0);
       else if (p === 'color' || p === 'colorexpr' || p === 'fillcolor') {
         const c = String(v);
