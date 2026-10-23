@@ -134,7 +134,7 @@ describe('shapes', () => {
   });
   it('curve and plot sample functions', () => {
     const c = only('curve(t => [cos(t), sin(t)], 0, TAU, { samples: 10 })') as Extract<DisplayItem, { k: 'path' }>;
-    expect(c.ops.filter((x, i) => i % 3 === 0).length).toBe(11);
+    expect(c.ops.filter((_, i) => i % 3 === 0).length).toBe(11);
     const f = only('curve(t => [cos(t), sin(t)], 0, TAU, { fill: "red", samples: 10 })') as Extract<DisplayItem, { k: 'path' }>;
     expect(f.ops[f.ops.length - 1]).toBe(OP.close);
     const pl = only('plot(x => x * x, { samples: 16 })', { view: { xmin: -2, xmax: 2, ymin: -1, ymax: 3 } }) as Extract<DisplayItem, { k: 'path' }>;

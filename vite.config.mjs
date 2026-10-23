@@ -1,6 +1,44 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath, URL } from 'node:url';
+import { resolve } from 'node:path';
+import { build as esbuild } from 'esbuild';
+
+const SANDBOX_ENTRY = fileURLToPath(new URL('./src/lib/script/sandbox/worker.ts', import.meta.url));
+const SANDBOX_ID = 'virtual:fluxion-sandbox-runtime';
+
+/**
+ * Script mode's sandbox runtime as a *string*: the worker (runtime + Graph
+ * bridge + mathjs) bundled into one self-contained IIFE. The app hands it to
+ * the sandboxed iframe, which starts it as a blob: Worker — an opaque-origin
+ * frame can't load a worker from the app's URL, and a string works the same
+ * in dev and in the static build. Only the lazily loaded Script mode chunk
+ * imports it, so Graph mode doesn't pay for it.
+ */
+function sandboxRuntime() {
+  return {
+    name: 'fluxion-sandbox-runtime',
+    resolveId(id) {
+      if (id === SANDBOX_ID) return '\0' + SANDBOX_ID;
+    },
+    async load(id) {
+      if (id !== '\0' + SANDBOX_ID) return;
+      const r = await esbuild({
+        entryPoints: [SANDBOX_ENTRY],
+        bundle: true,
+        write: false,
+        format: 'iife',
+        platform: 'browser',
+        target: 'es2020',
+        minify: true,
+        legalComments: 'none',
+        metafile: true,
+      });
+      for (const f of Object.keys(r.metafile.inputs)) this.addWatchFile(resolve(f));
+      return `export default ${JSON.stringify(r.outputFiles[0].text)};`;
+    },
+  };
+}
 
 // Relative base ('./') makes the build work when served from any path,
 // including a GitHub Pages project subdirectory (https://user.github.io/ODE-plotter/).
@@ -8,7 +46,7 @@ import { fileURLToPath, URL } from 'node:url';
 // bundling that breaks when Windows node operates on a \\wsl.localhost UNC path.
 export default defineConfig({
   base: './',
-  plugins: [react()],
+  plugins: [react(), sandboxRuntime()],
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

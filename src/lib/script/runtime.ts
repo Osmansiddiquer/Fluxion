@@ -159,8 +159,9 @@ function measureOffset(): number {
 
 function stackLocation(err: unknown): { line: number; column: number } | null {
   const stack = err instanceof Error ? String(err.stack ?? '') : '';
-  // V8 / Node: "<anonymous>:LINE:COL"; Firefox: "> Function:LINE:COL"; Safari: none.
-  const m = stack.match(/(?:<anonymous>|> Function|anonymous):(\d+):(\d+)/);
+  // V8 / Node: "(eval at …, <anonymous>:LINE:COL)"; Firefox: "> Function:LINE:COL";
+  // Safari: none. (Not "evalmachine.<anonymous>", the host script under node:vm.)
+  const m = stack.match(/(?:, <anonymous>|> Function):(\d+):(\d+)/);
   return m ? { line: Number(m[1]), column: Number(m[2]) } : null;
 }
 
