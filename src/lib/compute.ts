@@ -10,7 +10,8 @@ import {
 import { buildSystem } from './math/reduce';
 import { compileNode } from './math/compileCache';
 import { KNOWN_FUNCTIONS } from './math/builtins';
-import { integrateSystem, type Trajectory } from './solver/integrate';
+import type { Trajectory } from './solver/integrate';
+import { applyOdeNotation, forcing, resolveGroupSetup, runGroup, type OdeNumerics } from './solver/odeGroup';
 import { sampleFunction } from './solver/sample';
 import { sampleImplicit } from './solver/implicit';
 import { EMPTY_CURVE, type Point, type SampledCurve } from './solver/curve';
@@ -57,6 +58,8 @@ export interface CurveResult {
   ode?: OdeInfo;
   /** Parameter-family ghost curves (a slider's `family` switch). */
   ghosts?: Ghost[];
+  /** ODE: conditions used, solver, shown steps (lib/solver/odeGroup). */
+  numerics?: OdeNumerics;
 }
 
 type OdeParsed = Extract<Parsed, { kind: 'ode' }>;
@@ -77,7 +80,13 @@ const RESULT_CACHE = new Map<string, { key: string; result: CurveResult }>();
 // ODE integration is cached per coupling-group (keyed by the group's member ids).
 const ODE_GROUP_CACHE = new Map<
   string,
-  { key: string; curves: Map<string, SampledCurve>; errors: Map<string, string>; solved?: SolvedGroup }
+  {
+    key: string;
+    curves: Map<string, SampledCurve>;
+    errors: Map<string, string>;
+    numerics: Map<string, OdeNumerics>;
+    solved?: SolvedGroup;
+  }
 >();
 
 /** Max total copies a `for` repeat may draw. */
@@ -93,18 +102,25 @@ export function entrySamples(entry: Entry): number | undefined {
   return Math.round(Math.min(MAX_SAMPLES, Math.max(MIN_SAMPLES, n)));
 }
 
-function resolveIC(ic: number[] | undefined, order: number): number[] {
-  const out = new Array<number>(order).fill(0);
-  out[0] = 1;
-  if (ic) for (let i = 0; i < order; i++) if (i < ic.length && Number.isFinite(ic[i])) out[i] = ic[i];
-  return out;
+/** The initial point comes from typed conditions or a boundary-value solve. */
+function icLocked(n: OdeNumerics | undefined): boolean {
+  return !!n && (n.typedT0 || n.typedIc.some(Boolean) || !!n.bvp);
 }
 
 function extractComponent(traj: Trajectory, idx: number): SampledCurve {
   const segments: Point[][] = [];
   for (const seg of traj) {
-    const pts: Point[] = new Array(seg.ts.length);
-    for (let i = 0; i < seg.ts.length; i++) pts[i] = [seg.ts[i], seg.ys[i][idx]];
+    let pts: Point[] = [];
+    for (let i = 0; i < seg.ts.length; i++) {
+      const p: Point = [seg.ts[i], seg.ys[i][idx]];
+      // A repeated time is an impulse: this component jumps (new piece) or not (skip).
+      if (i > 0 && seg.ts[i] === seg.ts[i - 1]) {
+        if (p[1] === pts[pts.length - 1]?.[1]) continue;
+        if (pts.length >= 2) segments.push(pts);
+        pts = [];
+      }
+      pts.push(p);
+    }
     if (pts.length >= 2) segments.push(pts);
   }
   return { segments };
@@ -118,10 +134,17 @@ function baseVar(symbol: string): string {
 export function nodesOf(parsed: Parsed): MathNode[] {
   switch (parsed.kind) {
     case 'function':
-    case 'ode':
     case 'implicit':
     case 'fndef':
       return [parsed.node];
+    case 'ode':
+      return [
+        parsed.node,
+        ...(parsed.impulses ?? []).flatMap((p) => [p.arg, p.coef]),
+        ...(parsed.conds ?? []).flatMap((c) => [c.at, c.value]),
+      ];
+    case 'condition':
+      return parsed.conds.flatMap((c) => [c.at, c.value]);
     case 'points':
       return parsed.points.flatMap(specNodes);
     case 'pointvar':
@@ -612,6 +635,9 @@ export function computeAll(
   const depVars = new Set<string>();
   for (const { parsed } of parsedList) if (parsed.kind === 'ode') depVars.add(parsed.depVar);
   const valueNames = new Set([...varNames, ...derivedNames]);
+  // ODE notation (lib/solver/odeGroup): `y' = x·y` reads x as the independent
+  // variable unless an ODE or slider defines x; conditions typed on own rows.
+  const condRows = applyOdeNotation(parsedList, depVars, valueNames);
   const callsUser = (p: Parsed) => fnNames.size > 0 && [...callsOf(p)].some((f) => fnNames.has(f));
 
   // Point-valued variables (A = (x, y)) resolved to coordinates.
@@ -674,6 +700,7 @@ export function computeAll(
   const odeCurve = new Map<string, SampledCurve>();
   const odeError = new Map<string, string>();
   const solvedGroups: SolvedGroup[] = [];
+  const odeNumerics = new Map<string, OdeNumerics>();
   for (const idxs of groups.values()) {
     const members = idxs.map((i) => odes[i]);
     // Cache the (expensive) RK4 integration: a group re-integrates only when a
@@ -685,23 +712,25 @@ export function computeAll(
       .map((d) => (d in scope ? scope[d] : 'u'))
       .join(',');
     const memberSig = members
-      .map((m) => `${m.entry.id}:${m.entry.raw}:${m.entry.t0 ?? ''}:${m.entry.ic?.join('_') ?? ''}`)
+      .map((m) => `${m.entry.id}:${m.entry.raw}:${m.entry.t0 ?? ''}:${m.entry.ic?.join('_') ?? ''}:${m.parsed.indep ?? ''}`)
       .join(';');
     const fnSig = members.some((m) => callsUser(m.parsed)) ? ectx.fnKey : '';
+    // Typed conditions, boundary mode, solver and shown steps (resolved numbers).
+    const setup = resolveGroupSetup(members, condRows, scope, entries, fnNames);
     // Phase plane: integrate a fixed window around t0 (the axes are state
     // variables, so the viewport's x-range isn't a time range).
     const view = groupView(
       members.map((m) => m.entry),
       members.flatMap((m) => m.parsed.stateSymbols),
     );
-    const groupT0 = groupLeader(members.map((m) => m.entry), entries).t0 ?? 0;
-    const range = view.phase ? phaseRange(groupT0) : { tMin, tMax };
+    const range = view.phase ? phaseRange(setup.bvp ? setup.bvp.a : setup.t0) : { tMin, tMax };
     const steps = view.phase ? PHASE_SAMPLES : samples;
-    const gkey = `${memberSig}|${depSig}|${range.tMin}|${range.tMax}|${steps}|${fnSig}|${view.key}`;
+    const gkey = `${memberSig}|${depSig}|${range.tMin}|${range.tMax}|${steps}|${fnSig}|${setup.key}|${view.key}`;
     const cached = ODE_GROUP_CACHE.get(cacheId);
     if (cached && cached.key === gkey) {
       for (const [id, c] of cached.curves) odeCurve.set(id, c);
       for (const [id, e] of cached.errors) odeError.set(id, e);
+      for (const [id, n] of cached.numerics) odeNumerics.set(id, n);
       // Non-key fields (extra solutions, field switch) are read from the live entries.
       if (cached.solved) {
         solvedGroups.push({
@@ -715,33 +744,25 @@ export function computeAll(
     let solved: SolvedGroup | undefined;
     const curves = new Map<string, SampledCurve>();
     const errors = new Map<string, string>();
+    const numerics = new Map<string, OdeNumerics>();
     try {
       const system = buildSystem(members.map((m) => m.parsed), scope);
-      const y0 = new Array<number>(system.dim).fill(0);
-      let t0 = 0;
-      let earliest = Infinity;
-      members.forEach((m) => {
-        const pos = entries.indexOf(m.entry);
-        if (pos < earliest) {
-          earliest = pos;
-          t0 = m.entry.t0 ?? 0;
-        }
-      });
+      const run = runGroup(system, members, setup, scope, { tMin: range.tMin, tMax: range.tMax, samples: steps });
       system.blocks.forEach((block, b) => {
-        const ic = resolveIC(members[b].entry.ic, block.order);
-        for (let k = 0; k < block.order; k++) y0[block.offset + k] = ic[k];
+        curves.set(members[b].entry.id, extractComponent(run.traj, block.offset));
+        numerics.set(members[b].entry.id, run.numerics[b]);
       });
-      const traj = integrateSystem(system.deriv, { t0, y0, tMin: range.tMin, tMax: range.tMax, samples: steps });
-      system.blocks.forEach((block, b) => {
-        curves.set(members[b].entry.id, extractComponent(traj, block.offset));
-      });
+      // The initial point actually used (typed conditions / shooting applied).
+      const y0 = run.numerics.flatMap((n) => n.ic);
       solved = {
         entries: members.map((m) => m.entry),
         parsed: members.map((m) => m.parsed),
         system,
-        traj,
-        t0,
+        traj: run.traj,
+        t0: run.numerics[0]?.t0 ?? setup.t0,
         y0,
+        method: setup.method,
+        forcing: forcing(system, members, scope),
         leaderId: groupLeader(members.map((m) => m.entry), entries).id,
         view,
         range,
@@ -758,7 +779,8 @@ export function computeAll(
     }
     for (const [id, c] of curves) odeCurve.set(id, c);
     for (const [id, e] of errors) odeError.set(id, e);
-    ODE_GROUP_CACHE.set(cacheId, { key: gkey, curves, errors, solved });
+    for (const [id, n] of numerics) odeNumerics.set(id, n);
+    ODE_GROUP_CACHE.set(cacheId, { key: gkey, curves, errors, numerics, solved });
     if (solved) solvedGroups.push(solved);
   }
   // Phase plane, field, equilibria, extra solutions (cached in lib/ode/overlays).
@@ -852,6 +874,14 @@ export function computeAll(
         return { parsed, curve };
       }
 
+      if (parsed.kind === 'condition') {
+        // Conditions draw nothing; they set the ODE's initial / boundary values.
+        if (!depVars.has(parsed.depVar)) {
+          return { parsed, curve: EMPTY_CURVE, error: `No equation for ${parsed.depVar} yet: add a row like ${parsed.depVar}′ = …` };
+        }
+        return { parsed, curve: EMPTY_CURVE };
+      }
+
       if (!entry.visible || parsed.kind === 'layer') {
         // Layers draw nothing themselves; PlotCanvas evaluates their transform.
         return { parsed, curve: EMPTY_CURVE };
@@ -869,10 +899,17 @@ export function computeAll(
         if (parsed.kind === 'ode') {
           const err = odeError.get(entry.id);
           if (err) return { parsed, curve: EMPTY_CURVE, error: err };
-          const ode = odeInfo.get(entry.id);
-          return ode
-            ? { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE, ode }
-            : { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE };
+          const numerics = odeNumerics.get(entry.id);
+          let ode = odeInfo.get(entry.id);
+          // Typed conditions / boundary values fix the start: no draggable IC ring
+          // (a drag would write ic that the typed conditions override).
+          if (ode?.ic && ode.groupIds.some((id) => icLocked(odeNumerics.get(id)))) ode = { ...ode, ic: undefined };
+          return {
+            parsed,
+            curve: odeCurve.get(entry.id) ?? EMPTY_CURVE,
+            ...(numerics ? { numerics } : {}),
+            ...(ode ? { ode } : {}),
+          };
         }
         const sctx: SampleCtx = {
           entry,

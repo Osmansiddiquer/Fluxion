@@ -36,6 +36,7 @@ import { addExtraIC, extraFromClick, icDragPatches, snapToPixel, type IcTarget }
 import { describeEquilibrium } from '../../lib/analysis/equilibria';
 import { stateAt } from '../../lib/ode/overlays';
 import { useOdeFocus } from '../../state/odeFocus';
+import { drawOdeSteps, stepTip } from './stepsLayer';
 import './PlotCanvas.css';
 
 interface Size {
@@ -117,6 +118,8 @@ interface Tip {
   title?: string;
   t: number;
   y: number;
+  /** Second line (ODE "Show steps": the nearest step's global error). */
+  extra?: string;
   /** Extra detail lines (equilibrium eigenvalues / Jacobian). */
   lines?: string[];
 }
@@ -487,6 +490,9 @@ export default function PlotCanvas() {
       }
     }
 
+    // ODE "Show steps": discrete method steps over the accurate solutions.
+    drawOdeSteps(ctx, tf, entries, analysis.results, size, readGridColors().bg);
+
     // Script layer: above the Graph-mode curves, below markers, points and cursors.
     if (shownScript) {
       const getClip = (id: string) => {
@@ -758,6 +764,7 @@ export default function PlotCanvas() {
     title: p.label,
     t: p.t,
     y: p.y,
+    extra: stepTip(analysis.results.get(p.entryId), p.t, sigFigs),
   });
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -1098,7 +1105,7 @@ export default function PlotCanvas() {
       <ScriptChip />
       {tip && (
         <div
-          className={`plot-tooltip${tip.lines?.length ? ' tt-rich' : ''}`}
+          className={`plot-tooltip${tip.lines?.length ? ' tt-rich' : ''}${tip.extra ? ' has-extra' : ''}`}
           style={{ left: tip.px + frame.x, top: tip.py + frame.y }}
           role="status"
         >
@@ -1116,6 +1123,7 @@ export default function PlotCanvas() {
               ))}
             </span>
           ) : null}
+          {tip.extra && <span className="tt-extra">{tip.extra}</span>}
         </div>
       )}
       {labels.map((l) => (

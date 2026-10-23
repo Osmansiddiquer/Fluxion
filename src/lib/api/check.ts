@@ -43,8 +43,13 @@ function summarize(p: Parsed): string {
     case 'function':
       if ((isDerived as (x: Parsed) => boolean)(p)) return `derived value ${p.name}`;
       return p.name === 'y' ? 'function y(x)' : `function ${p.name}(x)`;
-    case 'ode':
-      return `${ord(p.order)}-order ODE in ${p.depVar}(t)`;
+    case 'ode': {
+      const v = p.indep === 'x' ? 'x' : 't';
+      const conds = p.conds?.length ? ` with ${p.conds.map((c) => c.text.replace(/D(\d+)_(\w+)/g, (_m, k, n) => n + "'".repeat(Number(k)))).join(', ')}` : '';
+      return `${ord(p.order)}-order ODE in ${p.depVar}(${v})${conds}`;
+    }
+    case 'condition':
+      return `condition${p.conds.length > 1 ? 's' : ''} for ${p.depVar}: ${p.conds.map((c) => c.text.replace(/D(\d+)_(\w+)/g, (_m, k, n) => n + "'".repeat(Number(k)))).join(', ')}`;
     case 'variable':
       return `slider ${p.name} = ${p.value}`;
     case 'implicit':
@@ -152,7 +157,7 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
       const names = res.undefinedVars;
       const hint =
         parsed.kind === 'ode' && names.includes('x')
-          ? ' ODEs always use t as the independent variable (write y\' = t*y, not y\' = x*y).'
+          ? ' This equation also uses t, so t is the independent variable and x would be a slider: write it in t only (y\' = t*y) or in x only (y\' = x*y, dy/dx = x*y).'
           : ` Add a slider expression such as "${names[0]} = 1".`;
       errors.push({ path, message: `undefined variable${names.length > 1 ? 's' : ''} ${names.join(', ')}.${hint}` });
     } else if (res?.error && !res.unknownFns?.length) {
@@ -183,6 +188,8 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
         'label/labelDir/pointSize/drag',
         'points',
       ],
+      [entry.solver !== undefined || entry.steps !== undefined || entry.stepSize !== undefined, 'solver/steps/h', 'ODEs'],
+      [entry.conditions !== undefined || entry.bc !== undefined, 'conditions/bc', '2nd-order ODEs'],
     ];
     const applies: Record<string, boolean> = {
       't0/ic': parsed.kind === 'ode',
@@ -190,6 +197,8 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
       autoplay: parsed.kind === 'variable',
       'thetaMin/thetaMax': isPolar,
       'label/labelDir/pointSize/drag': isPoint,
+      'solver/steps/h': parsed.kind === 'ode',
+      'conditions/bc': parsed.kind === 'ode' && parsed.order === 2,
     };
     for (const [present, what, forWhat] of misplaced) {
       if (present && !applies[what]) {
@@ -261,6 +270,12 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
     if (entry.family !== undefined && parsed.kind !== 'variable') {
       warnings.push({ path: `${path}.family`, message: `family only applies to sliders (k = 2); ignored for this ${parsed.kind} expression` });
     }
+    if (parsed.kind === 'ode' && entry.stepSize !== undefined && !entry.steps) {
+      warnings.push({ path: `${path}.h`, message: 'h is the step size of the shown steps: add "steps": "euler" (or "heun", "rk4") to draw them' });
+    }
+    if (parsed.kind === 'ode' && entry.bc !== undefined && entry.conditions !== 'boundary') {
+      warnings.push({ path: `${path}.bc`, message: 'bc only applies with "conditions": "boundary"' });
+    }
     if (parsed.kind === 'variable') {
       const v = entry.varValue ?? parsed.value;
       if ((entry.varMin !== undefined && v < entry.varMin) || (entry.varMax !== undefined && v > entry.varMax)) {
@@ -270,7 +285,7 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
 
     // Derived values (b = 2a) and helper definitions (f(u, v) = …) draw nothing by design.
     const plottable =
-      !['empty', 'variable', 'error', 'layer'].includes(parsed.kind) &&
+      !['empty', 'variable', 'error', 'layer', 'condition'].includes(parsed.kind) &&
       res?.value === undefined &&
       !(parsed.kind === 'fndef' && !isPlottableFnDef(parsed));
     // (Entries on a layer are moved at draw time, so their data position isn't where they show.)

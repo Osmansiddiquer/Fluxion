@@ -71,6 +71,9 @@ https://osmansiddiquer.github.io/Fluxion/#example=mandala
 | `phase` | ODE: draw the system (or a 2nd-order equation as y, y') in the phase plane (`1`) | `phase=1` |
 | `axes` | ODE phase plane of a 3+-D system: the two state variables to plot | `axes=x,z` |
 | `family` | slider: draw 7 ghost solutions for values across `min`..`max` (`1`/`0`) | `family=1` |
+| `solver` | ODE integrator: `rk4` (default, fixed step), `auto` (adaptive RK45, switches to an implicit method when stiff), `rk45`, `euler` | `solver=auto` |
+| `steps`, `h` | ODE: draw the steps of `euler`, `heun` or `rk4` with step size `h` (0.001 to 100, default 0.5) over the solution | `steps=euler&h=0.25` |
+| `conditions`, `bc` | 2nd-order ODE: `conditions=boundary` solves y(a) = alpha, y(b) = beta by shooting, with `bc=a,alpha,b,beta` | `conditions=boundary&bc=0,0,1,2` |
 
 ### Graph params
 
@@ -121,11 +124,48 @@ y'' + 0.4y' + 4y = 0       # ode
 d^2u/dt^2 = -sin(u)        # ode
 ```
 
-- **ODEs always use `t` as the independent variable** (it is the horizontal axis). Write `y' = t*y`, not `y' = x*y`.
+- The independent variable is the horizontal axis, `t` (also called `x`). An ODE written only in x uses x: `dy/dx = x + y` and `y' = x*y` both work. If a row uses both x and t, t is the variable and x must be a slider. In a system, `x` can be an unknown (`x' = y`).
 - Any name can be the unknown function: `y`, `u`, `P`, `theta` (or `θ`).
-- Orders 1 to 10. Derivatives: `y'`, `y''`, `y'''`, `dy/dt`, `d^2y/dt^2`. The equation may be in any form that is linear in the highest derivative (`y'' + 0.4y' + 4y = 0` is fine).
-- Fluxion solves numerically (RK4) forward and backward from t0 across the whole visible x-range.
-- Initial conditions: set `ic` (params: `ic=2,0`; JSON: `"ic": [2, 0]`) as `[y(t0), y'(t0), ...]`, and optionally `t0` (default 0). If you leave them out, Fluxion uses `y(t0) = 1` and zero for the higher derivatives.
+- Orders 1 to 10. Derivatives: `y'`, `y''`, `y'''`, `dy/dt`, `d^2y/dt^2`, `dy/dx`, `d^2y/dx^2`. The equation may be in any form that is linear in the highest derivative (`y'' + 0.4y' + 4y = 0` is fine).
+- Fluxion solves numerically (fixed-step RK4 by default; see `solver`) forward and backward from t0 across the whole visible x-range.
+- Initial conditions: type them after a comma (`y'' = -y, y(0) = 1, y'(0) = 0`) or on their own row (`y(0) = 1`), or set `ic` (params: `ic=2,0`; JSON: `"ic": [2, 0]`) as `[y(t0), y'(t0), ...]` and optionally `t0` (default 0). Typed conditions win over `ic`/`t0`. If you give none, Fluxion uses `y(t0) = 1` and zero for the higher derivatives.
+
+```fluxion
+dy/dx = x + y, y(0) = 0           # ode
+y' = x*y                          # ode
+y'' = -y, y(0) = 1, y'(0) = 0     # ode
+```
+
+```fluxion
+y' = -y + 2                       # ode
+y(1) = a                          # condition
+a = 3                             # variable
+```
+
+**Step and impulse forcing.** `H(t - a)` (also `u(t - a)` or `heaviside(t - a)`) is the unit step: 0 before a, 1 from a on. `delta(t - a)` is the Dirac impulse: it can't be plotted, so the solver applies it as a jump of the highest derivative at t = a (`y'' + y = delta(t - 1)` kicks y' by 1 at t = 1; a first-order `y' = -y + 2delta(t - 1)` makes y jump by 2). The argument must be linear in t; `delta(2(t - 1))` has weight 1/2. Steps and impulses split the integration step exactly where they act.
+
+```fluxion
+y' = -y + H(t - 1), y(0) = 0                    # ode
+y'' + 0.4y' + 4y = 2delta(t - 2) + u(t - 6)     # ode
+```
+
+**Boundary-value problems (2nd order).** One condition at each end, `y(a) = alpha, y(b) = beta` (or `y'(b) = beta`), is solved by shooting on y'(a): typed after a comma or on their own row, or with `"conditions": "boundary", "bc": [a, alpha, b, beta]`. If every slope fits (an eigenvalue case such as `y'' = -y, y(0) = 0, y(pi) = 0`) the row reports "not unique"; if none does, "no solution".
+
+```fluxion
+y'' = -y, y(0) = 0, y(pi/2) = 2       # ode
+```
+
+```fluxion
+y'' = -lambda*y                       # ode
+y(0) = 0, y(1) = 1                    # condition
+lambda = 2                            # variable
+```
+
+**Numerics.** `solver` picks the integrator: `rk4` (default: fixed step, about one step per sample across the view), `auto` (Dormand–Prince RK45 with error control and dense output; switches to an implicit Rosenbrock method when the problem is stiff, e.g. `y' = -1000(y - cos(t))`), `rk45` (adaptive only) and `euler` (forward Euler, to compare). For teaching, `"steps": "euler"` (or `heun`, `rk4`) with `"h": 0.5` draws the method's discrete steps as dots over the accurate solution; tracing a step shows its global error |y_h - y|. Euler's error is O(h), Heun's O(h^2), RK4's O(h^4).
+
+```json
+{ "expressions": [{ "expr": "y' = y", "ic": [1], "steps": "euler", "h": 0.5 }, { "expr": "y' = -1000*(y - cos(t))", "solver": "auto", "ic": [0] }], "viewport": { "xmin": -1, "xmax": 3 } }
+```
 
 Coupled systems are written as one expression per equation; Fluxion detects the coupling and solves them together. Each unknown is plotted against t. (Shared t0 comes from the first equation.)
 
@@ -291,7 +331,8 @@ Style options (JSON spec): `lineWidth` (px, 0 hides the line), `lineStyle` (`sol
 Each line shows something that fails, then what to write instead. (The suite checks that the left side fails and the right side works.)
 
 ```pitfalls
-y' = x*y              =>  y' = t*y
+y' = x*t*y            =>  y' = t^2*y
+y'' = y, y(0) = 1, y(0) = 2  =>  y'' = y, y(0) = 1, y'(0) = 2
 y = sin(πx)           =>  y = sin(pi*x)
 P' = P(1 - P)         =>  P' = P*(1 - P)
 y = |x|               =>  y = abs(x)
@@ -457,6 +498,7 @@ Fluxion ships example scripts (Script mode programs). Open one as-is with `#exam
 | `pendulum` | Pendulum from an ODE (`graph.ode`) | https://osmansiddiquer.github.io/Fluxion/#example=pendulum | https://osmansiddiquer.github.io/Fluxion/examples/pendulum.json |
 | `silhouette` | Silhouette clip | https://osmansiddiquer.github.io/Fluxion/#example=silhouette | link only (carries a frame clip) |
 | `sunset` | Cinematic sunset (Graph mode: gradients, layers, splines, letterbox) | https://osmansiddiquer.github.io/Fluxion/#example=sunset | https://osmansiddiquer.github.io/Fluxion/examples/sunset.json |
+| `impulse` | Spring hit by a hammer (Graph mode: `delta` forcing, inline initial conditions, sliders) | https://osmansiddiquer.github.io/Fluxion/#example=impulse | https://osmansiddiquer.github.io/Fluxion/examples/impulse.json |
 
 Tips for your own drawings, learned from these:
 

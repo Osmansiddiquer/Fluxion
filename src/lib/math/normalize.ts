@@ -61,11 +61,29 @@ function applyUnicode(s: string): string {
   return out;
 }
 
+// `d` must start a token (not the end of `and`, `nd2`, …).
+const LEIBNIZ_PAREN_K =
+  /(?<![A-Za-z_])\(\s*d\s*\^?\s*\{?\s*(\d)\s*\}?\s*([A-Za-z]\w*)\s*\)\s*\/\s*\(\s*d\s*[tx]\s*\^?\s*\{?\s*\1\s*\}?\s*\)/g;
+const LEIBNIZ_PAREN_1 = /(?<![A-Za-z_])\(\s*d\s*([A-Za-z]\w*)\s*\)\s*\/\s*\(\s*d\s*[tx]\s*\)/g;
+const LEIBNIZ_K = /(?<![A-Za-z_])d\s*\^?\s*\{?\s*(\d)\s*\}?\s*([A-Za-z]\w*)\s*\/\s*d\s*[tx]\s*\^?\s*\{?\s*\1\s*\}?/g;
+const LEIBNIZ_1 = /(?<![A-Za-z_])d\s*([A-Za-z]\w*)\s*\/\s*d\s*[tx](?![A-Za-z0-9_])/g;
+const LEIBNIZ_X = /(?<![A-Za-z_])\(?\s*d\s*(?:\^?\s*\{?\s*\d\s*\}?\s*)?[A-Za-z]\w*\s*\)?\s*\/\s*\(?\s*d\s*x(?![A-Za-z0-9_])/;
+
+/** Does the text use Leibniz notation in x (dy/dx, d²y/dx²)? Then x is the
+ * independent variable of that ODE (like a function y = f(x)). */
+export function usesLeibnizX(input: string): boolean {
+  return LEIBNIZ_X.test(applyUnicode(greekGlyphToWord(input)));
+}
+
 /** Convert Leibniz + prime notation into internal `D{k}_name` symbols. */
 export function normalizeDerivatives(input: string): string {
   let s = input;
-  s = s.replace(/d\s*\^?\s*2\s*([A-Za-z]\w*)\s*\/\s*d\s*t\s*\^?\s*2/g, "$1''");
-  s = s.replace(/d\s*([A-Za-z]\w*)\s*\/\s*d\s*t/g, "$1'");
+  // Leibniz in t or x (x then becomes the independent variable, see usesLeibnizX):
+  // dy/dt, d^2y/dx^2, and the parenthesised LaTeX forms ((dy)/(dx)), ((d^{2}y)/(dx^{2})).
+  s = s.replace(LEIBNIZ_PAREN_K, (_m, k: string, name: string) => name + "'".repeat(Number(k)));
+  s = s.replace(LEIBNIZ_PAREN_1, "$1'");
+  s = s.replace(LEIBNIZ_K, (_m, k: string, name: string) => name + "'".repeat(Number(k)));
+  s = s.replace(LEIBNIZ_1, "$1'");
   s = s.replace(
     /([A-Za-z]\w*)('+)/g,
     (_m, name: string, primes: string) => `D${primes.length}_${name}`,

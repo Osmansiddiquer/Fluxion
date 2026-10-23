@@ -24,6 +24,8 @@ function badgeFor(kind: string | undefined, order?: number): string | null {
       return null;
     case 'polar':
       return 'polar';
+    case 'condition':
+      return 'cond';
     default:
       return null;
   }

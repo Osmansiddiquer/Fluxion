@@ -343,6 +343,33 @@ describe('extra solutions', () => {
     expect(computeAll([{ ...a, extraICs: [[0, 1, 2]] }], VP).get(a.id)!.ode!.extras).toBeUndefined();
   });
 
+  it("extras use the row's solver and forcing (impulses), keyed by the solver", () => {
+    const a = E("y' = -y + 2delta(t - 3)", { ic: [1], extraICs: [[0, 0]] });
+    const r = computeAll([a], VP).get(a.id)!;
+    const pts = r.ode!.extras!.flatMap((c) => c.segments.flat());
+    // The extra from y(0) = 0 jumps by 2 at t = 3: 0 before, 2e^{-(t-3)} after.
+    const after = pts.find((p) => p[0] > 3.5)!;
+    expect(after[1]).toBeCloseTo(2 * Math.exp(-(after[0] - 3)), 4);
+    expect(pts.find((p) => p[0] > 1 && p[0] < 2.5)![1]).toBeCloseTo(0, 9);
+    // Euler gives a visibly different extra (a separate cache entry).
+    const b = { ...a, raw: "y' = -y", extraICs: [[0, 1]] };
+    const rk4 = computeAll([b], VP).get(b.id)!.ode!.extras![0];
+    const eu = computeAll([{ ...b, solver: 'euler' as const }], VP).get(b.id)!.ode!.extras![0];
+    const at = (c: typeof rk4, t: number) => c.segments.flat().find((p) => p[0] >= t)![1];
+    expect(at(rk4, 4)).toBeCloseTo(Math.exp(-4), 6);
+    expect(Math.abs(at(eu, 4) - Math.exp(-4))).toBeGreaterThan(1e-5);
+  });
+
+  it('phase mode honours typed conditions and the solver', () => {
+    const p = E("y'' = -y, y(0) = 2, y'(0) = 0", { phase: true, solver: 'auto' });
+    const r = computeAll([p], VP).get(p.id)!;
+    expect(r.ode!.y0).toEqual([2, 0]);
+    // Typed conditions fix the start: no draggable ring.
+    expect(r.ode!.ic).toBeUndefined();
+    expect(r.numerics!.solver).toBe('auto');
+    for (const q of r.ode!.phase!.curve!.segments[0]) expect(Math.hypot(q[0], q[1])).toBeCloseTo(2, 5);
+  });
+
   it('phase extras are state-space curves on the leader', () => {
     const x = E("x' = -y", { phase: true, extraICs: [[0, 2, 0]] });
     const y = E("y' = x");
@@ -445,7 +472,7 @@ describe('snapToPixel', () => {
 });
 
 describe('regression: graphs without the new options', () => {
-  // The old signature formula (before the ODE-view field was appended).
+  // The signature formula without the ODE-view field (main before this branch).
   const oldSig = (es: Entry[]) => {
     const F = '\u0001';
     const R = '\u0002';
@@ -454,7 +481,8 @@ describe('regression: graphs without the new options', () => {
         (e) =>
           `${e.id}${F}${e.raw}${F}${e.visible ? 1 : 0}${F}${e.t0 ?? ''}${F}${e.ic?.join(',') ?? ''}` +
           `${F}${e.varValue ?? ''}${F}${e.thetaMin ?? ''}${F}${e.thetaMax ?? ''}${F}${e.frames ?? ''}` +
-          `${F}${e.samples ?? ''}${F}${e.layer ?? ''}${F}${e.glow ?? ''}${F}${e.blur ?? ''}${F}${R}`,
+          `${F}${e.samples ?? ''}${F}${e.layer ?? ''}${F}${e.glow ?? ''}${F}${e.blur ?? ''}` +
+          `${F}${e.solver ?? ''}${F}${e.steps ?? ''}${F}${e.stepSize ?? ''}${F}${e.conditions ?? ''}${F}${e.bc?.join(',') ?? ''}${F}${R}`,
       )
       .join('');
   };

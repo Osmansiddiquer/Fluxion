@@ -11,6 +11,7 @@ import { PALETTE } from '../../utils/colors';
 export type DocKind =
   | 'function'
   | 'ode'
+  | 'condition'
   | 'variable'
   | 'implicit'
   | 'polar'

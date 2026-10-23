@@ -229,7 +229,7 @@ const curves: DocSection = {
 const odes: DocSection = {
   id: 'odes',
   title: 'Differential equations',
-  summary: 'First and higher order ODEs, systems, initial conditions, slope fields, the phase plane, equilibria, families and blow-up.',
+  summary: 'First and higher order ODEs, systems, typed initial and boundary conditions, slope fields, the phase plane, equilibria, families, step and impulse forcing, solvers and steps.',
   blocks: [
     P(
       'Type an ODE and Fluxion solves it numerically (fourth-order Runge–Kutta), forwards and backwards from $t_0$ across the whole visible range. The solution is redrawn as you pan, zoom or change a slider.',
@@ -238,6 +238,7 @@ const odes: DocSection = {
     SYNTAX(
       row("y' = -y", 'ode', 'Exponential decay'),
       row('dy/dt = t - y', 'ode', 'Leibniz notation works too'),
+      row('dy/dx = x + y', 'ode', 'In x, like a function: x is then the variable', { opts: { ic: [0] } }),
       row("y' = y*(1 - y/4)", 'ode', 'Logistic growth'),
       row("P' = r0*P*(1 - P/K)", 'ode', 'Any name can be the unknown; parameters are sliders', {
         with: [L('r0 = 0.8', 'variable', { varMin: 0, varMax: 3 }), L('K = 4', 'variable', { varMin: 1, varMax: 8 })],
@@ -266,6 +267,15 @@ const odes: DocSection = {
       'Drag a slider to move the solution; each slider has its own ▶ play button, so you can animate an initial condition.',
       'Type an exact value into the number box at either end of a slider.',
       'Move $t_0$ to start the solution somewhere else; it is integrated both ways from there.',
+    ),
+    P(
+      'You can also **type the conditions**, as a textbook writes them: after a comma on the equation row, or on a row of their own. Typed values win over the sliders (which then show them, greyed out); values can use sliders, like `y(0) = a`.',
+    ),
+    SYNTAX(
+      row("y'' = -y, y(0) = 0, y'(0) = 1", 'ode', 'Conditions after a comma: t₀ = 0, y(0) = 0, y′(0) = 1'),
+      row('y(1) = a', 'condition', 'On its own row: sets t₀ = 1 and y(1) for the equation in y', {
+        with: [L("y' = -y/2", 'ode'), L('a = 2', 'variable', { varMin: -3, varMax: 3 })],
+      }),
     ),
     EX({
       id: 'pendulum-family',
@@ -380,11 +390,70 @@ const odes: DocSection = {
       ],
       viewport: { tMin: -1, tMax: 12, yMin: -1.5, yMax: 1.5 },
     }),
+    H('Step and impulse forcing'),
+    P(
+      'The Laplace-transform unit is built on two forcing functions. `H(t - a)` (also written `u(t - a)` or `heaviside(t - a)`) is the unit step: 0 before $a$, 1 from $a$ on. `delta(t - a)` is the Dirac impulse, a kick at $t = a$. An impulse can\'t be drawn as a function, so the solver applies it as a jump of the highest derivative: in `y\'\' + y = delta(t - 1)` the velocity $y\'$ jumps by 1 at $t = 1$; in a first-order equation $y$ itself jumps. Steps and impulses split the integration step exactly where they act.',
+    ),
+    SYNTAX(
+      row("y' = -y + H(t - 1), y(0) = 0", 'ode', 'Switched on at t = 1: charging towards 1'),
+      row("y'' + y = delta(t - 2), y(0) = 0, y'(0) = 0", 'ode', 'A kick at t = 2: then sin(t − 2)'),
+      row("y' = -y + 2delta(t - 3), y(0) = 1", 'ode', 'First order: y jumps by 2 at t = 3'),
+    ),
+    TIP('`delta(2(t - 1))` has weight ½ (a delta scales by 1/|slope|), and the argument must be linear in t. Outside an ODE, `delta(x)` is 0 and `H(x)`, `u(x)` are the unit step (like `step(x)`).'),
+    EX({
+      id: 'impulse',
+      title: 'Spring hit by a hammer',
+      blurb: 'm y″ + c y′ + k y = J·δ(t − T), at rest until the impulse at t = T kicks its velocity by J/m. Play T to move the hammer; change m, c, k to hear a different ring.',
+      tex: "m\\,y'' + c\\,y' + k\\,y = J\\,\\delta(t - T)",
+      lines: [],
+      demo: 'impulse',
+    }),
+    H('Boundary-value problems'),
+    P(
+      'A second-order equation can also be pinned at two points: $y(a) = \\alpha$ and $y(b) = \\beta$. Fluxion solves it by **shooting**: it searches for the slope $y\'(a)$ whose solution lands on $\\beta$ at $b$ (secant iteration, then a bracketing search). Type the two conditions, or expand the row and switch **Conditions** to *Boundary* to get sliders for $a$, $y(a)$, $b$, $y(b)$.',
+    ),
+    SYNTAX(
+      row("y'' = -y, y(0) = 0, y(pi/2) = 2", 'ode', 'One condition at each end: 2 sin t'),
+      row("y'' = -4y", 'ode', 'Conditions → Boundary in the expanded row', {
+        opts: { conditions: 'boundary', bc: [0, 1, 1, 0], expanded: true },
+      }),
+    ),
+    TIP(
+      'Not every boundary problem has exactly one answer. `y\'\' = -y, y(0) = 0, y(pi) = 0` is solved by every $C\\sin t$, so the row says **not unique**: that is an eigenvalue case. With `y(pi) = 1` instead, no slope works: **no solution**. For `y\'\' = -lambda*y` with $y(0) = y(\\pi) = 0$, slide λ: only $\\lambda = 1, 4, 9, \\ldots$ give non-zero solutions (Sturm–Liouville).',
+    ),
+    H('Numerics: solvers and steps'),
+    P(
+      'Expand an ODE row and open **Numerics** (collapsed by default) to choose how it is solved. Nothing changes until you do.',
+    ),
+    TABLE(
+      ['Solver', 'What it does'],
+      ['**RK4** (default)', 'Classic fourth-order Runge–Kutta with a fixed step, about one step per pixel column.'],
+      ['**Auto**', 'Dormand–Prince RK45: adaptive steps with error control and smooth dense output; if the problem turns out *stiff* it switches to an implicit (Rosenbrock) method.'],
+      ['**RK45**', 'Dormand–Prince only, without the stiff switch.'],
+      ['**Euler**', 'Forward Euler at the RK4 step: first order, so visibly off. For comparison.'],
+    ),
+    P(
+      '**Show steps** draws a textbook method (Euler, Heun or RK4) with an explicit step size $h$ as dots joined by segments, faintly over the accurate solution. Trace a dot to read its global error $|y_h - y|$. Drag $h$, or press ▶ beside it to sweep $h$ and watch the error shrink: Euler is $O(h)$, Heun $O(h^2)$, RK4 $O(h^4)$.',
+    ),
+    EX({
+      id: 'euler-steps',
+      title: "Euler's method, step by step",
+      blurb: "y′ = y from y(0) = 1 with h = 0.5: each step follows the slope at its start, so it falls further behind eˣ. Halve h and the error halves.",
+      tex: "y' = y",
+      lines: [L("y' = y", 'ode', { ic: [1], steps: 'euler', stepSize: 0.5, expanded: true })],
+      viewport: { tMin: -1, tMax: 3.2, yMin: -1, yMax: 16 },
+    }),
+    SYNTAX(
+      row("y' = -1000*(y - cos(t))", 'ode', 'Stiff: Auto switches to the implicit method', {
+        opts: { solver: 'auto', ic: [0], expanded: true },
+        viewport: { tMin: -0.5, tMax: 8, yMin: -2, yMax: 2 },
+      }),
+    ),
     H('x or t?'),
     LIST(
       'In a function, `x` and `t` are interchangeable: `y = sin(x)` and `y = sin(t)` are the same curve.',
       'If a function uses both, `t` is the horizontal axis and `x` is treated as a name you need to define (a slider).',
-      '**ODEs always use t** as the independent variable. Write `y\' = t*y`, not `y\' = x*y`. In a system, `x` can be one of the unknowns (`x\' = y`).',
+      'The same goes for ODEs: an equation written only in x (`dy/dx = x + y`, `y\' = x*y`) uses x as the variable. In a system, `x` can be one of the unknowns (`x\' = y`), and then it stays one.',
     ),
     H('When solutions blow up'),
     P(

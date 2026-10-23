@@ -46,5 +46,12 @@
     "blurb": "Graph mode: a gradient sky, sun glow and god-rays, parallax layers, spline silhouettes, letterboxed at 24 fps.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=sunset",
     "spec": "examples/sunset.json"
+  },
+  {
+    "id": "impulse",
+    "title": "Spring hit by a hammer",
+    "blurb": "Graph mode: m y'' + c y' + k y = J delta(t - T) with y(0) = 0, y'(0) = 0 typed inline: the impulse at t = T kicks the spring, which rings down.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=impulse",
+    "spec": "examples/impulse.json"
   }
 ]

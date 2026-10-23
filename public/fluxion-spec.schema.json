@@ -69,7 +69,7 @@
     "exprString": {
       "type": "string",
       "maxLength": 3000,
-      "description": "Plain-text expression, e.g. \"y = sin(x)\", \"y'' = -y\", \"k = 2\", \"x^2 + y^2 = 9\", \"r = 1 + cos(theta)\", \"y < x\", \"(1, 2)\", \"(cos(t), sin(t))\", \"f(u) = u^2\", \"(k, k^2) for k = 0..3\"."
+      "description": "Plain-text expression, e.g. \"y = sin(x)\", \"y'' = -y\", \"k = 2\", \"x^2 + y^2 = 9\", \"r = 1 + cos(theta)\", \"y < x\", \"(1, 2)\", \"(cos(t), sin(t))\", \"f(u) = u^2\", \"(k, k^2) for k = 0..3\", \"dy/dx = x + y\", \"y'' + y = delta(t - 1), y(0) = 0, y'(0) = 0\"."
     },
     "number": {
       "description": "A finite number, or a constant expression string such as \"2pi\" or \"-pi/2\". |value| <= 1e9.",
@@ -136,7 +136,18 @@
         "phase": { "type": "boolean", "description": "ODE: draw the coupled system (x' = ..., y' = ...) or a 2nd-order equation (as y, y') in the phase plane instead of against t. Needs a state of 2+ dimensions." },
         "phaseAxes": { "type": "array", "minItems": 2, "maxItems": 2, "items": { "type": "string", "maxLength": 24, "pattern": "^[A-Za-z]\\w*'*$" }, "description": "ODE phase plane: the two state variables to plot for a 3+-D system, e.g. [\"x\", \"z\"] (default: the first two)." },
         "extraICs": { "type": "array", "maxItems": 24, "items": { "type": "array", "minItems": 2, "maxItems": 11, "items": { "$ref": "#/$defs/number" } }, "description": "ODE: extra solutions drawn thinner in the same colour, each [t0, y0, y0', ...] (the system's whole state at t0)." },
-        "family": { "type": "boolean", "description": "Slider: draw a family of 7 ghost solutions (functions and ODEs that use it) for values evenly spread across min..max." }
+        "family": { "type": "boolean", "description": "Slider: draw a family of 7 ghost solutions (functions and ODEs that use it) for values evenly spread across min..max." },
+        "solver": { "enum": ["auto", "rk45", "rk4", "euler"], "description": "ODE: integrator. rk4 (default) = fixed-step RK4; auto = adaptive Dormand-Prince RK45 that switches to an implicit Rosenbrock method on stiff problems; rk45 = adaptive only; euler = forward Euler (for comparison)." },
+        "steps": { "enum": ["euler", "heun", "rk4"], "description": "ODE: draw the discrete steps of this textbook method (step size h) as dots over the accurate solution; the trace shows the global error." },
+        "h": { "$ref": "#/$defs/number", "description": "ODE: step size of the shown steps, 0.001 to 100 (default 0.5)." },
+        "conditions": { "enum": ["initial", "boundary"], "description": "2nd-order ODE: initial values (default) or boundary values bc, solved by shooting." },
+        "bc": {
+          "type": "array",
+          "minItems": 4,
+          "maxItems": 4,
+          "items": { "$ref": "#/$defs/number" },
+          "description": "2nd-order ODE with conditions \"boundary\": [a, alpha, b, beta] for y(a) = alpha, y(b) = beta (a != b). Or type them: \"y(0) = 0, y(pi) = 0\"."
+        }
       }
     }
   }

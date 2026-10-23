@@ -1,4 +1,5 @@
-import { integrateSystem, type Trajectory } from '../solver/integrate';
+import { integrateSystem, type Impulse, type SolverMethod, type Trajectory } from '../solver/integrate';
+import { forcing } from '../solver/odeGroup';
 import { rk4Step } from '../solver/rk4';
 import { sampleImplicit } from '../solver/implicit';
 import { sampleFunction } from '../solver/sample';
@@ -52,6 +53,10 @@ export interface SolvedGroup {
   /** Base names the equations read (sliders, derived values). */
   deps: string[];
   callsUser: boolean;
+  /** The integrator the group uses (its rows' Numerics choice) and its forcing
+   * (impulses, step breakpoints): extra solutions and families use the same. */
+  method: SolverMethod;
+  forcing: { impulses: Impulse[]; breaks: number[] };
   /** The scope the system was built against (constants for the Jacobian). */
   scope: Record<string, number>;
 }
@@ -144,8 +149,9 @@ function integrateCached(
   y0: number[],
   range: { tMin: number; tMax: number },
   steps: number,
+  how: { method: SolverMethod; forcing: { impulses: Impulse[]; breaks: number[] } },
 ): Trajectory {
-  const k = `${key}|${t0}|${y0.join(',')}|${range.tMin},${range.tMax}|${steps}`;
+  const k = `${key}|${how.method}|${t0}|${y0.join(',')}|${range.tMin},${range.tMax}|${steps}`;
   const hit = TRAJ_CACHE.get(k);
   if (hit) {
     // Refresh recency (Map keeps insertion order).
@@ -156,7 +162,16 @@ function integrateCached(
   trajComputes++;
   let traj: Trajectory;
   try {
-    traj = integrateSystem(system.deriv, { t0, y0, tMin: range.tMin, tMax: range.tMax, samples: steps });
+    traj = integrateSystem(system.deriv, {
+      t0,
+      y0,
+      tMin: range.tMin,
+      tMax: range.tMax,
+      samples: steps,
+      method: how.method,
+      impulses: how.forcing.impulses,
+      breaks: how.forcing.breaks,
+    });
   } catch {
     traj = [];
   }
@@ -402,7 +417,7 @@ export function buildOdeInfo(
         if (!Array.isArray(ic) || ic.length !== dim + 1 || !ic.every(Number.isFinite)) continue;
         const [te, ...Ye] = ic;
         const range = view.phase ? phaseRange(te) : g.range;
-        extraTrajs.push(integrateCached(sysKey, system, te, Ye, range, g.steps));
+        extraTrajs.push(integrateCached(sysKey, system, te, Ye, range, g.steps, g));
       }
     }
 
@@ -547,7 +562,11 @@ export function familyGhosts(ctx: FamilyCtx): Map<string, Ghost[]> {
         const depSig = `${valueKey(s.scope, g.deps)}|${g.callsUser ? s.fnKey : ''}`;
         try {
           const system = buildSystem(g.parsed, s.scope);
-          traj = integrateCached(`${g.rawSig}|${depSig}`, system, g.t0, g.y0, g.range, g.steps);
+          const members = g.entries.map((entry, i) => ({ entry, parsed: g.parsed[i] }));
+          traj = integrateCached(`${g.rawSig}|${depSig}`, system, g.t0, g.y0, g.range, g.steps, {
+            method: g.method,
+            forcing: forcing(system, members, s.scope),
+          });
         } catch {
           traj = [];
         }

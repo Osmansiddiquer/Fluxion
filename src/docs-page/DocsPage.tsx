@@ -28,6 +28,7 @@ export const APP_HREF = '../';
 const KIND_LABEL: Record<DocKind, string> = {
   function: 'function',
   ode: 'ODE',
+  condition: 'condition',
   variable: 'slider',
   implicit: 'implicit',
   polar: 'polar',

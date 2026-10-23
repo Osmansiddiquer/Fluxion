@@ -59,6 +59,10 @@ export const KNOWN_FUNCTIONS = new Set([
   ...HELPER_NAMES,
 ]);
 
+/** Built-in functions with one-letter names (step functions H, u) that a graph may
+ * redefine as its own function or use as an ODE variable. */
+export const SOFT_FUNCTIONS = new Set(['H', 'u']);
+
 /** Built-in constants. */
 export const CONSTANTS = ['pi', 'e', 'tau', 'phi', 'Infinity'];
 
@@ -67,5 +71,6 @@ export const FUNCTION_SUGGESTIONS = [
   'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan',
   'sinh', 'cosh', 'tanh', 'sqrt', 'cbrt', 'exp', 'ln', 'log', 'log10',
   'abs', 'sign', 'floor', 'ceil', 'round', 'min', 'max', 'mod', 'gamma',
+  'heaviside', 'delta',
   'lerp', 'clamp', 'smoothstep', 'ease', 'keys', 'skeys', 'rotx', 'roty', 'projx', 'projy',
 ];
