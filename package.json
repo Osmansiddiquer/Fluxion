@@ -6,7 +6,8 @@
   "description": "A Desmos-like grapher specialized for plotting numerical solutions of ODEs.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run build:docs",
+    "build:docs": "vite build --config vite.docs.config.mjs && vite-node scripts/prerender-docs.ts",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
