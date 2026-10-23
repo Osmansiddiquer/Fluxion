@@ -1,0 +1,87 @@
+{
+  "version": 1,
+  "expressions": [
+    {
+      "expr": "a = 0",
+      "min": 0,
+      "max": 2.0943951023931953,
+      "anim": "loop",
+      "speed": 0.6,
+      "autoplay": true
+    },
+    {
+      "expr": "Fx(u, s) = u < 1 ? 2s cos(pi/2 - pi u) : (u < 2 ? s cos(pi*(u - 1) - pi/2) : s cos(-pi/2 - pi*(u - 2)))",
+      "color": "#000000"
+    },
+    {
+      "expr": "Fy(u, s) = u < 1 ? 2s sin(pi/2 - pi u) : (u < 2 ? s sin(pi*(u - 1) - pi/2) - s : s sin(-pi/2 - pi*(u - 2)) + s)",
+      "color": "#000000"
+    },
+    {
+      "expr": "p(k) = a + 2pi k/3",
+      "color": "#000000"
+    },
+    {
+      "expr": "(2 cos(t), 2 sin(t))",
+      "color": "#2a0505",
+      "lineWidth": 3,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "#b3121b"
+    },
+    {
+      "expr": "(1.55 cos(t), 1.55 sin(t))",
+      "color": "#d8262d",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 0.55
+    },
+    {
+      "expr": "(1.25 cos(t), 1.25 sin(t))",
+      "color": "#4a0c0c",
+      "lineWidth": 1.6,
+      "colorExpr": "rgba(60, 8, 8, 0.85)"
+    },
+    {
+      "expr": "(0.42 cos(t), 0.42 sin(t))",
+      "color": "#0b0b0b",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1
+    },
+    {
+      "expr": "(1.25 cos(p(k)) + rotx(Fx(t, 0.22), Fy(t, 0.22), p(k)), 1.25 sin(p(k)) + roty(Fx(t, 0.22), Fy(t, 0.22), p(k))) for k = 0..2",
+      "color": "#0b0b0b",
+      "thetaMin": 0,
+      "thetaMax": 3,
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1
+    },
+    {
+      "expr": "(0.24 cos(t) - 0.8, 0.15 sin(t) + 0.9)",
+      "color": "#ffffff",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 0.7
+    }
+  ],
+  "viewport": {
+    "xmin": -4.5,
+    "xmax": 4.5,
+    "ymin": -3,
+    "ymax": 3
+  },
+  "features": {
+    "extrema": false,
+    "xIntercepts": false,
+    "yIntercept": false,
+    "discontinuities": false,
+    "intersections": false,
+    "grid": false
+  },
+  "panels": {
+    "right": false,
+    "bottom": false
+  }
+}

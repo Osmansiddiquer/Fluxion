@@ -4,6 +4,8 @@ import { spawnSync } from 'node:child_process';
 import { deflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { checkSpec } from './check';
+import { exampleSpec, listExamples } from './examples';
+import { DEMOS } from '../demos';
 import { DEFAULT_BASE_URL, EXPR_PARAMS, GLOBAL_PARAMS, bytesToBase64Url, readUrlPayload } from './url';
 import {
   ANIM_MODES,
@@ -83,6 +85,12 @@ describe('llms.txt', () => {
     it(`example link works: ${link.slice(0, 110)}`, async () => {
       const u = new URL(link);
       const p = await readUrlPayload(u.hash, u.search);
+      if (/[#?&]example=/.test(link)) {
+        // Opens a built-in demo (a full graph, not a spec).
+        expect(p.kind).toBe('legacy');
+        if (p.kind === 'legacy') expect(p.graph.entries.length).toBeGreaterThan(0);
+        return;
+      }
       expect(p.kind).toBe('spec');
       if (p.kind !== 'spec') return;
       expect(p.warnings).toEqual([]);
@@ -174,5 +182,39 @@ describe('fluxion-spec.schema.json stays in sync with the validator', () => {
 describe('index.html', () => {
   it('points agents at llms.txt', () => {
     expect(INDEX).toMatch(/<link rel="help" type="text\/plain" href="llms.txt"/);
+  });
+});
+
+describe('built-in examples for agents', () => {
+  it('llms.txt lists every example with its link', () => {
+    for (const ex of listExamples()) {
+      expect(LLMS).toContain('`' + ex.id + '`');
+      expect(LLMS).toContain(ex.link);
+      if (ex.spec) expect(LLMS).toContain(DEFAULT_BASE_URL + ex.spec);
+    }
+  });
+
+  it('public/examples/index.json is up to date (npm run examples)', () => {
+    const index = JSON.parse(readFileSync(root('public/examples/index.json'), 'utf8'));
+    expect(index).toEqual(listExamples());
+  });
+
+  for (const d of DEMOS) {
+    const spec = exampleSpec(d.id);
+    if (!spec) continue;
+    it(`public/examples/${d.id}.json matches the demo and checks clean`, () => {
+      const file = JSON.parse(readFileSync(root(`public/examples/${d.id}.json`), 'utf8'));
+      expect(file).toEqual(spec);
+      const r = checkSpec(file);
+      expect(r.errors).toEqual([]);
+      expect(r.warnings).toEqual([]);
+    });
+  }
+
+  it('demos carrying a clip have no spec (they open by link only)', () => {
+    for (const ex of listExamples()) {
+      const g = DEMOS.find((d) => d.id === ex.id)!.build();
+      expect(!!ex.spec).toBe(!g.assets);
+    }
   });
 });

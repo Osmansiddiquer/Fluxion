@@ -62,7 +62,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Geometry / format | `lib/geom/transform.ts` (data↔screen), `lib/format.ts` (`fmtSig`), `lib/graphFile.ts` (export/share), `lib/math/resolveSlice.ts` (parametric cuts) |
 | Scripting | `lib/scope.ts` (shared eval scope: helpers + sliders + derived values + user fns), `lib/math/helpers.ts` (`lerp`/`keys`/`skeys`/`rotx`/`projx`…), `lib/color.ts` (colour literals + `rgb/hsv/…` expressions), `lib/style.ts` (per-frame `resolveStyle`), `lib/raster.ts` (adaptive inequality shading), `lib/anim.ts` + `state/player.ts` + `state/animate.ts` + `components/AnimationLoop.tsx` (shared slider clock) |
 | Frames ("Bad Apple") | `lib/frames/codec.ts` (FXF1 clip format), `trace.ts` (marching-squares contours + Douglas–Peucker), `assets.ts` (content-addressed asset store), `netpbm.ts`, `clipGraph.ts`; `scripts/frames-import.ts` (CLI, run with `npx vite-node`) |
-| Demos | `lib/demos/*` (Sharingan, cube, Mangekyō morph, silhouette clip) → GraphMenu "Examples" |
+| Demos | `lib/demos/*` (Sharingan, cube, Mangekyō morph, mandala, silhouette clip) → GraphMenu "Examples", `#example=<id>` links, and `public/examples/*.json` (via `lib/api/examples.ts`) |
 | Store | `store/useStore.ts` (Zustand+persist), `store/types.ts` (`Entry`, `Viewport`, …), `state/signature.ts` (`computeSignature`) |
 | Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls`, `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
 | Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
@@ -202,8 +202,15 @@ strips them; bad links show an error toast and keep the current graph.
 - **`public/llms.txt` is tested**: every line of a `fluxion` code block (`expr  # kind`), pitfall
   (`wrong => right`), prose link, JSON block and the JS/Python snippets are executed by
   `src/lib/api/docs.test.ts`. Change syntax → update the examples.
-- **CLI**: `npm run fluxion -- link|check|decode` (vite-node; I/O injected, tested in
-  `src/cli/fluxion.test.ts`).
+- **CLI**: `npm run fluxion -- link|check|decode|examples|example <id>` (vite-node; I/O
+  injected, tested in `src/cli/fluxion.test.ts` / `src/lib/api/examples.test.ts`).
+- **Demos are agent templates**: adding or changing a demo in `lib/demos/` means running
+  `npm run examples` to regenerate `public/examples/*.json` + `index.json`;
+  `docs.test.ts` fails if they're stale or if `llms.txt` doesn't list every demo id/link.
+  Demos carrying a frame clip get no spec (link only).
+- **Point-group detection** (`math/points.ts` `isWrapped`): an element is a point only if
+  its opening `(` closes at the very end, so `((a + b)*cos(t), (a + b)*sin(t))` is a
+  parametric curve, not a broken polyline.
 - The plot keeps a square grid: only xmin/xmax are exact; `checkSpec` warns when a
   requested y-range can't be honoured.
 

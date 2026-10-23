@@ -51,7 +51,9 @@ fill + opacity for closed shapes (parametric, polar, polygons, frames), and colo
 Entries draw in list order (later rows on top). Variables can play together on one
 clock (batched per frame), step frame-by-frame, and `autoplay` when a graph opens.
 **Examples** (share menu): a rotating Sharingan, a rotating cube, an
-eye → Sharingan → Mangekyō morph, and a traced silhouette clip.
+eye → Sharingan → Mangekyō morph, a blooming mandala, and a traced silhouette clip.
+Each also opens from a link, e.g.
+[`#example=mandala`](https://osmansiddiquer.github.io/Fluxion/#example=mandala).
 
 #### Playing a video ("Bad Apple!!")
 
@@ -106,7 +108,13 @@ https://osmansiddiquer.github.io/Fluxion/#z=<compressed JSON spec>
   is the JSON Schema for the graph spec.
 - **CLI** (uses the app's real parser): `npm run fluxion -- link --expr "y' = -y" --ic 1`,
   `npm run fluxion -- check spec.json` (a JSON report of how each expression parses
-  and what's wrong), `npm run fluxion -- decode <link>`.
+  and what's wrong), `npm run fluxion -- decode <link>`, `npm run fluxion -- examples`
+  and `npm run fluxion -- example cube` (a demo's spec, to edit).
+- **Scripting for agents**: the params form takes style options (`width`, `style`,
+  `fill`, `opacity`, `colorexpr`, `fillcolor`, `autoplay`, `grid=off`), so an agent
+  can hand-write an animated drawing; `#example=<id>` opens a built-in demo, and every
+  demo is published as an editable JSON template under
+  [`examples/`](https://osmansiddiquer.github.io/Fluxion/examples/index.json).
 - In the app, **Share → Copy as JSON spec** copies the current graph in this format,
   ready to paste to an assistant.
 

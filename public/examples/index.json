@@ -1,0 +1,36 @@
+[
+  {
+    "id": "sharingan",
+    "title": "Rotating Sharingan",
+    "blurb": "Parametric tomoe repeated with for k = 0..2, filled and spun by a slider.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=sharingan",
+    "spec": "examples/sharingan.json"
+  },
+  {
+    "id": "cube",
+    "title": "Rotating cube",
+    "blurb": "3D vertices projected with projx / projy; edges and faces from lookup tables.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=cube",
+    "spec": "examples/cube.json"
+  },
+  {
+    "id": "mangekyo",
+    "title": "Eye → Sharingan → Mangekyō",
+    "blurb": "One clock T, keyframed with skeys: colour, growth, spin and a shape morph.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=mangekyo",
+    "spec": "examples/mangekyo.json"
+  },
+  {
+    "id": "mandala",
+    "title": "Mandala bloom",
+    "blurb": "Three rings of repeated petals counter-rotate while one clock eases the bloom and cycles hsv colours.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=mandala",
+    "spec": "examples/mandala.json"
+  },
+  {
+    "id": "silhouette",
+    "title": "Silhouette clip",
+    "blurb": "A traced black-and-white frame sequence — the Bad Apple pipeline.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=silhouette"
+  }
+]
