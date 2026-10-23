@@ -1,87 +1,6 @@
 {
   "version": 1,
-  "expressions": [
-    {
-      "expr": "T = 0",
-      "color": "#c74440",
-      "min": 0,
-      "max": 12,
-      "anim": "loop",
-      "speed": 0.3333333333333333,
-      "autoplay": true
-    },
-    {
-      "expr": "s = skeys(T, 0, 0.35, 4, 1, 8, 1, 12, 0.35)",
-      "color": "#000000"
-    },
-    {
-      "expr": "w = pi T/6",
-      "color": "#000000"
-    },
-    {
-      "expr": "Px(u, L, W) = L*(1 - cos(u))/2",
-      "color": "#000000"
-    },
-    {
-      "expr": "Py(u, L, W) = W*sin(u)*(1 - cos(u))/2",
-      "color": "#000000"
-    },
-    {
-      "expr": "(4.4 s cos(t), 4.4 s sin(t))",
-      "color": "#888888",
-      "lineWidth": 1.5,
-      "lineStyle": "dotted",
-      "colorExpr": "hsv(30 T + 200, 0.5, 0.75)"
-    },
-    {
-      "expr": "(rotx(Px(t, 3.9 s, 1.5 s), Py(t, 3.9 s, 1.5 s), w + pi k/6), roty(Px(t, 3.9 s, 1.5 s), Py(t, 3.9 s, 1.5 s), w + pi k/6)) for k = 0..11",
-      "color": "#c74440",
-      "lineWidth": 1.5,
-      "fill": true,
-      "fillOpacity": 0.32,
-      "colorExpr": "hsv(30 T, 0.75, 0.8)",
-      "fillColor": "hsv(30 T, 0.6, 1)"
-    },
-    {
-      "expr": "(rotx(Px(t, 2.7 s, 1.1 s), Py(t, 2.7 s, 1.1 s), -w + pi/12 + pi k/6), roty(Px(t, 2.7 s, 1.1 s), Py(t, 2.7 s, 1.1 s), -w + pi/12 + pi k/6)) for k = 0..11",
-      "lineWidth": 1.5,
-      "fill": true,
-      "fillOpacity": 0.45,
-      "colorExpr": "hsv(30 T + 120, 0.75, 0.75)",
-      "fillColor": "hsv(30 T + 120, 0.55, 1)"
-    },
-    {
-      "expr": "(rotx(Px(t, 1.7 s, 0.7 s), Py(t, 1.7 s, 0.7 s), 2 w + pi k/3), roty(Px(t, 1.7 s, 0.7 s), Py(t, 1.7 s, 0.7 s), 2 w + pi k/3)) for k = 0..5",
-      "lineWidth": 1.2,
-      "fill": true,
-      "fillOpacity": 0.7,
-      "colorExpr": "hsv(30 T + 240, 0.8, 0.7)",
-      "fillColor": "hsv(30 T + 240, 0.6, 1)"
-    },
-    {
-      "expr": "(4.4 s cos(-w/2 + pi k/12), 4.4 s sin(-w/2 + pi k/12)) for k = 0..23",
-      "color": "#c74440",
-      "pointSize": 3,
-      "colorExpr": "hsv(30 T + 40, 0.8, 0.9)"
-    },
-    {
-      "expr": "((0.55 + 0.08 sin(2 w))*cos(t), (0.55 + 0.08 sin(2 w))*sin(t))",
-      "color": "#e8a33d",
-      "lineWidth": 2,
-      "fill": true,
-      "fillOpacity": 1,
-      "colorExpr": "hsv(30 T + 300, 0.7, 0.8)",
-      "fillColor": "hsv(42, 0.75, 1)"
-    },
-    {
-      "expr": "(0.22 cos(t), 0.22 sin(t))",
-      "color": "#7a4a00",
-      "lineWidth": 0,
-      "fill": true,
-      "fillOpacity": 0.85,
-      "fillColor": "hsv(30, 0.9, 0.55)"
-    }
-  ],
+  "expressions": [],
   "viewport": {
     "xmin": -6,
     "xmax": 6,
@@ -99,5 +18,6 @@
   "panels": {
     "right": false,
     "bottom": false
-  }
+  },
+  "script": "// Mandala bloom: three rings of petals counter-rotate while one clock\n// opens and closes the bloom and walks every hue round the colour wheel.\nloop(12)\nconst bloom = keyframes(time, [[0, 0.35], [4, 1], [8, 1], [12, 0.35]])\nconst w = time * PI / 6          // a full turn per loop\nconst hue = 30 * time            // and a full trip round the colour wheel\n\n// A petal pointing along +x, turned to angle q.\nfunction petal(length, width, q, h, opacity) {\n  group({ rotate: q }, () => {\n    curve(u => [length * (1 - cos(u)) / 2, width * sin(u) * (1 - cos(u)) / 2], 0, TAU, {\n      color: hsv(h, 0.75, 0.8), fill: hsv(h, 0.6, 1, opacity), width: 1.5, samples: 90,\n    })\n  })\n}\n\ncircle(0, 0, 4.4 * bloom, { color: hsv(hue + 200, 0.5, 0.75), width: 1.5, dash: \"dotted\" })\nfor (const k of range(12)) petal(3.9 * bloom, 1.5 * bloom, w + k * PI / 6, hue, 0.32)\nfor (const k of range(12)) petal(2.7 * bloom, 1.1 * bloom, -w + PI / 12 + k * PI / 6, hue + 120, 0.45)\nfor (const k of range(6))  petal(1.7 * bloom, 0.7 * bloom, 2 * w + k * PI / 3, hue + 240, 0.7)\nfor (const k of range(24)) {\n  const q = -w / 2 + k * PI / 12\n  point(4.4 * bloom * cos(q), 4.4 * bloom * sin(q), { size: 3, color: hsv(hue + 40, 0.8, 0.9) })\n}\ncircle(0, 0, 0.55 + 0.08 * sin(2 * w), { fill: hsv(42, 0.75, 1), color: hsv(hue + 300, 0.7, 0.8) })\ncircle(0, 0, 0.22, { fill: hsv(30, 0.9, 0.55, 0.85) })\n"
 }

@@ -73,8 +73,9 @@ describe('pre-rendered docs page', () => {
     expect(DATA.links).toBe(LINKS);
   });
 
-  it('shows the Script mode placeholder in the static HTML', () => {
-    expect(BODY).toContain('Script mode is coming');
+  it('shows the Script mode reference placeholder in the static HTML (filled in on the client)', () => {
+    expect(BODY).toContain('Script mode reference');
+    expect(BODY).not.toContain('Script mode is coming');
   });
 
   it('labels derived values', () => {

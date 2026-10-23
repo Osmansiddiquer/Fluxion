@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEMOS } from './index';
+import { EXPRESSION_DEMOS as DEMOS } from './index';
 import { computeAll } from '../compute';
 import { parseEntry } from '../math/parse';
 import { isColorExpr } from '../color';

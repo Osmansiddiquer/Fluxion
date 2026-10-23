@@ -124,14 +124,15 @@ describe('save / update / rename / duplicate / delete / undo', () => {
     expect(await l.get(a.id)).toEqual(a);
   });
 
-  it('round-trips unknown future fields (e.g. script) and sanitizes known ones', async () => {
+  it('round-trips the script and future fields, and sanitizes known ones', async () => {
     const l = lib();
-    const g = { ...graph('y=t'), script: { code: 'plot(t => t)' } } as GraphData;
+    const g = { ...graph('y=t'), script: { code: 'plot(t => t)' }, futureField: 7 } as GraphData;
     (g.entries[0] as unknown as Record<string, unknown>).color = 'javascript:alert(1)';
     g.viewport = { tMin: 5, tMax: 1, yMin: 0, yMax: 1 };
     const a = await l.save({ name: 'S', graph: g });
     const back = await l.toGraph(a);
-    expect((back as { script?: unknown }).script).toEqual({ code: 'plot(t => t)' });
+    expect(back.script).toEqual({ code: 'plot(t => t)' });
+    expect((back as { futureField?: number }).futureField).toBe(7);
     expect(back.entries[0].color).toMatch(/^#/);
     expect(back.viewport).toEqual(VP); // invalid viewport → default
   });
@@ -185,6 +186,33 @@ describe('assets', () => {
     await l.remove(a.id);
     expect(await l.gcAssets()).toBe(1);
     expect(await kv.keys('assets')).toEqual([]);
+  });
+});
+
+describe('scripted graphs (Script mode)', () => {
+  const scripted = (code: string, extra: Partial<GraphData> = {}): GraphData =>
+    ({ ...graph(''), script: { code, sliders: { speed: 2 }, clips: { dancer: clipId } }, assets: { [clipId]: clip }, ...extra }) as GraphData;
+
+  it('saves, lists and reopens the script with its sliders and clips', async () => {
+    const kv = memoryKV();
+    const l = lib(kv);
+    const rec = await l.save({ name: 'Dancer', graph: scripted('clip("dancer").draw()'), thumb: 'data:image/webp;base64,AAAA' });
+    expect(rec.assetIds).toEqual([clipId]); // the script's clip is stored by reference too
+    expect((await l.list())[0]).toMatchObject({ name: 'Dancer', thumb: 'data:image/webp;base64,AAAA' });
+    const back = await l.toGraph(rec);
+    expect(back.script).toEqual({ code: 'clip("dancer").draw()', sliders: { speed: 2 }, clips: { dancer: clipId } });
+    expect(back.assets).toEqual({ [clipId]: clip }); // kept by sanitizeGraph: the script references it
+    expect(await l.gcAssets()).toBe(0); // referenced, not collected
+  });
+
+  it('a script edit changes the content hash; a script-only graph is real work', async () => {
+    expect(graphHash(scripted('a()'))).not.toBe(graphHash(scripted('b()')));
+    expect(isTrivialGraph(scripted('a()'))).toBe(false);
+    expect(describeGraph(scripted('a()'))).toBe('Script');
+    const l = lib();
+    const r = await l.pushRecent('s', scripted('a()'));
+    expect(r).toMatchObject({ label: 'Script', assetIds: [clipId] });
+    expect((await l.toGraph(r!)).script?.code).toBe('a()');
   });
 });
 

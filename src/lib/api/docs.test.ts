@@ -4,6 +4,8 @@ import { spawnSync } from 'node:child_process';
 import { deflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { checkSpec } from './check';
+import { runHeadless } from '../script/testkit';
+import { API_NAMES } from '../script/api';
 import { exampleSpec, listExamples } from './examples';
 import { DEMOS } from '../demos';
 import { DEFAULT_BASE_URL, EXPR_PARAMS, GLOBAL_PARAMS, bytesToBase64Url, readUrlPayload } from './url';
@@ -88,7 +90,7 @@ describe('llms.txt', () => {
       if (/[#?&]example=/.test(link)) {
         // Opens a built-in demo (a full graph, not a spec).
         expect(p.kind).toBe('legacy');
-        if (p.kind === 'legacy') expect(p.graph.entries.length).toBeGreaterThan(0);
+        if (p.kind === 'legacy') expect(p.graph.entries.length + (p.graph.script?.code ? 1 : 0)).toBeGreaterThan(0);
         return;
       }
       expect(p.kind).toBe('spec');
@@ -97,6 +99,7 @@ describe('llms.txt', () => {
       const r = checkSpec(p.spec);
       expect(r.errors).toEqual([]);
       expect(r.warnings).toEqual([]);
+      if (r.spec?.script) expectScriptRuns(r.spec.script, specEntries(r.spec));
     });
   }
 
@@ -107,7 +110,20 @@ describe('llms.txt', () => {
       const r = checkSpec(JSON.parse(j));
       expect(r.errors).toEqual([]);
       expect(r.warnings).toEqual([]);
+      if (r.spec?.script) expectScriptRuns(r.spec.script, specEntries(r.spec));
     }
+  });
+
+  const scripts = blocks('fluxion-script');
+  it('has Script mode examples', () => expect(scripts.length).toBeGreaterThanOrEqual(2));
+  scripts.forEach((code, i) => {
+    it(`script example #${i + 1} runs and draws`, () => expectScriptRuns(code, []));
+  });
+
+  it('summarises the Script API (every name except plain Math aliases)', () => {
+    const mathOnly = new Set(['asin', 'acos', 'atan', 'sinh', 'cosh', 'tanh', 'cbrt', 'sign', 'ceil', 'round', 'trunc', 'log2', 'log10', 'info']);
+    const missing = API_NAMES.filter((n) => !mathOnly.has(n) && !LLMS.includes('`' + n) && !new RegExp(`[\\s(.]${n}\\(`).test(LLMS) && !LLMS.includes(` ${n} `));
+    expect(missing).toEqual([]);
   });
 
   it('documents every params key', () => {
@@ -147,12 +163,25 @@ describe('llms.txt', () => {
   });
 });
 
+function specEntries(spec: { expressions: { expr: string; hidden: boolean; t0?: number; ic?: number[] }[] }) {
+  return spec.expressions.map((e) => ({ raw: e.expr, visible: !e.hidden, t0: e.t0, ic: e.ic }));
+}
+
+function expectScriptRuns(code: string, entries: { raw: string; visible: boolean; ic?: number[] }[]) {
+  for (const time of [0, 1, 4.5]) {
+    const r = runHeadless(code, { time, entries });
+    expect(r.error, `t=${time}: ${r.error?.message}`).toBeUndefined();
+    expect(r.frame.items.length).toBeGreaterThan(0);
+  }
+}
+
 describe('fluxion-spec.schema.json stays in sync with the validator', () => {
   const keys = (o: Record<string, unknown>) => Object.keys(o).sort();
   it('top-level keys', () => {
     expect(keys(SCHEMA.properties)).toEqual([...TOP_KEYS].sort());
     expect(SCHEMA.additionalProperties).toBe(false);
-    expect(SCHEMA.required).toEqual(['expressions']);
+    expect(SCHEMA.anyOf).toEqual([{ required: ['expressions'] }, { required: ['script'] }]);
+    expect(SCHEMA.properties.script.maxLength).toBe(LIMITS.maxScriptChars);
   });
   it('expression keys and enums', () => {
     const e = SCHEMA.$defs.expression;

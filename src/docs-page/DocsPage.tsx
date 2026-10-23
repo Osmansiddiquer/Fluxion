@@ -14,11 +14,11 @@ import { texHtml } from './tex';
 import { activeSection } from './scrollspy';
 
 // ── Script mode reference hook ──────────────────────────────────────────────
-// Script mode (branch feat/script-mode) ships its reference as a default-exported,
-// prop-less component at src/components/Script/ScriptDocs.tsx. Until it lands, the
-// Scripting section shows a "coming soon" note. To wire it in, replace the final
-// `= null` on the next line with `= () => import('../components/Script/ScriptDocs')`.
-const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = null;
+// Script mode's reference is a default-exported, prop-less component
+// (src/components/Script/ScriptDocs.tsx). Here, outside the app, its "Try it"
+// buttons are links that open the app with the snippet (#z= links). Set this to
+// null to show the "coming soon" note instead.
+const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = () => import('../components/Script/ScriptDocs');
 // Mounted on the client only (after hydration), so it may use editors etc.
 const ScriptDocs = SCRIPT_DOCS ? lazy(SCRIPT_DOCS) : null;
 
@@ -466,6 +466,23 @@ function ScriptDocsSlot() {
       <Suspense fallback={<p className="dp-muted">Loading the Script mode reference…</p>}>
         <ScriptDocs />
       </Suspense>
+    );
+  }
+  if (ScriptDocs) {
+    // Static HTML / before hydration: say what loads here.
+    return (
+      <div className="dp-soon">
+        <div className="dp-soon-mark" aria-hidden="true">
+          {'{ }'}
+        </div>
+        <div>
+          <div className="dp-soon-title">Script mode reference</div>
+          <p>
+            Every Script mode function, with an example you can open in the app. It needs JavaScript to load; you can
+            also open it inside the app: switch to <a href={`${APP_HREF}`}>Script</a> mode and press Reference.
+          </p>
+        </div>
+      </div>
     );
   }
   return (

@@ -4,6 +4,7 @@ import { cubeDemo } from './cube';
 import { mangekyoDemo } from './mangekyo';
 import { silhouetteDemo } from './silhouette';
 import { mandalaDemo } from './mandala';
+import { cubeScript, mandalaScript, mangekyoScript, pendulumScript, sharinganScript, silhouetteScript } from './scripted';
 
 export interface Demo {
   id: string;
@@ -12,8 +13,53 @@ export interface Demo {
   build: () => GraphData;
 }
 
-/** Scripting showcase graphs, opened from the graph menu. */
+/** The examples (Script mode programs), opened from the graph menu, the
+ * Script mode toolbar and \`#example=<id>\` links. */
 export const DEMOS: Demo[] = [
+  {
+    id: 'sharingan',
+    title: 'Rotating Sharingan',
+    blurb: 'A tomoe() helper drawn three times with path() arcs, spun by the clock.',
+    build: sharinganScript,
+  },
+  {
+    id: 'cube',
+    title: 'Rotating cube',
+    blurb: 'A 3D camera(): corners, faces sorted back to front, see-through hsv colours.',
+    build: cubeScript,
+  },
+  {
+    id: 'mangekyo',
+    title: 'Eye → Sharingan → Mangekyō',
+    blurb: 'One 12 s clock and keyframes(): colour, growth, spin and a tomoe → blade morph.',
+    build: mangekyoScript,
+  },
+  {
+    id: 'mandala',
+    title: 'Mandala bloom',
+    blurb: 'A petal() helper in three counter-rotating rings; the bloom and the hues loop seamlessly.',
+    build: mandalaScript,
+  },
+  {
+    id: 'pendulum',
+    title: 'Pendulum from an ODE',
+    blurb: "graph.ode() reads the Graph-mode solution of θ'' = −(g/L)·sin θ − c·θ' to swing a pendulum along it.",
+    build: pendulumScript,
+  },
+  {
+    id: 'silhouette',
+    title: 'Silhouette clip',
+    blurb: 'A traced black-and-white video clip played with clip("apple").play() — the Bad Apple pipeline.',
+    build: silhouetteScript,
+  },
+];
+
+/**
+ * The same showcases built from expression rows only (parametric curves, for
+ * repeats, keyframes, colour expressions). Not in the menu any more; kept as
+ * regression fixtures for the expression engine (demos.test.ts).
+ */
+export const EXPRESSION_DEMOS: Demo[] = [
   {
     id: 'sharingan',
     title: 'Rotating Sharingan',

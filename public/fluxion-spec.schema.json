@@ -4,7 +4,7 @@
   "title": "Fluxion graph spec",
   "description": "A graph for Fluxion (https://osmansiddiquer.github.io/Fluxion/). Put it in a link as #spec=<percent-encoded or base64url JSON> or #z=<base64url(deflate-raw(JSON))>. Expression syntax: https://osmansiddiquer.github.io/Fluxion/llms.txt",
   "type": "object",
-  "required": ["expressions"],
+  "anyOf": [{ "required": ["expressions"] }, { "required": ["script"] }],
   "additionalProperties": false,
   "properties": {
     "$schema": { "type": "string" },
@@ -53,7 +53,12 @@
         "sliceY": { "$ref": "#/$defs/numberOrExpr", "default": 1 }
       }
     },
-    "sigFigs": { "$ref": "#/$defs/number", "description": "Significant figures in labels, 1 to 12.", "default": 3 }
+    "sigFigs": { "$ref": "#/$defs/number", "description": "Significant figures in labels, 1 to 12.", "default": 3 },
+    "script": {
+      "type": "string",
+      "maxLength": 100000,
+      "description": "A Script mode program: JavaScript using the Fluxion drawing API (circle, polygon, path, group, hsv, slider, time, graph.ode, ...). It runs sandboxed and draws on the same axes as the expressions. See the Script section of llms.txt."
+    }
   },
   "$defs": {
     "exprString": {

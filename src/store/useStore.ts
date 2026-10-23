@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { Entry, FeatureToggles, Projections, ThemeMode, Viewport } from './types';
+import type { AppMode, Entry, FeatureToggles, Projections, ScriptDoc, ThemeMode, Viewport } from './types';
 import { nextColor } from '../utils/colors';
 import { setSigFigs as applySigFigs } from '../lib/format';
 
@@ -54,6 +54,16 @@ export interface AppState {
   sigFigs: number;
   panelW: number;
   panelH: number;
+  /** Script mode program (optional; absent = no script). */
+  script?: ScriptDoc;
+  /** Sidebar mode (optional; default graph). */
+  mode?: AppMode;
+  /** Script mode: re-run while typing (default true). */
+  scriptAutoRun?: boolean;
+  /** Script mode: reference panel open. */
+  scriptDocsOpen?: boolean;
+  /** Script mode: editor panel width (px). */
+  scriptPanelWidth?: number;
 
   addEntry: () => void;
   addAssignment: (name: string) => void;
@@ -77,7 +87,18 @@ export interface AppState {
     features: FeatureToggles;
     projections: Projections;
     sigFigs: number;
+    script?: ScriptDoc;
   }) => void;
+
+  setMode: (m: AppMode) => void;
+  setScriptCode: (code: string) => void;
+  setScriptSlider: (name: string, value: number) => void;
+  setScriptVisible: (visible: boolean) => void;
+  addScriptClip: (name: string, assetId: string) => void;
+  removeScriptClip: (name: string) => void;
+  setScriptAutoRun: (on: boolean) => void;
+  setScriptDocsOpen: (open: boolean) => void;
+  setScriptPanelWidth: (w: number) => void;
 }
 
 export const useStore = create<AppState>()(
@@ -150,8 +171,26 @@ export const useStore = create<AppState>()(
           features: g.features ?? s.features,
           projections: g.projections ?? s.projections,
           sigFigs: g.sigFigs ?? s.sigFigs,
+          // A loaded graph replaces the script too (none → no script).
+          script: g.script ? { ...g.script } : undefined,
         }));
       },
+      setMode: (mode) => set({ mode }),
+      setScriptCode: (code) => set((s) => ({ script: { ...s.script, code } })),
+      setScriptSlider: (name, value) =>
+        set((s) => ({ script: { code: '', ...s.script, sliders: { ...s.script?.sliders, [name]: value } } })),
+      setScriptVisible: (visible) => set((s) => ({ script: { code: '', ...s.script, visible } })),
+      addScriptClip: (name, assetId) =>
+        set((s) => ({ script: { code: '', ...s.script, clips: { ...s.script?.clips, [name]: assetId } } })),
+      removeScriptClip: (name) =>
+        set((s) => {
+          const clips = { ...s.script?.clips };
+          delete clips[name];
+          return { script: { code: '', ...s.script, clips } };
+        }),
+      setScriptAutoRun: (scriptAutoRun) => set({ scriptAutoRun }),
+      setScriptDocsOpen: (scriptDocsOpen) => set({ scriptDocsOpen }),
+      setScriptPanelWidth: (w) => set({ scriptPanelWidth: Math.round(Math.max(340, Math.min(1100, w))) }),
       setSigFigs: (n) => {
         const v = Math.max(1, Math.min(12, Math.round(n)));
         applySigFigs(v);
@@ -190,6 +229,11 @@ export const useStore = create<AppState>()(
         sigFigs: s.sigFigs,
         panelW: s.panelW,
         panelH: s.panelH,
+        script: s.script,
+        mode: s.mode,
+        scriptAutoRun: s.scriptAutoRun,
+        scriptDocsOpen: s.scriptDocsOpen,
+        scriptPanelWidth: s.scriptPanelWidth,
       }),
       onRehydrateStorage: () => (state) => {
         if (state?.sigFigs) applySigFigs(state.sigFigs);

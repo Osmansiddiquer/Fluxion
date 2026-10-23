@@ -131,7 +131,8 @@ export function isTrivialGraph(g: GraphData): boolean {
 // Loading
 // ---------------------------------------------------------------------------
 
-const KNOWN_GRAPH_KEYS = new Set(['v', 'entries', 'viewport', 'features', 'projections', 'sigFigs', 'assets']);
+// Fields sanitizeGraph owns (dropped by it when invalid — never carried through raw).
+const KNOWN_GRAPH_KEYS = new Set(['v', 'entries', 'viewport', 'features', 'projections', 'sigFigs', 'assets', 'script']);
 
 /**
  * Sanitize a stored graph for loading. `sanitizeGraph` is the gatekeeper for the

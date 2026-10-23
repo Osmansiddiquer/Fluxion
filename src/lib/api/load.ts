@@ -1,6 +1,6 @@
 import { parseEntry } from '../math/parse';
 import type { GraphData } from '../graphFile';
-import type { Entry, FeatureToggles, Projections, Viewport } from '../../store/types';
+import type { Entry, FeatureToggles, Projections, ScriptDoc, Viewport } from '../../store/types';
 import { nextColor } from '../../utils/colors';
 import {
   ANIM_MODES,
@@ -22,6 +22,7 @@ import { readUrlPayload } from './url';
 import { isColorExpr } from '../color';
 import { assetId } from '../frames/assets';
 import { parseHeader } from '../frames/codec';
+import { SCRIPT_LIMITS } from '../script/protocol';
 
 /**
  * Glue between the URL API and the app: turn the current location into a graph
@@ -136,12 +137,45 @@ export function sanitizeGraph(g: GraphData): GraphData {
 
   const sigFigs = finite(g.sigFigs) ? Math.min(12, Math.max(1, Math.round(g.sigFigs))) : DEFAULT_SIG_FIGS;
   const out: GraphData = { v: 1, entries, viewport, features, projections, sigFigs };
-  const assets = sanitizeAssets(g.assets, entries);
+  const script = sanitizeScript(g.script);
+  if (script) out.script = script;
+  const assets = sanitizeAssets(g.assets, entries, Object.values(script?.clips ?? {}));
   if (assets) out.assets = assets;
   return out;
 }
 
 const ASSET_ID = /^fx[0-9a-f]{8}[0-9a-z]{1,10}$/;
+/** Script slider names (as slider() accepts) and clip names. */
+const SLIDER_NAME = /^[A-Za-z_$][\w$ ]*$/;
+export const CLIP_NAME = /^[A-Za-z0-9_-]{1,32}$/;
+
+/**
+ * A graph's Script-mode program. The code itself is only ever run inside the
+ * sandbox (lib/script/sandbox), so here it is just a size-capped string; the
+ * slider values and clip table are type-checked and bounded.
+ */
+export function sanitizeScript(raw: unknown): ScriptDoc | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.code !== 'string' || !r.code.trim() || r.code.length > SCRIPT_LIMITS.maxCodeChars) return undefined;
+  const out: ScriptDoc = { code: r.code };
+  if (r.sliders && typeof r.sliders === 'object' && !Array.isArray(r.sliders)) {
+    const sl: Record<string, number> = {};
+    for (const [k, v] of Object.entries(r.sliders as Record<string, unknown>).slice(0, SCRIPT_LIMITS.maxSliders)) {
+      if (SLIDER_NAME.test(k) && k.length <= SCRIPT_LIMITS.maxName && inAbs(v)) sl[k] = v;
+    }
+    if (Object.keys(sl).length) out.sliders = sl;
+  }
+  if (r.clips && typeof r.clips === 'object' && !Array.isArray(r.clips)) {
+    const cl: Record<string, string> = {};
+    for (const [k, v] of Object.entries(r.clips as Record<string, unknown>).slice(0, SCRIPT_LIMITS.maxClips)) {
+      if (CLIP_NAME.test(k) && typeof v === 'string' && ASSET_ID.test(v)) cl[k] = v;
+    }
+    if (Object.keys(cl).length) out.clips = cl;
+  }
+  if (r.visible === false) out.visible = false;
+  return out;
+}
 
 /**
  * Frame-sequence payloads carried by a graph file / link. Keep only assets an
@@ -153,9 +187,10 @@ const ASSET_ID = /^fx[0-9a-f]{8}[0-9a-z]{1,10}$/;
 export function sanitizeAssets(
   raw: unknown,
   entries: Entry[],
+  extraIds: string[] = [],
 ): Record<string, string> | undefined {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
-  const wanted = new Set(entries.map((e) => e.frames).filter((f): f is string => !!f));
+  const wanted = new Set([...entries.map((e) => e.frames), ...extraIds].filter((f): f is string => !!f));
   const out: Record<string, string> = {};
   let total = 0;
   let n = 0;
