@@ -29,6 +29,41 @@ intersections.
 | `A = (1, 2)` then `(A, B)` | Point-valued variables; a tuple of them draws a line |
 | `a = 2` | A variable you can slide, animate, and reuse in other equations |
 
+### Scripting & animation
+
+| Input | Meaning |
+| --- | --- |
+| `(2cos(t), sin(t))` | Parametric curve over a t-range (default 0…2π, editable) |
+| `b = 2a + 1` | Derived value (shown live, usable everywhere, any order) |
+| `f(u, v) = u*cos(v)` | User function, callable from any expression; `f(x) = x^2` also plots |
+| `(cos(t) + k, sin(t)) for k = 0..2` | Repeat any drawable entry (`for i = 0..3, j = i..3`, `step`) |
+| `(t - 3k)^2 + y^2 < 1 for k = 0..2` | A repeated inequality is the union of its regions |
+| `keys(T, 0, 0, 2, 5)`, `skeys(…)` | Keyframe tracks (linear / eased) of a clock `T` |
+| `lerp`, `clamp`, `smoothstep`, `ease`, `step`, `pulse` | Interpolation / timing helpers |
+| `rotx(x, y, a)`, `roty(x, y, a)` | 2D rotation |
+| `projx(x, y, z, yaw, pitch, dist)`, `projy`, `projz` | 3D rotation + perspective projection |
+| `frames(24 T)` | Frame *i* of an imported black-and-white clip (filled contours) |
+
+Right-click an entry's colour dot for **style**: line width, solid / dashed / dotted,
+fill + opacity for closed shapes (parametric, polar, polygons, frames), and colour
+**expressions** for the line and fill — `hsv(360a, 0.8, 1)`, `rgba(0, 0, 0, keys(T, 0, 0, 1, 1))`,
+`mixc(#ff0000, #0000ff, u)` — so colour and opacity animate with your variables.
+Entries draw in list order (later rows on top). Variables can play together on one
+clock (batched per frame), step frame-by-frame, and `autoplay` when a graph opens.
+**Examples** (share menu): a rotating Sharingan, a rotating cube, an
+eye → Sharingan → Mangekyō morph, and a traced silhouette clip.
+
+#### Playing a video ("Bad Apple!!")
+
+```bash
+ffmpeg -i clip.mp4 -vf "fps=30,scale=192:144" frames/%05d.pgm   # extract frames
+npx vite-node scripts/frames-import.ts -- frames clip.json --fps 30
+```
+
+then **Import from file…** `clip.json`. Frames are traced into polygons and stored
+compactly (≈150–500 bytes per frame); the graph carries the clip, which is kept in
+browser storage separately from your per-tab graph state.
+
 ## Highlights
 
 - **Numerical ODE engine** — any-order / coupled, RK4 with per-direction step budget.
@@ -65,6 +100,7 @@ intersections.
 npm install
 npm run dev        # local dev server
 npm run build      # static production build into dist/
+npm test           # Vitest suites (src/**/*.test.ts)
 npm run preview    # serve the production build locally
 ```
 

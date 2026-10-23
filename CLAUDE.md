@@ -37,11 +37,14 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 ```
 
 1. **`lib/math/parse.ts`** classifies `raw` → `Parsed` union: `function | ode | variable
-   | implicit | polar | points | pointvar | inequality | error | empty`. Normalisation
+   | implicit | polar | points | pointvar | inequality | parametric | fndef | repeat |
+   frames | error | empty`. Normalisation
    (`normalize.ts`) and LaTeX↔text bridges (`fromlatex.ts` / `tolatex.ts`) wrap it.
 2. **`lib/compute.ts` `computeAll(entries, viewport, samples)`** is the heart: builds the
-   variable scope, groups + integrates coupled ODEs, and samples every curve →
-   `Map<id, CurveResult>`. Caches live here (see Performance).
+   evaluation scope (`lib/scope.ts` `buildEvalContext`), groups + integrates coupled
+   ODEs, and samples every curve → `Map<id, CurveResult>`. Caches live here (see
+   Performance). `buildVarScope` (slices, singularities, colour expressions) shares
+   the same scope builder, so helpers / derived values / user functions work everywhere.
 3. **`state/results.tsx` `ResultsProvider`** runs `computeAll` + feature/intersection
    analysis inside one memo and shares it via context (`useResults`, `useEntryResult`,
    `useAnalysis`, `useSliceStatus`).
@@ -57,7 +60,10 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Compute orchestration | `lib/compute.ts`, `lib/analysis/eval.ts` |
 | Analysis | `lib/analysis/features.ts` (extrema/roots/intercepts/endpoints), `singularities.ts` (removable holes vs asymptotes), `intersections.ts`, `types.ts` |
 | Geometry / format | `lib/geom/transform.ts` (data↔screen), `lib/format.ts` (`fmtSig`), `lib/graphFile.ts` (export/share), `lib/math/resolveSlice.ts` (parametric cuts) |
-| Store | `store/useStore.ts` (Zustand+persist), `store/types.ts` (`Entry`, `Viewport`, …) |
+| Scripting | `lib/scope.ts` (shared eval scope: helpers + sliders + derived values + user fns), `lib/math/helpers.ts` (`lerp`/`keys`/`skeys`/`rotx`/`projx`…), `lib/color.ts` (colour literals + `rgb/hsv/…` expressions), `lib/style.ts` (per-frame `resolveStyle`), `lib/raster.ts` (adaptive inequality shading), `lib/anim.ts` + `state/player.ts` + `state/animate.ts` + `components/AnimationLoop.tsx` (shared slider clock) |
+| Frames ("Bad Apple") | `lib/frames/codec.ts` (FXF1 clip format), `trace.ts` (marching-squares contours + Douglas–Peucker), `assets.ts` (content-addressed asset store), `netpbm.ts`, `clipGraph.ts`; `scripts/frames-import.ts` (CLI, run with `npx vite-node`) |
+| Demos | `lib/demos/*` (Sharingan, cube, Mangekyō morph, silhouette clip) → GraphMenu "Examples" |
+| Store | `store/useStore.ts` (Zustand+persist), `store/types.ts` (`Entry`, `Viewport`, …), `state/signature.ts` (`computeSignature`) |
 | Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls`, `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
 | Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
 | Chrome | `App.tsx`, `Tutorial.tsx`, `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
@@ -89,16 +95,55 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 - **Browser automation coordinate mismatch**: the page viewport is wider than the
   1568-px screenshot, so DOM x ≠ screenshot x. Verify drags via JS
   (`getBoundingClientRect` / dispatched events), not guessed click coordinates.
+- **mathjs parsing traps** (bit the demos): `2 mod(i, 2)` parses `mod` as the binary
+  *operator* — write `2*mod(i, 2)`; `pi (u - 1)` is a *call* of `pi` — write
+  `pi*(u - 1)`. `[a, b][k + 1]` indexing is 1-based. `i` is allowed as a loop variable /
+  parameter (scope shadows the imaginary unit).
+- **Grid toggle** lives in `FeatureToggles.grid` (optional, default shown; the Points
+  menu) so it rides in `GraphData.features` with no store/graph-file change.
 - **Per-tab state**: `useStore` persist uses `sessionStorage` (per tab) mirrored to
   `localStorage` (so a fresh tab inherits your last graph and work survives restart). Two
   open tabs are independent. Persist key `ode-plotter`, `version: 2`.
+
+## Scripting layer (issue #2) — how it fits together
+
+- **Syntax** (all in `parse.ts`): `(x(t), y(t))` = `parametric` (t-range reuses
+  `thetaMin/thetaMax`, edited by `PolarControls` labelled `t`); `f(a, b) = body` =
+  `fndef` (recognised *before* inequalities, so bodies may hold comparisons/ternaries;
+  a `?` anywhere also skips inequality parsing); `body for k = a..b[, j = c..d step s]` =
+  `repeat` (split first via `findFor`; body ∈ `REPEATABLE_KINDS`); `frames(expr)` =
+  `frames`. `name = expr` without `y` is decided by `namedValue` (no symbolic
+  differentiation): constant → variable, uses `t` → named function, else a **derived
+  value** (`isDerived` in `scope.ts`) with no curve and a live `= value` badge.
+- **Scope** (`scope.ts`): mathjs resolves a *called* name from the scope before its own
+  namespace, so helpers and user functions are plain closures in the scope object (spread
+  copies keep them). A user fn evaluates its body on `Object.create(globalScope)` +
+  params — it sees globals, never the caller's `t`/`y`/loop vars. It has a **one-slot
+  last-call memo** (valid because globals are fixed per scope build and derived values
+  are assigned once); recursion is rejected at parse time and depth-capped at runtime.
+- **Rendering** (`PlotCanvas`): entries draw in list order, each fill then stroke;
+  `resolveStyle` (cosmetic fields + colour expressions evaluated against
+  `analysis.scope`) decides stroke/dash/fill. Inequality shading is `rasterizeRegion`,
+  cached per `CurveResult` + viewport in a `WeakMap`. Frames fill even-odd as one path
+  (holes); other shapes fill per segment.
+- **Animation**: variable sliders play through ONE rAF loop (`AnimationLoop` →
+  `stepPlaying` → a single `useStore.setState` per frame). `autoplay` entries start once
+  per id (new ids on every demo build). IVP sliders still use the self-contained
+  `PlayButton`. Loop mode wraps the overshoot (seamless rotations); speed may go far
+  below the UI slider's 0.1 (real-time clips use `4 / seconds`).
+- **Frames**: clip payloads live in the asset store (`localStorage['fluxion-assets']`,
+  written once on import), *not* in the per-tab persisted store, which is rewritten on
+  every animation tick. Entries keep only the id (`Entry.frames`); `makeGraph` exports
+  referenced assets in `GraphData.assets`; every graph load path must call
+  `registerAssets(g.assets)` first (GraphMenu file/hash/examples do).
 
 ## Performance — the compute caches (extend carefully)
 
 Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU throttle):
 
 1. **Signature gating** (`state/results.tsx`): the analysis memo keys on
-   `computeSignature(entries)` (only raw, visible, t0/ic, varValue, thetaMin/Max), read via
+   `computeSignature(entries)` (`state/signature.ts`: only raw, visible, t0/ic, varValue,
+   thetaMin/Max, frames), read via
    a ref — so **styling/UX-only edits** (colour, expanded, point size, anim speed, var
    bounds) don't recompute curves at all. If you add a new *compute-relevant* `Entry`
    field, **add it to `computeSignature`** or its changes won't take effect.
@@ -107,11 +152,18 @@ Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU
    only when their key changes (raw + viewport + samples + θ-range + `depKey(deps)` [values
    of the variables/pointvars they reference] + `definedKey` [the set of defined names]).
    ODE integration is cached per coupling group. If you add a new input that a curve
-   depends on, **fold it into the cache key** (else you'll serve stale curves).
+   depends on, **fold it into the cache key** (else you'll serve stale curves). Scripting
+   additions to the key: `ectx.fnKey` (every fndef's raw + the values its body reads) for
+   any entry/ODE group that calls a user function, derived + function names in
+   `definedKey`, and the `frames` asset id. Cosmetic style fields (`lineWidth`,
+   `lineStyle`, `fill*`, `colorExpr`, `fillColor`, `autoplay`) are deliberately NOT in
+   the signature — colour expressions are re-evaluated at draw time.
 
 ## Verifying changes
 
-1. `npm run build` (WSL) — must show `✓ built`, no `error TS`.
+1. `npm run build` (WSL) — must show `✓ built`, no `error TS`. `npm test` runs the Vitest
+   suites (node env; `lib/demos/demos.test.ts` checks every shipped demo computes with no
+   errors and non-empty curves — keep it green when touching the engine).
 2. Browser check on `localhost:5173`: seed a known graph by writing `localStorage`
    `ode-plotter` (a `{state:{...},version:2}` blob) and reloading in one JS call, then
    screenshot. This is far more reliable than typing into the MathLive field (which races
@@ -124,6 +176,10 @@ Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU
 All planned features are shipped (ODEs/systems, functions, implicit, polar, inequalities
 incl. polar/compound, points/lines, animatable sliders, projection panels, trace,
 discontinuities, sharing/export, per-tab state, x/t interchange, tutorial, compute
-caches). There is no open backlog. The user commits/deploys themselves (push to `main`
+caches, and the scripting layer: parametric curves, derived values, user functions,
+for-repeats, keyframes, 3D projection, styling/fills/colour expressions, shared
+animation clock, frame sequences + importer, demo graphs). Open: full "Bad Apple!!"
+playback needs the user's own frames via `scripts/frames-import.ts` (no copyrighted
+frames are committed). The user commits/deploys themselves (push to `main`
 triggers GitHub Pages). When picking up new work, re-read files before editing — the user
 co-edits in parallel.

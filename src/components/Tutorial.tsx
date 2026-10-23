@@ -74,6 +74,8 @@ const SYNTAX: { tex: string; label: string }[] = [
   { tex: '1 < y < \\sin t', label: 'Inequalities — shaded regions' },
   { tex: '(2,\\ 1)', label: 'Points & lines' },
   { tex: 'a = 2', label: 'Variables become sliders' },
+  { tex: '(\\cos t,\\ \\sin 2t)', label: 'Parametric curves — fill & style them' },
+  { tex: 'f(u)=u^2\\ \\operatorname{for}\\ k=0..2', label: 'Functions, repeats & keyframes' },
 ];
 
 const INSPECT: { icon: string; text: string }[] = [
@@ -82,6 +84,7 @@ const INSPECT: { icon: string; text: string }[] = [
   { icon: '⊞', text: 'The bottom & right panels read linked cross-sections at the cursor.' },
   { icon: '▶', text: 'Drag — or animate — initial-condition and variable sliders.' },
   { icon: '↗', text: 'Share a link or export your graph from the top bar anytime.' },
+  { icon: '✦', text: 'Animated drawings: open the Examples in the share menu (Sharingan, cube, …).' },
 ];
 
 export default function Tutorial({ open, onClose }: { open: boolean; onClose: () => void }) {
