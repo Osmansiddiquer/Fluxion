@@ -29,6 +29,23 @@ export function canFillShape(res: CurveResult | undefined): boolean {
   return p.kind === 'points' && (res.curve.segments.length > 0 || p.polyline);
 }
 
+/**
+ * Does an entry draw point markers? Points, named points and repeated points
+ * always do. Polylines show vertex dots by default only when plain (a single,
+ * unfilled, straight polyline — the segment `((0,0),(1,1))` keeps its ends); a
+ * repeated, filled or smooth (spline / bezier / arc) path reads as a shape. The
+ * entry's `dots` option overrides the default either way.
+ */
+export function showsVertexDots(entry: Entry, res: CurveResult | undefined, fillMode: ResolvedStyle['fillMode']): boolean {
+  if (!res?.points) return false;
+  const p = res.parsed.kind === 'repeat' ? res.parsed.body : res.parsed;
+  if (p.kind === 'pointvar') return true;
+  if (p.kind !== 'points') return false;
+  if (!p.polyline) return true;
+  if (entry.dots !== undefined) return entry.dots;
+  return res.parsed.kind === 'points' && !p.smooth && fillMode !== 'shape';
+}
+
 export function isRegion(res: CurveResult | undefined): boolean {
   return !!res?.inequality;
 }

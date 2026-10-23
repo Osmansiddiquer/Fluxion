@@ -16,6 +16,8 @@ import { sampleImplicit } from './solver/implicit';
 import { EMPTY_CURVE, type Point, type SampledCurve } from './solver/curve';
 import { buildEvalContext, isDerived, isPlottableFnDef, type EvalContext } from './scope';
 import { boxOutside, parametricBox, polarBox } from './math/bounds';
+import { specNodes, type PointSpec } from './math/points';
+import { PathBuilder, flattenOps, type Pt } from './geom/path';
 import { getFrameSequence } from './frames/assets';
 import type { Entry, Viewport } from '../store/types';
 
@@ -43,6 +45,9 @@ export interface CurveResult {
   copies?: number;
   /** How many shapes (copies) were skipped because they lie entirely off-screen. */
   culled?: number;
+  /** Smooth point paths: the exact path as ops (lib/geom/path, Script mode's
+   * format) in data coordinates; `curve` holds its flattened polyline. */
+  path?: number[];
 }
 
 type OdeParsed = Extract<Parsed, { kind: 'ode' }>;
@@ -101,7 +106,7 @@ export function nodesOf(parsed: Parsed): MathNode[] {
     case 'fndef':
       return [parsed.node];
     case 'points':
-      return parsed.points.flatMap((p) => [p.tNode, p.yNode].filter((n): n is MathNode => !!n));
+      return parsed.points.flatMap(specNodes);
     case 'pointvar':
       return [parsed.tNode, parsed.yNode];
     case 'polar':
@@ -323,6 +328,7 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
           polyline = true;
         }
       }
+      if (parsed.smooth) return samplePath(parsed, scope, ctx);
       const coords: [number, number][] = [];
       for (const sp of specs) {
         if (sp.ref) {
@@ -349,6 +355,70 @@ function gridFor(ctx: SampleCtx): { cellsX: number; cellsY: number } | undefined
   const cellsX = Math.min(600, ctx.own);
   const aspect = (v.yMax - v.yMin) / Math.max(1e-12, v.tMax - v.tMin);
   return { cellsX, cellsY: Math.max(8, Math.min(600, Math.round(cellsX * aspect))) };
+}
+
+/** Evaluate one point spec (a literal point or a point-variable reference). */
+function evalPoint(sp: PointSpec, scope: Record<string, number>, pointScope: Map<string, [number, number]>): Pt | null {
+  if (sp.ref) return pointScope.get(sp.ref) ?? null;
+  if (!sp.tNode || !sp.yNode) return null;
+  const t = compileNode(sp.tNode).evaluate(scope);
+  const y = compileNode(sp.yNode).evaluate(scope);
+  return typeof t === 'number' && typeof y === 'number' && Number.isFinite(t) && Number.isFinite(y) ? [t, y] : null;
+}
+
+/**
+ * A point path with smooth pieces: plain points are corners, `spline(…)` runs a
+ * centripetal Catmull-Rom curve through its points, `bezier(…)` and `arc(…)`
+ * continue from the previous point. Built as path ops (lib/geom/path, Script
+ * mode's format), then flattened to one polyline (~2 px per piece, or the
+ * entry's own `samples` per cubic). `points` are the corners only (no dots).
+ */
+function samplePath(
+  parsed: Extract<Parsed, { kind: 'points' }>,
+  scope: Record<string, number>,
+  ctx: SampleCtx,
+): CurveResult {
+  const { pointScope, viewport } = ctx;
+  const P = (sp: PointSpec): Pt => {
+    const p = evalPoint(sp, scope, pointScope);
+    if (!p) throw new Error('A path point is undefined');
+    return p;
+  };
+  const b = new PathBuilder();
+  const corners: [number, number][] = [];
+  const specs = parsed.points;
+  // A single top-level spline whose last point equals its first is a closed loop.
+  const lone = specs.length === 1 && specs[0].seg?.kind === 'spline';
+  specs.forEach((sp, i) => {
+    const seg = sp.seg;
+    if (!seg) {
+      const p = P(sp);
+      b.lineTo(p);
+      corners.push(p);
+      return;
+    }
+    if (seg.kind === 'spline') {
+      const pts = seg.points.map(P);
+      // Neighbouring corners shape the end tangents so the curve leaves and
+      // joins the straight parts naturally.
+      const prevSpec = specs[i - 1];
+      const nextSpec = specs[i + 1];
+      const before = prevSpec && !prevSpec.seg && specs[i - 2] && !specs[i - 2].seg ? P(specs[i - 2]) : undefined;
+      const after = nextSpec && !nextSpec.seg ? P(nextSpec) : undefined;
+      b.splineThrough(pts, { closed: lone, before, after });
+    } else if (seg.kind === 'bezier') {
+      const pts = seg.points.map(P);
+      if (pts.length === 3) b.cubicTo(pts[0], pts[1], pts[2]);
+      else b.quadTo(pts[0], pts[1]);
+    } else {
+      const angle = compileNode(seg.angle).evaluate(scope);
+      if (typeof angle !== 'number') throw new Error('arc angle must be a number');
+      b.arcAround(P(seg.center), angle);
+    }
+  });
+  const unitsPerPx = (viewport.tMax - viewport.tMin) / Math.max(1, ctx.samples / 1.5);
+  const segments = flattenOps(b.ops, unitsPerPx * 2, ctx.own);
+  return { parsed, curve: { segments }, points: corners, path: b.ops };
 }
 
 function sampleInequality(

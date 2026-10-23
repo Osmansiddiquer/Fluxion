@@ -1,6 +1,6 @@
 import { parse as mjParse, derivative, simplify, type MathNode } from 'mathjs';
 import { normalizeInput } from './normalize';
-import { parsePoints, looksLikePoints, type PointSpec } from './points';
+import { parsePoints, looksLikePoints, specNodes, specRefs, type PointSpec } from './points';
 import { KNOWN_FUNCTIONS } from './builtins';
 import { HELPER_NAMES } from './helpers';
 
@@ -62,6 +62,8 @@ export type Parsed =
       kind: 'points';
       points: PointSpec[];
       polyline: boolean;
+      /** Contains spline / bezier / arc pieces (drawn smooth, no vertex dots). */
+      smooth?: boolean;
       scattered: boolean;
       deps: string[];
       raw: string;
@@ -586,14 +588,14 @@ function parseEntryUncached(raw: string): Parsed {
       if (pts) {
         const deps = new Set<string>();
         for (const p of pts.points) {
-          if (p.ref) deps.add(p.ref);
-          if (p.tNode) for (const s of freeSymbols(p.tNode)) deps.add(s);
-          if (p.yNode) for (const s of freeSymbols(p.yNode)) deps.add(s);
+          for (const r of specRefs(p)) deps.add(r);
+          for (const n of specNodes(p)) for (const s of freeSymbols(n)) deps.add(s);
         }
         return {
           kind: 'points',
           points: pts.points,
           polyline: pts.polyline,
+          ...(pts.smooth ? { smooth: true } : {}),
           scattered: pts.scattered,
           deps: [...deps],
           raw,
