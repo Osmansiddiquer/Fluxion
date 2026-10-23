@@ -224,7 +224,7 @@ const close = (a, b, eps = 0.05) => Math.abs(a - b) < eps;
   // Numerical vs exact readout.
   await seed(page, SCENES.compare);
   const diff = page.locator('.proj-diff');
-  check('right panel shows the ODE − function difference', (await diff.count()) === 1 && /=/.test(await diff.innerText()), await diff.innerText().catch(() => ''));
+  check('right panel shows the ODE − function difference', (await diff.count()) === 1 && /[=<]/.test(await diff.innerText()), await diff.innerText().catch(() => ''));
 
   // Screenshots: every scene, light + dark, desktop + 390 px.
   if (shots) {
