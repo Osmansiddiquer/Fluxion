@@ -555,9 +555,9 @@ const drawing: DocSection = {
     }),
     H('Examples'),
     P(
-      'The share menu’s **Examples** open complete scripted drawings: Rotating Sharingan, Rotating cube, Eye → Sharingan → Mangekyō, Mandala bloom and Silhouette clip. Opening one replaces your graph, with **Undo** in the notice that appears. Each is a good template to take apart.',
+      'The share menu’s **Examples** open complete drawings: Rotating Sharingan, Rotating cube, Eye → Sharingan → Mangekyō, Mandala bloom, Pendulum from an ODE and Silhouette clip. They are written as short **Script mode** programs (see Scripting below), which is the easier way to make drawings like these. Opening one replaces your graph, with **Undo** in the notice that appears.',
     ),
-    EX({ id: 'mandala-demo', title: 'Mandala bloom', blurb: 'Repeated petals, rotation, skeys and hsv colours on one clock.', lines: [], demo: 'mandala' }),
+    EX({ id: 'mandala-demo', title: 'Mandala bloom', blurb: 'A petal() helper in three counter-rotating rings, on one looping clock.', lines: [], demo: 'mandala' }),
   ],
 };
 
@@ -566,10 +566,13 @@ const drawing: DocSection = {
 const clips: DocSection = {
   id: 'clips',
   title: 'Clips',
-  summary: 'Play a short black-and-white video as filled outlines with frames().',
+  summary: 'Play a short black-and-white video as filled outlines.',
   blocks: [
     P(
-      'A **clip** is a short black-and-white video turned into a sequence of filled outlines, one per frame. A row `frames(i)` draws frame number i of the clip attached to that row; a clock slider drives i, so the clip plays like any other animation.',
+      'A **clip** is a short black-and-white video turned into a sequence of filled outlines, one per frame, so it plays crisply at any zoom. Import one in **Script mode → Clips** (a video, a GIF or a set of images; it all happens in your browser), give it a name, and play it from a script with `clip("name").play()`. The Scripting reference has the details.',
+    ),
+    P(
+      'Graph files made before Script mode play clips with a row `frames(i)`, which draws frame number i of the clip attached to that row; a clock slider drives i.',
     ),
     SYNTAX(
       row('frames(30*T)', 'frames', 'Frame 30·T of the row’s clip (30 frames per second of T)', {
@@ -577,15 +580,15 @@ const clips: DocSection = {
       }),
     ),
     P(
-      'A clip has to be attached to the row, so you can’t type one from scratch: it comes from a graph file. The **Silhouette clip** Example shows one.',
+      'The **Silhouette clip** Example plays one.',
     ),
-    EX({ id: 'silhouette-demo', title: 'Silhouette clip', blurb: 'A built-in clip played by frames(…).', lines: [], demo: 'silhouette' }),
-    H('Importing your own clip'),
-    P('There is no in-app converter yet. With a copy of the repository and ffmpeg:'),
+    EX({ id: 'silhouette-demo', title: 'Silhouette clip', blurb: 'A built-in clip played with clip("apple").play().', lines: [], demo: 'silhouette' }),
+    H('Long clips: the command-line importer'),
+    P('The in-app importer takes up to a minute of video. For longer clips, with a copy of the repository and ffmpeg:'),
     STEPS(
       'Extract small black-and-white frames: `ffmpeg -i clip.mp4 -vf "fps=30,scale=192:144" frames/%05d.pgm`',
       'Trace them into a graph file: `npx vite-node scripts/frames-import.ts -- frames clip.fluxion.json --fps 30`',
-      'In Fluxion: share menu → **Import from file…** → choose `clip.fluxion.json`.',
+      'In Fluxion: share menu → **Import from file…** → choose `clip.fluxion.json`. It opens in Script mode, playing the clip.',
     ),
     P(
       'Options include `--threshold`, `--invert`, `--every` and `--width`; run the script without arguments for the list. Everything runs on your machine. A clip travels inside exported files and share links, but not in JSON specs.',

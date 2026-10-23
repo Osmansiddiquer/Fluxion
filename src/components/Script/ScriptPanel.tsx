@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { useScriptRuntime } from '../../state/scriptRuntime';
-import { registerAssets } from '../../lib/frames/assets';
+import { openGraphWithUndo } from '../../lib/openGraph';
 import { DEMOS } from '../../lib/demos';
 import type { SliderDecl } from '../../lib/script/protocol';
 import CodeEditor from './CodeEditor';
@@ -95,8 +95,8 @@ export default function ScriptPanel({ open = false }: { open?: boolean }) {
           <section className="sp-docs" aria-label="Scripting reference">
             <div className="sp-docs-head">
               <span className="sp-docs-title">Scripting reference</span>
-              <a className="sp-docs-full" href={DOCS_PAGE} target="_blank" rel="noopener" title="Open the full documentation in a new tab">
-                Full docs ↗
+              <a className="sp-docs-full" href={DOCS_PAGE} title="Open the full documentation">
+                Full docs
               </a>
               <button className="icon-btn" title="Close the reference" aria-label="Close the reference" onClick={() => setDocsOpen(false)}>
                 ✕
@@ -177,7 +177,6 @@ const stopScript = () => useScriptRuntime.getState().requestStop();
 function ExamplesMenu() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-  const loadGraph = useStore((s) => s.loadGraph);
   useEffect(() => {
     if (!open) return;
     const off = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
@@ -197,11 +196,9 @@ function ExamplesMenu() {
               role="menuitem"
               onClick={() => {
                 setOpen(false);
-                const g = d.build();
-                const prev = useStore.getState().script?.code ?? '';
-                registerAssets(g.assets);
-                loadGraph(g);
-                useScriptRuntime.setState({ time: 0, playing: true, replaced: prev.trim() && prev !== g.script?.code ? prev : null });
+                // Through the graph menu: registers clip assets, resets the
+                // clock and offers Undo in its notice.
+                openGraphWithUndo(d.build(), d.title);
               }}
             >
               <span className="sp-menu-title">{d.title}</span>

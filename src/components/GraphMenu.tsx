@@ -45,7 +45,8 @@ export default function GraphMenu() {
     loadGraph(g);
     useScriptRuntime.setState({ frame: null, error: null, killed: false, time: 0, playing: true, replaced: null });
     const scripted = !!g.script?.code.trim();
-    if (scripted) useStore.getState().setMode('script');
+    // Show what was opened: its script, or its expressions.
+    useStore.getState().setMode(scripted ? 'script' : 'graph');
     return scripted;
   };
   const applyRef = useRef(applyGraph);

@@ -11,11 +11,10 @@ import { isDerived } from '../../lib/scope';
 import './Docs.css';
 
 // ── Script mode reference hook ──────────────────────────────────────────────
-// Script mode (branch feat/script-mode) ships its own reference as a default-
-// exported, prop-less component at src/components/Script/ScriptDocs.tsx. Until
-// it lands, the Scripting section shows a "coming soon" note. To wire it in,
-// replace the final `= null` on the next line with `= () => import('../Script/ScriptDocs')`.
-const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = null;
+// Script mode ships its own reference as a default-exported, prop-less component
+// (src/components/Script/ScriptDocs.tsx, content loaded lazily); the Scripting
+// section mounts it. Set this to null to show the "coming soon" note instead.
+const SCRIPT_DOCS: (() => Promise<{ default: ComponentType }>) | null = () => import('../Script/ScriptDocs');
 const ScriptDocs = SCRIPT_DOCS ? lazy(SCRIPT_DOCS) : null;
 
 /** Below this width, "Try it" closes the docs so the graph is visible. */
