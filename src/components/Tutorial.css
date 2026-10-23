@@ -227,6 +227,28 @@
   line-height: 1.4;
 }
 
+/* Last card: link onward to the full documentation. */
+.tut-docs-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  padding: 6px 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  border-radius: var(--radius-sm);
+}
+.tut-docs-link span {
+  transition: transform 0.14s var(--ease);
+}
+.tut-docs-link:hover {
+  color: var(--accent-hover);
+}
+.tut-docs-link:hover span {
+  transform: translateX(3px);
+}
+
 /* --- Footer / nav --- */
 .tut-foot {
   display: flex;

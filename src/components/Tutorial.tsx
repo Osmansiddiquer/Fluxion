@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import katex from 'katex';
 import { useStore } from '../store/useStore';
-import type { Entry, FeatureToggles, Projections, Viewport } from '../store/types';
+import { TOUR_EXAMPLES, exampleGraph, type DocExample } from './Docs/examples';
 import { APP_NAME } from '../config';
 import './Tutorial.css';
 
@@ -11,61 +11,9 @@ function Tex({ children, className }: { children: string; className?: string }) 
   return <span className={className} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
-let seed = 0;
-function ex(raw: string, color: string, extra: Partial<Entry> = {}): Entry {
-  return { id: `tut${seed++}`, raw, color, visible: true, expanded: false, ...extra };
-}
-
-const FEATURES: FeatureToggles = {
-  extrema: true,
-  xIntercepts: true,
-  yIntercept: true,
-  endpoints: false,
-  discontinuities: true,
-  intersections: true,
-};
-const PANELS_OFF: Projections = { rightOpen: false, bottomOpen: false, sliceT: 0, sliceY: 1 };
-
-interface Example {
-  title: string;
-  blurb: string;
-  tex: string;
-  entries: Entry[];
-  viewport: Viewport;
-  projections?: Projections;
-}
-
-const EXAMPLES: Example[] = [
-  {
-    title: 'Harmonic motion',
-    blurb: "A 2nd-order ODE solved from its initial conditions — y(0)=0, y'(0)=1.",
-    tex: "y'' = -y",
-    entries: [ex("y'' = -y", '#c74440', { t0: 0, ic: [0, 1], expanded: true })],
-    viewport: { tMin: -1, tMax: 13, yMin: -2, yMax: 2 },
-    projections: { rightOpen: true, bottomOpen: true, sliceT: 2.5, sliceY: 1 },
-  },
-  {
-    title: 'Logistic growth',
-    blurb: 'A nonlinear ODE — population that levels off at its carrying capacity.',
-    tex: 'y\\,\' = y\\,(1 - y/4)',
-    entries: [ex("y' = y (1 - y/4)", '#388c46', { t0: 0, ic: [0.4], expanded: true })],
-    viewport: { tMin: -1, tMax: 11, yMin: -0.5, yMax: 5 },
-  },
-  {
-    title: 'Spiral region',
-    blurb: 'A polar inequality swept over θ — the shaded area inside an Archimedean spiral.',
-    tex: 'r < 2\\theta',
-    entries: [ex('r < 2theta', '#6042a6', { thetaMin: 0, thetaMax: 4 * Math.PI, expanded: true })],
-    viewport: { tMin: -28, tMax: 28, yMin: -18, yMax: 18 },
-  },
-  {
-    title: 'Rose curve',
-    blurb: 'A polar curve r = f(θ). Try editing the 3 to change the number of petals.',
-    tex: 'r = 3\\sin(3\\theta)',
-    entries: [ex('r = 3 sin(3theta)', '#c74440', { expanded: true })],
-    viewport: { tMin: -4.5, tMax: 4.5, yMin: -3, yMax: 3 },
-  },
-];
+type Example = DocExample;
+// The four starter examples are shared with the docs (Docs/examples.ts).
+const EXAMPLES: Example[] = TOUR_EXAMPLES;
 
 const SYNTAX: { tex: string; label: string }[] = [
   { tex: "y'' = -y", label: 'Differential equations — any order & systems' },
@@ -87,7 +35,16 @@ const INSPECT: { icon: string; text: string }[] = [
   { icon: '✦', text: 'Animated drawings: open the Examples in the share menu (Sharingan, cube, …).' },
 ];
 
-export default function Tutorial({ open, onClose }: { open: boolean; onClose: () => void }) {
+export default function Tutorial({
+  open,
+  onClose,
+  onDocs,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** Open the documentation (the last card's "Read the docs →"). */
+  onDocs?: () => void;
+}) {
   const [step, setStep] = useState(0);
   const loadGraph = useStore((s) => s.loadGraph);
   const sigFigs = useStore((s) => s.sigFigs);
@@ -113,13 +70,7 @@ export default function Tutorial({ open, onClose }: { open: boolean; onClose: ()
   if (!open) return null;
 
   const launch = (e: Example) => {
-    loadGraph({
-      entries: e.entries.map((en) => ({ ...en, id: `${en.id}-${Date.now()}` })),
-      viewport: e.viewport,
-      features: FEATURES,
-      projections: e.projections ?? PANELS_OFF,
-      sigFigs,
-    });
+    loadGraph(exampleGraph(e, sigFigs));
     onClose();
   };
 
@@ -194,12 +145,17 @@ export default function Tutorial({ open, onClose }: { open: boolean; onClose: ()
               <div className="tut-examples">
                 {EXAMPLES.map((e) => (
                   <button className="tut-example" key={e.title} onClick={() => launch(e)}>
-                    <Tex className="tut-example-tex">{e.tex}</Tex>
+                    <Tex className="tut-example-tex">{e.tex ?? ''}</Tex>
                     <span className="tut-example-title">{e.title}</span>
                     <span className="tut-example-blurb">{e.blurb}</span>
                   </button>
                 ))}
               </div>
+              {onDocs && (
+                <button className="tut-docs-link" onClick={onDocs}>
+                  Read the docs <span aria-hidden="true">→</span>
+                </button>
+              )}
             </section>
           )}
         </div>

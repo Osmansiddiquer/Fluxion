@@ -6,6 +6,7 @@ import { stripApiParams } from '../lib/api/url';
 import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
 import { registerAssets } from '../lib/frames/assets';
 import { DEMOS } from '../lib/demos';
+import { setOpenGraphHandler } from '../lib/openGraph';
 
 const isPlainSpecLike = (x: unknown) => !!x && typeof x === 'object' && 'expressions' in x;
 
@@ -89,13 +90,22 @@ export default function GraphMenu() {
 
   const current = () => makeGraph(useStore.getState());
 
+  // Replace the graph, keeping the old one for the toast's Undo. Shared with the
+  // docs' "Try it" buttons via lib/openGraph.
+  const openWithUndo = (g: GraphData, title: string) => {
+    const prev = current();
+    applyGraph(g);
+    flash(`Opened “${title}”`, false, prev);
+  };
+  const openWithUndoRef = useRef(openWithUndo);
+  openWithUndoRef.current = openWithUndo;
+  useEffect(() => setOpenGraphHandler((g, title) => openWithUndoRef.current(g, title)), []);
+
   const openDemo = (id: string) => {
     setOpen(false);
     const demo = DEMOS.find((d) => d.id === id);
     if (!demo) return;
-    const prev = current();
-    applyGraph(demo.build());
-    flash(`Opened “${demo.title}”`, false, prev);
+    openWithUndo(demo.build(), demo.title);
   };
 
   const share = async () => {
