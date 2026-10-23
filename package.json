@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fluxion": "vite-node src/cli/main.ts --"
   },
   "dependencies": {
     "@types/katex": "^0.16.8",

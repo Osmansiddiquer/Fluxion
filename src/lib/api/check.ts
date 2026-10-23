@@ -186,8 +186,8 @@ function aspectWarning(spec: NormalizedSpec): Issue | null {
   const { tMin, tMax, yMin, yMax } = spec.viewport;
   const ratio = (yMax - yMin) / (tMax - tMin);
   if (ratio > 0.3 && ratio < 1.6) return null;
-  const shown = ((tMax - tMin) * TYPICAL_ASPECT).toPrecision(2);
-  const c = ((yMin + yMax) / 2).toPrecision(3);
+  const shown = Number(((tMax - tMin) * TYPICAL_ASPECT).toPrecision(2));
+  const c = Number(((yMin + yMax) / 2).toPrecision(3));
   return {
     path: 'viewport',
     message:
@@ -203,7 +203,10 @@ export function checkSpec(input: unknown): CheckReport {
   const g = specToGraph(v.spec);
   const sem = checkGraph(g);
   const errors = sem.errors;
-  const aspect = aspectWarning(v.spec);
+  // Only when the caller asked for a y-range (the default one is never 'wrong').
+  const vpIn = (input as { viewport?: Record<string, unknown> } | null)?.viewport;
+  const askedY = !!vpIn && typeof vpIn === 'object' && (vpIn.ymin !== undefined || vpIn.ymax !== undefined);
+  const aspect = askedY ? aspectWarning(v.spec) : null;
   return {
     ok: errors.length === 0,
     errors,

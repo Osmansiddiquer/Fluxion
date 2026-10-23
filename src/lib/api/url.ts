@@ -120,9 +120,10 @@ export function safeDecode(s: string): string {
 
 /**
  * Percent-encode a value for a URL fragment/query, but leave characters that are
- * safe there (and common in math) readable: = , / : ; @ $ ^ |. Characters that
- * break auto-linking in chat/markdown — spaces, quotes, ( ) [ ] { } < > ' — and
- * the separators & # % + are always encoded.
+ * legal there (and common in math) readable: = , / : ; @ $ ^ ( ) * !. Characters
+ * that break auto-linking in chat/markdown — spaces, quotes, [ ] { } < > | — and
+ * the separators & # % + are always encoded. (Parentheses stay: they're valid
+ * URL characters and markdown/linkifiers accept them when balanced.)
  */
 export function encodeValue(s: string): string {
   return encodeURIComponent(s)
@@ -134,7 +135,7 @@ export function encodeValue(s: string): string {
     .replace(/%40/g, '@')
     .replace(/%24/g, '$')
     .replace(/%5E/g, '^')
-    .replace(/[()'!*]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+    .replace(/'/g, '%27');
 }
 
 // ── simple params form ───────────────────────────────────────────────────────

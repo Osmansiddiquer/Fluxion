@@ -76,9 +76,10 @@ describe('safeDecode / encodeValue', () => {
     expect(safeDecode('%E2%89%A4')).toBe('≤');
   });
   it('keeps math readable but encodes separators and link-breaking chars', () => {
-    expect(encodeValue("y'' = -y + sin(t)")).toBe('y%27%27%20=%20-y%20%2B%20sin%28t%29');
+    expect(encodeValue("y'' = -y + sin(t)")).toBe('y%27%27%20=%20-y%20%2B%20sin(t)');
     expect(encodeValue('a^2/b,c:d')).toBe('a^2/b,c:d');
     expect(encodeValue('y>0 & y<x #x 50%')).toBe('y%3E0%20%26%20y%3Cx%20%23x%2050%25');
+    expect(encodeValue('{"a":[1]}|')).toBe('%7B%22a%22:%5B1%5D%7D%7C');
   });
   it('is undone by safeDecode', () => {
     for (const s of ["y'' = -0.2y' - sin(y)", 'r < 2θ & r > 1', '{"a":[1,2]}', '100% #1 + 2*3!']) {
@@ -255,10 +256,14 @@ describe('buildLink', () => {
   it('defaults to the compressed format', async () => {
     expect(await buildLink(spec)).toMatch(/#z=[A-Za-z0-9_-]+$/);
   });
-  it('produces links that survive markdown / chat auto-linking (no spaces, quotes or parens)', async () => {
+  it('produces links that survive markdown / chat auto-linking (no spaces, quotes, brackets)', async () => {
     for (const format of ['z', 'json', 'b64', 'params'] as const) {
-      expect(await buildLink(spec, { format })).not.toMatch(/[\s"'()<>{}[\]]/);
+      const link = await buildLink(spec, { format });
+      expect(link).not.toMatch(/[\s"'<>{}[\]|\\]/);
+      // Parentheses may appear (readable math) but always balanced.
+      expect(link.split('(').length).toBe(link.split(')').length);
     }
+    expect(await buildLink(spec, { format: 'z' })).toMatch(/^[\w:/.#=-]+$/);
   });
   it('honours a custom base URL and replaces an existing fragment', async () => {
     expect(await buildLink(spec, { base: 'http://localhost:5173/#old', format: 'params' })).toMatch(

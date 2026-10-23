@@ -128,6 +128,8 @@ describe('checkSpec', () => {
     const w = r.warnings.find((x) => x.path === 'viewport');
     expect(w?.message).toMatch(/same scale.*about 15 units centred on 500/);
     expect(checkSpec({ expressions: ['y=x'], viewport: { xmin: 0, xmax: 20, ymin: -7, ymax: 7 } }).warnings).toEqual([]);
+    // No y-range requested → nothing to warn about.
+    expect(checkSpec({ expressions: ['y=x'], viewport: { xmin: 0, xmax: 2 } }).warnings).toEqual([]);
     expect(checkSpec({ expressions: ['y=x'], viewport: { xmin: -100, xmax: 100, ymin: -1, ymax: 1 } }).warnings[0].path).toBe('viewport');
   });
 
