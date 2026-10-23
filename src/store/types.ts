@@ -102,3 +102,20 @@ export interface Projections {
   sliceTExpr?: string;
   sliceYExpr?: string;
 }
+
+/** Which editor the sidebar shows: the expression list or the script editor. */
+export type AppMode = 'graph' | 'script';
+
+/**
+ * A Script-mode program (JavaScript run in the sandbox) plus its state. Lives
+ * beside the expression list; both draw on the same canvas.
+ */
+export interface ScriptDoc {
+  code: string;
+  /** Current values of the script's slider() controls, by name. */
+  sliders?: Record<string, number>;
+  /** Imported clips the script can play with clip(name): name → asset id. */
+  clips?: Record<string, string>;
+  /** Show the script's drawing (default true). */
+  visible?: boolean;
+}

@@ -273,3 +273,66 @@ a.report-bug {
     opacity: 1;
   }
 }
+
+/* Graph | Script mode switch (topbar). */
+.mode-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-left: 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+.mode-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  transition: background 0.12s var(--ease), color 0.12s var(--ease), box-shadow 0.12s var(--ease);
+}
+.mode-seg-btn:hover {
+  color: var(--text);
+}
+.mode-seg-btn.active {
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow-sm);
+}
+.script-panel-loading {
+  background: var(--surface);
+}
+@media (max-width: 760px) {
+  .mode-seg {
+    margin-left: 0;
+  }
+  .mode-seg-btn {
+    padding: 0 10px;
+  }
+}
+@media (max-width: 480px) {
+  /* Phones: an icon-only Graph | Script switch, and no sig-figs selector or
+     wordmark, so every header button (?, bug report, share, theme, reset) keeps
+     its place without overflowing. */
+  .topbar {
+    gap: 6px;
+  }
+  .mode-seg-btn {
+    width: 30px;
+    padding: 0;
+    justify-content: center;
+  }
+  .mode-seg-label {
+    display: none;
+  }
+  .topbar .sigfig,
+  .brand-name,
+  .beta-tag {
+    display: none;
+  }
+}

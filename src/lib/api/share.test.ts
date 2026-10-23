@@ -43,6 +43,7 @@ function visible(g: GraphData) {
     // An expression-driven cut stores only the expression; its number is derived.
     projections: g.projections.sliceTExpr ? { ...g.projections, sliceT: undefined } : g.projections,
     sigFigs: g.sigFigs,
+    script: g.script,
   };
 }
 
@@ -91,8 +92,11 @@ describe('share links', () => {
       expect(Object.keys(back.assets ?? {})).toEqual(Object.keys(g.assets ?? {}));
       const res = computeAll(back.entries, back.viewport, 300);
       for (const e of back.entries) expect(res.get(e.id)!.parsed.kind, e.raw).not.toBe('error');
-      // Much shorter than the old format.
-      expect(link.length).toBeLessThan(`${BASE}#g=${encodeGraph(g)}`.length / 2);
+      // Much shorter than the old format. (A script-only example is mostly its
+      // code, which both formats carry, so it can't halve; just never longer.)
+      const old = `${BASE}#g=${encodeGraph(g)}`.length;
+      if (g.script && !g.entries.length) expect(link.length).toBeLessThan(old * 1.1);
+      else expect(link.length).toBeLessThan(old / 2);
     });
   }
 

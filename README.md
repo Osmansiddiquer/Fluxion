@@ -29,7 +29,48 @@ intersections.
 | `A = (1, 2)` then `(A, B)` | Point-valued variables; a tuple of them draws a line |
 | `a = 2` | A variable you can slide, animate, and reuse in other equations |
 
-### Scripting & animation
+## Script mode (JavaScript drawings and animation)
+
+Switch the header to **Script** and the sidebar becomes a code editor (CodeMirror,
+with autocomplete and inline errors) next to the same canvas. A script is plain
+JavaScript with a drawing API built in, drawn on the graph's own axes:
+
+```js
+// Three tomoe orbit the pupil.
+function tomoe(angle, size) {
+  group({ translate: [1.25 * cos(angle), 1.25 * sin(angle)], rotate: angle }, () => {
+    path({ fill: "#120a0a" })
+      .arc(0, 0, 2 * size, PI / 2, -PI / 2)
+      .arc(0, -size, size, -PI / 2, PI / 2)
+      .arc(0, size, size, -PI / 2, -3 * PI / 2)
+      .close()
+  })
+}
+circle(0, 0, 2, { fill: "#b3121b", color: "#2a0505", width: 3 })
+circle(0, 0, 0.42, { fill: "#0b0b0b" })
+for (const k of range(3)) tomoe(-time + k * TAU / 3, 0.22)
+```
+
+- **Shapes** `circle ellipse rect polygon polyline line arrow point arc text label path curve plot`,
+  **style** objects (`color`, `fill`, `width`, `dash`, `opacity`, gradients), **colour**
+  helpers (`hsv`, `hsl`, `rgb`, `mix`, `alpha`), **transforms** (`group`, `push`/`pop`),
+  **animation** (`time`, `loop`, `keyframes`, `ease`, `lerp`), **sliders**
+  (`slider("k", 0, 5)` shows a real slider), **3D** (`camera`, `project3d`).
+- **Reads Graph mode**: `graph.ode("theta")(t)` is the solution of the ODE you typed in
+  Graph mode, at any t — the *Pendulum* example swings along it. Also `graph.fn`,
+  `graph.value`.
+- **Clips**: import a short video, GIF or image sequence in the browser (Script mode →
+  Clips), then `clip("name").play()`.
+- **Reference** button: every function with a runnable snippet (*Try it* / *Insert*).
+- **Sandboxed**: scripts run in a Web Worker inside an opaque-origin iframe with a
+  no-network CSP, and are stopped if they run too long. Opening someone's link with a
+  script is safe; it can draw, nothing else.
+- Scripts travel in share links, exported files and the JSON spec (`"script"`). Check
+  one headlessly with `npm run fluxion -- script file.js`.
+
+### Expression scripting
+
+The expression rows can also draw and animate, without code:
 
 | Input | Meaning |
 | --- | --- |
@@ -50,8 +91,9 @@ fill + opacity for closed shapes (parametric, polar, polygons, frames), and colo
 `mixc(#ff0000, #0000ff, u)` — so colour and opacity animate with your variables.
 Entries draw in list order (later rows on top). Variables can play together on one
 clock (batched per frame), step frame-by-frame, and `autoplay` when a graph opens.
-**Examples** (share menu): a rotating Sharingan, a rotating cube, an
-eye → Sharingan → Mangekyō morph, a blooming mandala, and a traced silhouette clip.
+**Examples** (share menu, or Script mode → Examples) are short scripts: a rotating
+Sharingan, a rotating cube, an eye → Sharingan → Mangekyō morph, a blooming mandala, a
+pendulum driven by a Graph-mode ODE, and a traced silhouette clip.
 Each also opens from a link, e.g.
 [`#example=mandala`](https://osmansiddiquer.github.io/Fluxion/#example=mandala).
 
@@ -62,7 +104,9 @@ ffmpeg -i clip.mp4 -vf "fps=30,scale=192:144" frames/%05d.pgm   # extract frames
 npx vite-node scripts/frames-import.ts -- frames clip.json --fps 30
 ```
 
-then **Import from file…** `clip.json`. Frames are traced into polygons and stored
+then **Import from file…** `clip.json` (it opens in Script mode playing
+`clip("clip").play()`). Short clips can be imported right in the app instead: Script
+mode → **Clips**. Frames are traced into polygons and stored
 compactly (≈150–500 bytes per frame); the graph carries the clip, which is kept in
 browser storage separately from your per-tab graph state.
 
@@ -136,6 +180,7 @@ npm install
 npm run dev        # local dev server
 npm run build      # static production build into dist/ (app + pre-rendered docs in dist/docs/)
 npm test           # Vitest suites (src/**/*.test.ts)
+node scripts/e2e-script-mode.cjs http://localhost:5173/   # browser checks of Script mode (needs playwright-core)
 npm run preview    # serve the production build locally
 ```
 

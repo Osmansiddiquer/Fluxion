@@ -142,7 +142,7 @@ export function encodeValue(s: string): string {
 // ── simple params form ───────────────────────────────────────────────────────
 
 /** Graph-level params. */
-export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers', 'grid'] as const;
+export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers', 'grid', 'script'] as const;
 /** Per-expression params; each applies to the most recent `expr`. */
 export const EXPR_PARAMS = [
   'color',
@@ -198,7 +198,7 @@ const MARKER_KEYS = ['extrema', 'xIntercepts', 'yIntercept', 'endpoints', 'disco
 const HEX = /^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
 const ALL_PARAMS: readonly string[] = ['expr', ...GLOBAL_PARAMS, ...EXPR_PARAMS];
 /** Keys that make a query string / fragment an API payload. */
-const PAYLOAD_KEYS = ['expr', 'spec', 'z', 'g', 'gz', 'example'];
+const PAYLOAD_KEYS = ['expr', 'spec', 'z', 'g', 'gz', 'example', 'script'];
 
 /**
  * Split `a=1&b=2` into pairs. An `&` only separates parameters when it's followed
@@ -264,6 +264,8 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
     }
     if ((VIEWPORT_PARAMS as readonly string[]).includes(key)) {
       viewport[key] = numish(value);
+    } else if (key === 'script') {
+      spec.script = value;
     } else if (key === 'sigfigs') {
       spec.sigFigs = numish(value) as number;
     } else if (key === 'panels') {
@@ -332,6 +334,7 @@ export function specToParams(spec: FluxionSpec): string | null {
   }
   if (spec.viewport) for (const k of VIEWPORT_PARAMS) if (spec.viewport[k] !== undefined) push(k, spec.viewport[k]!);
   if (spec.sigFigs !== undefined) push('sigfigs', spec.sigFigs);
+  if (spec.script !== undefined) push('script', spec.script);
   if (spec.panels) {
     const { right, bottom, ...rest } = spec.panels;
     if (Object.keys(rest).length) return null;
@@ -435,7 +438,7 @@ export async function readUrlPayload(hash: string, search: string): Promise<UrlP
 
 /** Cheap synchronous test: does this location carry a graph? (e.g. to skip the tour) */
 export function hasUrlPayload(hash: string, search: string): boolean {
-  const re = /(?:^[#?]|&)(?:expr|spec|z|g|gz|example)=/i;
+  const re = /(?:^[#?]|&)(?:expr|spec|z|g|gz|example|script)=/i;
   return re.test(hash) || re.test(search);
 }
 
@@ -485,7 +488,8 @@ export async function buildLink(spec: FluxionSpec, opts: LinkOptions = {}): Prom
  * graphs (`#gz=`). Old `#g=` links still load.
  */
 export async function buildShareLink(g: GraphData, base: string): Promise<string> {
-  if (g.assets || g.entries.some((e) => e.frames)) {
+  // Frame clips (from rows or the script's clip table) only travel in GraphData.
+  if (g.assets || g.entries.some((e) => e.frames) || Object.keys(g.script?.clips ?? {}).length) {
     const json = JSON.stringify({ ...g, entries: g.entries.map(({ id: _id, expanded: _x, ...e }) => e) });
     return withBase(base, `gz=${bytesToBase64Url(await deflateText(json))}`);
   }

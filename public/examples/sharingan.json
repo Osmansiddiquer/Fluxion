@@ -1,71 +1,6 @@
 {
   "version": 1,
-  "expressions": [
-    {
-      "expr": "a = 0",
-      "min": 0,
-      "max": 2.0943951023931953,
-      "anim": "loop",
-      "speed": 0.6,
-      "autoplay": true
-    },
-    {
-      "expr": "Fx(u, s) = u < 1 ? 2s cos(pi/2 - pi u) : (u < 2 ? s cos(pi*(u - 1) - pi/2) : s cos(-pi/2 - pi*(u - 2)))",
-      "color": "#000000"
-    },
-    {
-      "expr": "Fy(u, s) = u < 1 ? 2s sin(pi/2 - pi u) : (u < 2 ? s sin(pi*(u - 1) - pi/2) - s : s sin(-pi/2 - pi*(u - 2)) + s)",
-      "color": "#000000"
-    },
-    {
-      "expr": "p(k) = a + 2pi k/3",
-      "color": "#000000"
-    },
-    {
-      "expr": "(2 cos(t), 2 sin(t))",
-      "color": "#2a0505",
-      "lineWidth": 3,
-      "fill": true,
-      "fillOpacity": 1,
-      "fillColor": "#b3121b"
-    },
-    {
-      "expr": "(1.55 cos(t), 1.55 sin(t))",
-      "color": "#d8262d",
-      "lineWidth": 0,
-      "fill": true,
-      "fillOpacity": 0.55
-    },
-    {
-      "expr": "(1.25 cos(t), 1.25 sin(t))",
-      "color": "#4a0c0c",
-      "lineWidth": 1.6,
-      "colorExpr": "rgba(60, 8, 8, 0.85)"
-    },
-    {
-      "expr": "(0.42 cos(t), 0.42 sin(t))",
-      "color": "#0b0b0b",
-      "lineWidth": 0,
-      "fill": true,
-      "fillOpacity": 1
-    },
-    {
-      "expr": "(1.25 cos(p(k)) + rotx(Fx(t, 0.22), Fy(t, 0.22), p(k)), 1.25 sin(p(k)) + roty(Fx(t, 0.22), Fy(t, 0.22), p(k))) for k = 0..2",
-      "color": "#0b0b0b",
-      "thetaMin": 0,
-      "thetaMax": 3,
-      "lineWidth": 0,
-      "fill": true,
-      "fillOpacity": 1
-    },
-    {
-      "expr": "(0.24 cos(t) - 0.8, 0.15 sin(t) + 0.9)",
-      "color": "#ffffff",
-      "lineWidth": 0,
-      "fill": true,
-      "fillOpacity": 0.7
-    }
-  ],
+  "expressions": [],
   "viewport": {
     "xmin": -4.5,
     "xmax": 4.5,
@@ -83,5 +18,6 @@
   "panels": {
     "right": false,
     "bottom": false
-  }
+  },
+  "script": "// Sharingan: three tomoe orbit the pupil.\nloop(4)                          // seconds per loop\nconst spin = -time / 4 * TAU / 3 // a third of a turn per loop: the pattern looks the same\n\n// One tomoe (\"comma\"): a round back, then in under the head and out round the tail.\n// It sits on the ring at `angle`, turned to follow it.\nfunction tomoe(angle, size) {\n  const [x, y] = [1.25 * cos(angle), 1.25 * sin(angle)]\n  group({ translate: [x, y], rotate: angle }, () => {\n    path({ fill: \"#120a0a\" })\n      .arc(0, 0, 2 * size, PI / 2, -PI / 2)\n      .arc(0, -size, size, -PI / 2, PI / 2)\n      .arc(0, size, size, -PI / 2, -3 * PI / 2)\n      .close()\n  })\n}\n\ncircle(0, 0, 2, { fill: \"#b3121b\", color: \"#2a0505\", width: 3 })   // iris\ncircle(0, 0, 1.55, { fill: alpha(\"#e0393f\", 0.5) })                 // inner glow\ncircle(0, 0, 1.25, { color: \"rgba(60, 8, 8, 0.85)\", width: 1.6 })   // the ring the tomoe ride on\ncircle(0, 0, 0.42, { fill: \"#0b0b0b\" })                             // pupil\nfor (const k of range(3)) tomoe(spin + k * TAU / 3, 0.22)\nellipse(-0.8, 0.9, 0.24, 0.15, { fill: alpha(\"white\", 0.7) })       // highlight\n"
 }

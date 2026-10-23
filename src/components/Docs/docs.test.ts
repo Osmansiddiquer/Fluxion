@@ -94,6 +94,13 @@ describe('docs content structure', () => {
       for (const b of s.blocks) if (b.type === 'table') for (const r of b.rows) expect(r.length, r.join(' | ')).toBe(b.head.length);
   });
 
+  it('the Script mode reference documents every Script API name', async () => {
+    const { DOCS } = await import('../Script/docsContent');
+    const { API_NAMES } = await import('../../lib/script/api');
+    const text = JSON.stringify(DOCS);
+    expect(API_NAMES.filter((n) => !new RegExp(`\\b${n}\\b`).test(text))).toEqual([]);
+  });
+
   it('the home page offers the tour and the Scripting section has the Script docs slot', () => {
     expect(SECTIONS[0].blocks.some((b) => b.type === 'tour')).toBe(true);
     expect(findSection('scripting')!.blocks.some((b) => b.type === 'script-docs')).toBe(true);

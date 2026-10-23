@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import PlotCanvas from './components/Plot/PlotCanvas';
 import Sidebar from './components/Sidebar/Sidebar';
 import RightPanel from './components/Projections/RightPanel';
@@ -12,6 +12,7 @@ import HelpMenu, { type HelpMenuHandle } from './components/HelpMenu';
 import { parseDocsHash } from './components/Docs/hash';
 import Resizer from './components/Resizer';
 import AnimationLoop from './components/AnimationLoop';
+import ModeSwitch from './components/ModeSwitch';
 import { ResultsProvider } from './state/results';
 import { useStore } from './store/useStore';
 import { APP_NAME } from './config';
@@ -20,10 +21,16 @@ import './App.css';
 
 // `?tour` opens the getting-started tour (the docs page's "Take the tour" link).
 const wantsTour = () => typeof location !== 'undefined' && new URLSearchParams(location.search).has('tour');
+// Script mode (editor, reference, sandbox runtime) loads on demand, so Graph mode's
+// first load doesn't pay for it.
+const ScriptPanel = lazy(() => import('./components/Script/ScriptPanel'));
+const ScriptEngine = lazy(() => import('./components/Script/ScriptEngine'));
 
 export default function App() {
   const resetView = useStore((s) => s.resetView);
   const theme = useStore((s) => s.theme);
+  const mode = useStore((s) => s.mode ?? 'graph');
+  const hasScript = useStore((s) => !!s.script?.code.trim());
 
   // On phones the sidebar becomes a slide-in drawer; on desktop CSS keeps it
   // docked and this flag is irrelevant. Closed by default so the graph leads.
@@ -69,7 +76,7 @@ export default function App() {
         <header className="topbar">
           <button
             className="icon-btn sidebar-toggle"
-            title={sidebarOpen ? 'Hide expressions' : 'Show expressions'}
+            title={sidebarOpen ? 'Hide the panel' : mode === 'script' ? 'Show the script' : 'Show expressions'}
             aria-label="Toggle expressions panel"
             aria-expanded={sidebarOpen}
             onClick={() => setSidebarOpen((o) => !o)}
@@ -81,6 +88,7 @@ export default function App() {
             <span className="brand-name">{APP_NAME}</span>
             <span className="beta-tag">beta</span>
           </div>
+          <ModeSwitch />
           <div className="topbar-spacer" />
           <HelpMenu ref={helpRef} onTour={() => setTour(true)} />
           <a
@@ -101,7 +109,13 @@ export default function App() {
           </button>
         </header>
         <div className="body">
-          <Sidebar open={sidebarOpen} />
+          {mode === 'script' ? (
+            <Suspense fallback={<aside className="sidebar script-panel-loading" style={{ width: 500 }} />}>
+              <ScriptPanel open={sidebarOpen} />
+            </Suspense>
+          ) : (
+            <Sidebar open={sidebarOpen} />
+          )}
           <Resizer />
           <main className="stage">
             <div className="top-row">
@@ -120,6 +134,11 @@ export default function App() {
         </div>
         <Tutorial open={tour} onClose={closeTour} />
         <AnimationLoop />
+        {(hasScript || mode === 'script') && (
+          <Suspense fallback={null}>
+            <ScriptEngine />
+          </Suspense>
+        )}
       </div>
     </ResultsProvider>
   );

@@ -3,7 +3,7 @@ import { loadFromUrl, sanitizeGraph } from './load';
 import { encodeGraph, makeGraph, type GraphData } from '../graphFile';
 import { checkSpec } from './check';
 import { DEFAULT_FEATURES, graphToSpec, specToGraph, validateSpec } from './spec';
-import { DEMOS } from '../demos';
+import { EXPRESSION_DEMOS as DEMOS } from '../demos';
 import { registerAssets, _resetAssets, assetId } from '../frames/assets';
 import { encodeClip } from '../frames/codec';
 import { computeAll } from '../compute';

@@ -29,6 +29,18 @@
   --axis-text: #6b7686;
   --cursor: #ef8f1c;
 
+  /* Script mode code colours */
+  --code-keyword: #8a3ab9;
+  --code-number: #b35a00;
+  --code-string: #2f7d32;
+  --code-comment: #8b95a3;
+  --code-fn: #2d64a8;
+  --code-def: #1d5e8c;
+  --code-prop: #7a4b1f;
+  --code-punct: #5d6877;
+  --code-active-line: rgba(45, 112, 179, 0.05);
+  --code-selection: rgba(45, 112, 179, 0.18);
+
   --radius-sm: 7px;
   --radius: 11px;
   --radius-lg: 15px;
@@ -70,6 +82,16 @@
   --axis: #5c6675;
   --axis-text: #8a95a3;
   --cursor: #f0a000;
+  --code-keyword: #c792ea;
+  --code-number: #f2a65a;
+  --code-string: #9ccc65;
+  --code-comment: #6c7686;
+  --code-fn: #82aaff;
+  --code-def: #7fc8f8;
+  --code-prop: #e6b98a;
+  --code-punct: #9aa6b4;
+  --code-active-line: rgba(130, 170, 255, 0.06);
+  --code-selection: rgba(130, 170, 255, 0.22);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
   --shadow-lg: 0 14px 40px rgba(0, 0, 0, 0.5);
@@ -99,6 +121,16 @@
     --axis: #5c6675;
     --axis-text: #8a95a3;
     --cursor: #f0a000;
+    --code-keyword: #c792ea;
+    --code-number: #f2a65a;
+    --code-string: #9ccc65;
+    --code-comment: #6c7686;
+    --code-fn: #82aaff;
+    --code-def: #7fc8f8;
+    --code-prop: #e6b98a;
+    --code-punct: #9aa6b4;
+    --code-active-line: rgba(130, 170, 255, 0.06);
+    --code-selection: rgba(130, 170, 255, 0.22);
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
     --shadow-lg: 0 14px 40px rgba(0, 0, 0, 0.5);

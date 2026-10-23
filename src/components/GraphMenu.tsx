@@ -6,6 +6,8 @@ import { buildShareLink, stripApiParams } from '../lib/api/url';
 import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
 import { registerAssets } from '../lib/frames/assets';
 import { DEMOS } from '../lib/demos';
+import { setOpenGraphHandler } from '../lib/openGraph';
+import { useScriptRuntime } from '../state/scriptRuntime';
 
 const isPlainSpecLike = (x: unknown) => !!x && typeof x === 'object' && 'expressions' in x;
 
@@ -37,9 +39,15 @@ export default function GraphMenu() {
 
   // Every load path goes through here: frame-sequence assets must be registered
   // before the entries that reference them are computed.
-  const applyGraph = (g: GraphData) => {
+  // A graph that carries a script opens in Script mode, with a fresh clock.
+  const applyGraph = (g: GraphData): boolean => {
     registerAssets(g.assets);
     loadGraph(g);
+    useScriptRuntime.setState({ frame: null, error: null, killed: false, time: 0, playing: true, replaced: null });
+    const scripted = !!g.script?.code.trim();
+    // Show what was opened: its script, or its expressions.
+    useStore.getState().setMode(scripted ? 'script' : 'graph');
+    return scripted;
   };
   const applyRef = useRef(applyGraph);
   applyRef.current = applyGraph;
@@ -64,8 +72,9 @@ export default function GraphMenu() {
       loadFromUrl(hash, search).then((r) => {
         if (!r) return;
         if (live) {
-          if (r.graph) applyRef.current(r.graph);
+          const scripted = r.graph ? applyRef.current(r.graph) : false;
           if (r.message) flashRef.current(r.message, r.tone === 'error');
+          else if (scripted) flashRef.current('This graph includes a script. It runs sandboxed: it can draw, nothing else.');
         }
         history.replaceState(null, '', pathname + stripApiParams(search));
       });
@@ -89,13 +98,22 @@ export default function GraphMenu() {
 
   const current = () => makeGraph(useStore.getState());
 
+  // Replace the graph, keeping the old one for the toast's Undo. Shared with
+  // Script mode's Examples menu via lib/openGraph.
+  const openWithUndo = (g: GraphData, title: string) => {
+    const prev = current();
+    applyGraph(g);
+    flash(`Opened “${title}”`, false, prev);
+  };
+  const openWithUndoRef = useRef(openWithUndo);
+  openWithUndoRef.current = openWithUndo;
+  useEffect(() => setOpenGraphHandler((g, title) => openWithUndoRef.current(g, title)), []);
+
   const openDemo = (id: string) => {
     setOpen(false);
     const demo = DEMOS.find((d) => d.id === id);
     if (!demo) return;
-    const prev = current();
-    applyGraph(demo.build());
-    flash(`Opened “${demo.title}”`, false, prev);
+    openWithUndo(demo.build(), demo.title);
   };
 
   const share = async () => {
