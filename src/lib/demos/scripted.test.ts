@@ -25,7 +25,9 @@ const run = (g: GraphData, time: number) =>
     view: { xmin: g.viewport.tMin, xmax: g.viewport.tMax, ymin: g.viewport.yMin, ymax: g.viewport.yMax },
   });
 
-describe.each(DEMOS.map((d) => [d.id, d] as const))('example %s', (_id, demo) => {
+// Script mode examples (the Graph-mode "sunset" scene is tested in sunset.test.ts).
+const SCRIPTED = DEMOS.filter((d) => !!d.build().script?.code.trim());
+describe.each(SCRIPTED.map((d) => [d.id, d] as const))('example %s', (_id, demo) => {
   const g = demo.build();
 
   it('is a script graph that survives a file / link round-trip', () => {

@@ -39,5 +39,12 @@
     "title": "Silhouette clip",
     "blurb": "A traced black-and-white video clip played with clip(\"apple\").play() — the Bad Apple pipeline.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=silhouette"
+  },
+  {
+    "id": "sunset",
+    "title": "Cinematic sunset",
+    "blurb": "Graph mode: a gradient sky, sun glow and god-rays, parallax layers, spline silhouettes, letterboxed at 24 fps.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=sunset",
+    "spec": "examples/sunset.json"
   }
 ]

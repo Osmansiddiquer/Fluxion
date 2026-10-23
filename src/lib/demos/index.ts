@@ -4,6 +4,7 @@ import { cubeDemo } from './cube';
 import { mangekyoDemo } from './mangekyo';
 import { silhouetteDemo } from './silhouette';
 import { mandalaDemo } from './mandala';
+import { sunsetDemo } from './sunset';
 import { cubeScript, mandalaScript, mangekyoScript, pendulumScript, sharinganScript, silhouetteScript } from './scripted';
 
 export interface Demo {
@@ -51,6 +52,12 @@ export const DEMOS: Demo[] = [
     title: 'Silhouette clip',
     blurb: 'A traced black-and-white video clip played with clip("apple").play() — the Bad Apple pipeline.',
     build: silhouetteScript,
+  },
+  {
+    id: 'sunset',
+    title: 'Cinematic sunset',
+    blurb: 'Graph mode: a gradient sky, sun glow and god-rays, parallax layers, spline silhouettes, letterboxed at 24 fps.',
+    build: sunsetDemo,
   },
 ];
 

@@ -1,0 +1,125 @@
+{
+  "version": 1,
+  "expressions": [
+    {
+      "expr": "T = 0",
+      "min": 0,
+      "max": 24,
+      "anim": "loop",
+      "speed": 0.16666666666666666,
+      "autoplay": true
+    },
+    {
+      "expr": "((-18, -8), (18, -8), (18, 8), (-18, 8))",
+      "color": "#0b1d3a",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "linear(0, 7, 0, -3, #0b1d3a, #5a3a7a, #f28c38)"
+    },
+    {
+      "expr": "(3.2cos(t) + 5, 3.2sin(t) + 0.5)",
+      "color": "#ffd7a0",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "radial(5, 0.5, 3.2, rgba(255, 245, 215, 1), rgba(255, 200, 120, 0.55), rgba(255, 140, 60, 0))",
+      "blend": "screen"
+    },
+    {
+      "expr": "((5, 0.5), (5 + 16cos(a - 0.035), 0.5 + 16sin(a - 0.035)), (5 + 16cos(a + 0.035), 0.5 + 16sin(a + 0.035))) where a = 0.35k + 0.04sin(pi*T/6 + k) for k = 0..17",
+      "color": "#ffd2a0",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "rgba(255, 210, 150, 0.04 + 0.03sin(pi*T/6 + k))",
+      "blend": "add"
+    },
+    {
+      "expr": "(1.1cos(t) + 5, 1.1sin(t) + 0.5)",
+      "color": "#fff3d6",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "#fff3d6",
+      "glow": 24
+    },
+    {
+      "expr": "far = layer(-0.6sin(pi*T/12), 0)",
+      "color": "#000000"
+    },
+    {
+      "expr": "((-19, -8), spline((-19, -1.2), (-13, 1.1), (-8, -0.4), (-2, 1.7), (3, -0.1), (8, 1.3), (13, -0.5), (19, 0.6)), (19, -8))",
+      "color": "#3b2f5c",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "#3b2f5c",
+      "layer": "far"
+    },
+    {
+      "expr": "(s*cos(t) + mod(4.5k - 5T/3, 40) - 20, 0.42s*sin(t) + 3.6 + 0.45*mod(k, 3)) where s = 1.3 + 0.3sin(k) for k = 0..8",
+      "color": "#ffd9cc",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 0.55,
+      "fillColor": "rgb(255, 225 - 7k, 205)",
+      "samples": 48
+    },
+    {
+      "expr": "near = layer(-1.5sin(pi*T/12), 0)",
+      "color": "#000000"
+    },
+    {
+      "expr": "((-19, -8), spline((-19, -3.4), (-11, -2.3), (-5, -3.7), (2, -2.45), (8, -3.4), (14, -2.2), (19, -3)), (19, -8))",
+      "color": "#120d1f",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "#120d1f",
+      "layer": "near"
+    },
+    {
+      "expr": "((1.55, -2.5), (1.7, -1.3), spline((1.75, -0.95), (1.85, -0.75)), bezier((1.9, -0.25), (2.3, -0.25), (2.3, -0.75)), arc((2.05, -0.95), -1.2), (2.45, -2.5))",
+      "color": "#000000",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "#07050c",
+      "layer": "near"
+    },
+    {
+      "expr": "(2.15 + t, -0.85 + 0.14t*sin(6t - 2pi*T))",
+      "color": "#ff3b30",
+      "thetaMin": 0,
+      "thetaMax": 1.3,
+      "lineWidth": 4,
+      "glow": 10,
+      "layer": "near"
+    },
+    {
+      "expr": "camera = layer(0.05sin(20pi*T)*pulse(mod(T, 8), 0, 0.4), 0)",
+      "color": "#000000"
+    }
+  ],
+  "viewport": {
+    "xmin": -16,
+    "xmax": 16,
+    "ymin": -6.7,
+    "ymax": 6.7
+  },
+  "features": {
+    "extrema": false,
+    "xIntercepts": false,
+    "yIntercept": false,
+    "discontinuities": false,
+    "intersections": false,
+    "grid": false
+  },
+  "panels": {
+    "right": false,
+    "bottom": false
+  },
+  "aspect": 2.39,
+  "fps": 24
+}

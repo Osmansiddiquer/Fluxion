@@ -4,6 +4,7 @@
  *
  *   npx vite-node scripts/bench.ts            # default 120 frames
  *   npx vite-node scripts/bench.ts -- 300     # more frames
+ *   npx vite-node scripts/bench.ts -- tuned   # clouds with their own samples: 96
  *
  * Each frame advances the clock T by 1/30 s, so every T-dependent curve misses
  * the result cache (as in real playback), then resolves every entry's style.
@@ -16,10 +17,11 @@ import { parseEntry } from '../src/lib/math/parse';
 import { computeSignature } from '../src/state/signature';
 
 const frames = Number(process.argv.find((a) => /^\d+$/.test(a)) ?? 120);
+const tuned = process.argv.includes('tuned');
 const SAMPLES = 2000; // ≈ a 1333-px-wide plot (sampleCount = 1.5 × window width)
 
 function frame(T: number) {
-  const entries = benchScene(T);
+  const entries = benchScene(T, tuned);
   computeSignature(entries);
   const results = computeAll(entries, BENCH_VIEWPORT, SAMPLES);
   const scope = buildVarScope(entries);
@@ -45,5 +47,5 @@ const mean = times.reduce((a, b) => a + b, 0) / times.length;
 const med = times[Math.floor(times.length / 2)];
 const p95 = times[Math.floor(times.length * 0.95)];
 console.log(
-  JSON.stringify({ expressions: scene.length, frames, sampledPoints: pts, meanMs: +mean.toFixed(2), medianMs: +med.toFixed(2), p95Ms: +p95.toFixed(2) }),
+  JSON.stringify({ tuned, expressions: scene.length, frames, sampledPoints: pts, meanMs: +mean.toFixed(2), medianMs: +med.toFixed(2), p95Ms: +p95.toFixed(2) }),
 );

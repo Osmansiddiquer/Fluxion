@@ -32,7 +32,8 @@ function rng(seed: number) {
   };
 }
 
-export function benchScene(T = 0): Entry[] {
+/** `tuned`: give the soft clouds their own low resolution (`samples: 96`). */
+export function benchScene(T = 0, tuned = false): Entry[] {
   n = 0;
   const r = rng(7);
   const out: Entry[] = [e(`T = ${T}`, { varMin: 0, varMax: 60, animMode: 'loop' })];
@@ -69,7 +70,7 @@ export function benchScene(T = 0): Entry[] {
       e(
         `(${s}*(1 + 0.15*sin(3t + k))*cos(t) + mod(T*${sp} + ${ph}, 48) - 24 + 1.1*k*${s}, ` +
           `0.6*${s}*(1 + 0.15*sin(3t + k))*sin(t) + ${h} + 0.3*sin(mod(T*${sp} + ${ph}, 48)/3) + 0.25*mod(k, 2)) for k = 0..3`,
-        { fill: true, fillOpacity: 0.9, lineWidth: 0, fillColor: '#ffffff' },
+        { fill: true, fillOpacity: 0.9, lineWidth: 0, fillColor: '#ffffff', ...(tuned ? { samples: 96 } : {}) },
       ),
     );
   }

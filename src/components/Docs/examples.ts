@@ -20,6 +20,7 @@ export type DocKind =
   | 'parametric'
   | 'fndef'
   | 'repeat'
+  | 'layer'
   | 'frames';
 
 /** Per-line options: anything the user could set on a row besides its text. */
