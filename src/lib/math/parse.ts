@@ -458,9 +458,100 @@ export function parseEntry(raw: string): Parsed {
   return parsed;
 }
 
+/** Index of the first top-level `where` keyword (outside brackets), or -1. */
+function findWhere(s: string): number {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (
+      depth === 0 &&
+      c === 'w' &&
+      s.startsWith('where', i) &&
+      !/[A-Za-z0-9_]/.test(s[i - 1] ?? ' ') &&
+      !/[A-Za-z0-9_]/.test(s[i + 5] ?? ' ')
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** Does this entry use local definitions (`… where a = …`)? */
+export function hasWhere(raw: string): boolean {
+  return findWhere(raw.trim()) > 0;
+}
+
+const WHERE_RESERVED = new Set([...RESERVED, 'x', 'y', 'r', 'theta', 'θ', 'where', 'for', 'step']);
+
+/** Replace every standalone identifier `name` in `text` (not part of a longer
+ * name, not a number's exponent like 1e5) with `(value)`. */
+function substituteName(text: string, name: string, value: string): string {
+  return text.replace(/[A-Za-z_]\w*/g, (m, at: number) => {
+    if (m !== name) return m;
+    if (/[0-9.]/.test(text[at - 1] ?? '') && /^e\d*$/.test(m)) return m;
+    return `(${value})`;
+  });
+}
+
+/**
+ * Local definitions: `body where a = expr, b = expr` is `body` with each local
+ * substituted (later locals may use earlier ones, and `for` loop variables). A
+ * trailing `for …` clause may follow the definitions. Repeated uses are shared
+ * at evaluation time (fastCompile CSE + hoisting), so a local is computed once.
+ * Returns the expanded text, an error, or null when there's no `where`.
+ */
+export function expandWhere(trimmed: string): { text: string } | { error: string } | null {
+  const at = findWhere(trimmed);
+  if (at < 0) return null;
+  const body = trimmed.slice(0, at).trim();
+  let defsText = trimmed.slice(at + 5).trim();
+  if (!body) return { error: 'Nothing before "where"' };
+  // `body where a = … for k = 0..3`: the loop belongs to the body.
+  let loop = '';
+  const forAt = findFor(defsText);
+  if (forAt >= 0) {
+    loop = defsText.slice(forAt);
+    defsText = defsText.slice(0, forAt).trim();
+  }
+  const clauses = splitTopChar(defsText, ',').map((c) => c.trim()).filter(Boolean);
+  if (!clauses.length) return { error: 'Expected definitions after "where", like: where a = 2t' };
+  const seen = new Map<string, string>();
+  for (const clause of clauses) {
+    const m = /^([A-Za-z]\w*)\s*=(?!=)\s*(.+)$/.exec(clause);
+    if (!m) return { error: `Expected name = value after "where", got "${clause}"` };
+    const [, name, valueRaw] = m;
+    if (WHERE_RESERVED.has(name)) return { error: `A local can't be called ${name}` };
+    if (seen.has(name)) return { error: `Local ${name} is defined twice` };
+    let value = valueRaw.trim();
+    for (const [n, v] of seen) value = substituteName(value, n, v);
+    if (findWhere(value) >= 0) return { error: 'Nested "where" is not supported' };
+    seen.set(name, value);
+  }
+  let text = body;
+  // Substitute the last-defined first so earlier locals inside later ones (already
+  // expanded above) aren't revisited.
+  for (const [n, v] of [...seen].reverse()) text = substituteName(text, n, v);
+  if (loop) {
+    let l = loop;
+    for (const [n, v] of [...seen].reverse()) l = substituteName(l, n, v);
+    text = `${text} ${l}`;
+  }
+  return { text };
+}
+
 function parseEntryUncached(raw: string): Parsed {
   const trimmed = raw.trim();
   if (!trimmed) return { kind: 'empty' };
+
+  // Locals: `body where a = …` → body with the locals substituted (see expandWhere).
+  const local = expandWhere(trimmed);
+  if (local) {
+    if ('error' in local) return { kind: 'error', message: local.error };
+    const inner = parseEntry(local.text);
+    return 'raw' in inner ? { ...inner, raw } : inner;
+  }
 
   // Repeat: `body for k = 0..5` — split before anything else so the body can be
   // any repeatable kind (inequalities included).
