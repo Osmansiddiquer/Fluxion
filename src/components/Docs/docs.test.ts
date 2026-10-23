@@ -44,6 +44,7 @@ describe('docs content structure', () => {
       'sliders',
       'inspect',
       'drawing',
+      'animation',
       'clips',
       'sharing',
       'keyboard',
@@ -150,7 +151,7 @@ describe('docs cover every feature', () => {
 
   it('found the parse kinds', () => {
     expect(kinds.sort()).toEqual(
-      ['fndef', 'frames', 'function', 'implicit', 'inequality', 'ode', 'parametric', 'pointvar', 'points', 'polar', 'repeat', 'variable'].sort(),
+      ['fndef', 'frames', 'function', 'implicit', 'inequality', 'layer', 'ode', 'parametric', 'pointvar', 'points', 'polar', 'repeat', 'variable'].sort(),
     );
   });
 

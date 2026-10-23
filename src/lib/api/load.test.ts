@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadFromUrl, sanitizeGraph } from './load';
 import { buildLink } from './url';
 import { encodeGraph, makeGraph, type GraphData } from '../graphFile';
-import { DEFAULT_FEATURES, DEFAULT_PROJECTIONS, DEFAULT_VIEWPORT } from './spec';
+import { DEFAULT_FEATURES, DEFAULT_PROJECTIONS, DEFAULT_VIEWPORT, LIMITS } from './spec';
 import type { Entry } from '../../store/types';
 
 const hashOf = (link: string) => new URL(link).hash;
@@ -114,11 +114,11 @@ describe('sanitizeGraph', () => {
   });
 
   it('skips non-entries, caps the count, truncates long expressions, de-duplicates ids', () => {
-    const many = Array.from({ length: 150 }, () => ({ id: 'same', raw: 'y = ' + 'x+'.repeat(800) + 'x', color: '#000000', visible: true, expanded: true }));
+    const many = Array.from({ length: LIMITS.maxExpressions + 50 }, () => ({ id: 'same', raw: 'y = ' + 'x+'.repeat(LIMITS.maxExprLength) + 'x', color: '#000000', visible: true, expanded: true }));
     const g = legacy([null as never, { raw: 5 } as never, ...many]);
     const out = sanitizeGraph(g);
-    expect(out.entries.length).toBeLessThanOrEqual(100);
-    expect(out.entries.every((e) => e.raw.length <= 1000)).toBe(true);
+    expect(out.entries.length).toBeLessThanOrEqual(LIMITS.maxExpressions);
+    expect(out.entries.every((e) => e.raw.length <= LIMITS.maxExprLength)).toBe(true);
     expect(new Set(out.entries.map((e) => e.id)).size).toBe(out.entries.length);
   });
 

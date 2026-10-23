@@ -196,7 +196,13 @@ async function inked(page) {
   check('runtime error reported with its line', /Line 3/.test(errMsg) && !!marked, errMsg.trim());
 
   // 4. Every example renders in Script mode, light and dark.
-  const examples = JSON.parse(fs.readFileSync(path.join(__dirname, '../public/examples/index.json'), 'utf8')).map((e) => e.id);
+  // Script examples only (a Graph-mode example such as "sunset" has no script).
+  const examples = JSON.parse(fs.readFileSync(path.join(__dirname, '../public/examples/index.json'), 'utf8'))
+    .map((e) => e.id)
+    .filter((id) => {
+      const f = path.join(__dirname, `../public/examples/${id}.json`);
+      return !fs.existsSync(f) || 'script' in JSON.parse(fs.readFileSync(f, 'utf8'));
+    });
   for (const theme of ['light', 'dark']) {
     for (const id of examples) {
       await open(page, `${base}#example=${id}`, theme);

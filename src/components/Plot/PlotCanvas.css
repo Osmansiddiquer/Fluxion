@@ -179,3 +179,12 @@
   background: var(--accent-soft);
   color: var(--accent);
 }
+
+/* Fixed-aspect (letterbox) mode: cinematic bars around the frame, in both themes. */
+.plot-letterbox {
+  background: #000;
+}
+.plot-letterbox .plot-canvas {
+  right: auto;
+  bottom: auto;
+}

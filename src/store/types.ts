@@ -70,7 +70,24 @@ export interface Entry {
   autoplay?: boolean;
   /** `frames(i)` entry: id of its imported frame sequence (lib/frames/assets.ts). */
   frames?: string;
+
+  /** Animation & rendering options (all optional, hidden behind the style
+   * popover's Advanced disclosure; defaults render exactly as before). */
+  /** Own sample count (function / parametric / polar; grid cells for implicit). */
+  samples?: number;
+  /** Polylines: show vertex dots (default: shown unless filled / repeated / smooth). */
+  dots?: boolean;
+  /** Canvas blend mode for this entry's fill and stroke. */
+  blend?: BlendMode;
+  /** Soft glow radius in px (canvas shadow in the stroke / fill colour). */
+  glow?: number;
+  /** Gaussian blur radius in px. */
+  blur?: number;
+  /** Name of a `name = layer(…)` row: drawn with that layer's transform and z-order. */
+  layer?: string;
 }
+
+export type BlendMode = 'normal' | 'add' | 'screen' | 'multiply' | 'overlay' | 'lighten' | 'darken';
 
 export type LineStyle = 'solid' | 'dashed' | 'dotted';
 
@@ -87,7 +104,16 @@ export interface FeatureToggles {
   intersections: boolean;
   /** Grid lines + axes (default shown). Off gives a clean canvas for drawings. */
   grid?: boolean;
+  /** Display options for animations (not toggles; ride along in GraphData.features). */
+  /** Fixed aspect ratio (width / height, e.g. 2.39): letterbox the plot to that frame. */
+  aspect?: number;
+  /** Fixed playback rate: sliders advance in whole frames of 1/fps s, and slider
+   * values become a pure function of the frame number (deterministic playback). */
+  fps?: number;
 }
+
+/** The boolean marker / grid toggles of FeatureToggles (not the display numbers). */
+export type ToggleKey = Exclude<keyof FeatureToggles, 'aspect' | 'fps'>;
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 

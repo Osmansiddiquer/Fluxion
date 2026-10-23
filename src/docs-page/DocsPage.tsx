@@ -37,6 +37,7 @@ const KIND_LABEL: Record<DocKind, string> = {
   parametric: 'parametric',
   fndef: 'definition',
   repeat: 'repeat',
+  layer: 'layer',
   frames: 'clip',
 };
 

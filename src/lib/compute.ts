@@ -15,6 +15,9 @@ import { sampleFunction } from './solver/sample';
 import { sampleImplicit } from './solver/implicit';
 import { EMPTY_CURVE, type Point, type SampledCurve } from './solver/curve';
 import { buildEvalContext, isDerived, isPlottableFnDef, type EvalContext } from './scope';
+import { boxOutside, parametricBox, polarBox } from './math/bounds';
+import { specNodes, type PointSpec } from './math/points';
+import { PathBuilder, flattenOps, type Pt } from './geom/path';
 import { getFrameSequence } from './frames/assets';
 import type { Entry, Viewport } from '../store/types';
 
@@ -40,9 +43,25 @@ export interface CurveResult {
   fillRule?: 'evenodd';
   /** How many copies a `for` repeat drew. */
   copies?: number;
+  /** How many shapes (copies) were skipped because they lie entirely off-screen. */
+  culled?: number;
+  /** Per copy of a repeat: its slice of `curve.segments` / `points` and its
+   * loop values — so colour expressions using `k` resolve per copy. */
+  copyRanges?: CopyRange[];
+  /** Smooth point paths: the exact path as ops (lib/geom/path, Script mode's
+   * format) in data coordinates; `curve` holds its flattened polyline. */
+  path?: number[];
 }
 
 type OdeParsed = Extract<Parsed, { kind: 'ode' }>;
+
+export interface CopyRange {
+  /** [start, end) into curve.segments. */
+  seg: [number, number];
+  /** [start, end) into points. */
+  pts: [number, number];
+  vars: Record<string, number>;
+}
 
 // Per-entry result cache: a curve is re-sampled only when one of its real inputs
 // (expression, viewport, samples, the variable values it depends on, …) changes.
@@ -57,6 +76,16 @@ const ODE_GROUP_CACHE = new Map<
 
 /** Max total copies a `for` repeat may draw. */
 export const MAX_COPIES = 2000;
+/** Bounds of a per-entry `samples` override. */
+export const MIN_SAMPLES = 8;
+export const MAX_SAMPLES = 20000;
+
+/** An entry's own sample count (clamped), or undefined for the defaults. */
+export function entrySamples(entry: Entry): number | undefined {
+  const n = entry.samples;
+  if (typeof n !== 'number' || !Number.isFinite(n)) return undefined;
+  return Math.round(Math.min(MAX_SAMPLES, Math.max(MIN_SAMPLES, n)));
+}
 
 function resolveIC(ic: number[] | undefined, order: number): number[] {
   const out = new Array<number>(order).fill(0);
@@ -88,7 +117,7 @@ export function nodesOf(parsed: Parsed): MathNode[] {
     case 'fndef':
       return [parsed.node];
     case 'points':
-      return parsed.points.flatMap((p) => [p.tNode, p.yNode].filter((n): n is MathNode => !!n));
+      return parsed.points.flatMap(specNodes);
     case 'pointvar':
       return [parsed.tNode, parsed.yNode];
     case 'polar':
@@ -99,6 +128,8 @@ export function nodesOf(parsed: Parsed): MathNode[] {
       return [parsed.xNode, parsed.yNode];
     case 'frames':
       return [parsed.indexNode];
+    case 'layer':
+      return parsed.args;
     case 'repeat':
       return [
         ...nodesOf(parsed.body),
@@ -123,10 +154,11 @@ function samplePolar(
   scope: Record<string, number>,
   thetaMin: number,
   thetaMax: number,
+  n?: number,
 ): SampledCurve {
   const span = thetaMax - thetaMin;
   // ~720 samples per full turn, capped, so wide sweeps stay smooth but bounded.
-  const N = Math.max(2, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 720)));
+  const N = n ?? Math.max(2, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 720)));
   const ps = { ...scope } as Record<string, number>;
   const segments: Point[][] = [];
   let cur: Point[] = [];
@@ -161,10 +193,11 @@ export function sampleParametric(
   scope: Record<string, number>,
   tMin: number,
   tMax: number,
+  n?: number,
 ): SampledCurve {
   const span = tMax - tMin;
   if (!Number.isFinite(span)) return EMPTY_CURVE;
-  const N = Math.max(200, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 480)));
+  const N = n ?? Math.max(200, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 480)));
   const ps = { ...scope } as Record<string, number>;
   const segments: Point[][] = [];
   let cur: Point[] = [];
@@ -221,7 +254,25 @@ interface SampleCtx {
   viewport: Viewport;
   samples: number;
   pointScope: Map<string, [number, number]>;
+  /** The entry's own `samples` override, if any. */
+  own?: number;
+  /** Data-space margin around the viewport for off-screen culling; null = never cull. */
+  cullMargin: number | null;
 }
+
+/** Margin (data units) a shape must clear the viewport by to be culled: room for
+ * its stroke and some slack, so culling can never clip anything visible. */
+function cullMarginFor(entry: Entry, viewport: Viewport, samples: number): number | null {
+  // Shapes on a transformed layer are moved at draw time: never cull those.
+  if (entry.layer) return null;
+  const span = Math.max(viewport.tMax - viewport.tMin, viewport.yMax - viewport.yMin);
+  const unitsPerPx = (viewport.tMax - viewport.tMin) / Math.max(1, samples / 1.5);
+  // Half the widest stroke (20 px), glow / blur spread, plus slack.
+  const px = 10 + (entry.glow ?? 0) * 2 + (entry.blur ?? 0) * 2 + 8;
+  return 0.02 * span + px * unitsPerPx;
+}
+
+const CULLED: SampledCurve = { segments: [] };
 
 type Drawable = Extract<
   Parsed,
@@ -237,25 +288,37 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
       const curve = sampleFunction(compileNode(parsed.node), scope, {
         tMin,
         tMax,
-        samples,
+        samples: ctx.own ?? samples,
         yMin: viewport.yMin,
         yMax: viewport.yMax,
       });
       return { parsed, curve };
     }
     case 'implicit':
-      return { parsed, curve: sampleImplicit(compileNode(parsed.node), scope, viewport) };
+      return { parsed, curve: sampleImplicit(compileNode(parsed.node), scope, viewport, gridFor(ctx)) };
     case 'polar': {
       const tMinP = entry.thetaMin ?? 0;
       const tMaxP = entry.thetaMax ?? Math.PI * 2;
-      return { parsed, curve: samplePolar(compileNode(parsed.rNode), scope, tMinP, tMaxP) };
+      if (ctx.cullMargin !== null && boxOutside(polarBox(parsed.rNode, scope, tMinP, tMaxP), viewport, ctx.cullMargin)) {
+        return { parsed, curve: CULLED, culled: 1 };
+      }
+      return { parsed, curve: samplePolar(compileNode(parsed.rNode), scope, tMinP, tMaxP, ctx.own) };
     }
     case 'parametric': {
       const t0 = entry.thetaMin ?? 0;
       const t1 = entry.thetaMax ?? Math.PI * 2;
+      // Skip shapes whose guaranteed bounds miss the view (interval arithmetic:
+      // never culls anything visible; unbounded expressions are never culled).
+      if (
+        ctx.cullMargin !== null &&
+        Number.isFinite(t1 - t0) &&
+        boxOutside(parametricBox(parsed.xNode, parsed.yNode, scope, t0, t1), viewport, ctx.cullMargin)
+      ) {
+        return { parsed, curve: CULLED, culled: 1 };
+      }
       return {
         parsed,
-        curve: sampleParametric(compileNode(parsed.xNode), compileNode(parsed.yNode), scope, t0, t1),
+        curve: sampleParametric(compileNode(parsed.xNode), compileNode(parsed.yNode), scope, t0, t1, ctx.own),
       };
     }
     case 'frames': {
@@ -266,7 +329,7 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
       return { parsed, curve: { segments: seq.frameInData(idx) }, fillRule: 'evenodd' };
     }
     case 'inequality':
-      return sampleInequality(parsed, scope, entry, viewport);
+      return sampleInequality(parsed, scope, entry, viewport, ctx);
     case 'points': {
       // Reinterpret a single (A, B) as a line when both are point-variables.
       let specs = parsed.points;
@@ -278,6 +341,7 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
           polyline = true;
         }
       }
+      if (parsed.smooth) return samplePath(parsed, scope, ctx);
       const coords: [number, number][] = [];
       for (const sp of specs) {
         if (sp.ref) {
@@ -297,11 +361,85 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
   }
 }
 
+/** Marching-squares grid for an entry with its own `samples` (cells across x). */
+function gridFor(ctx: SampleCtx): { cellsX: number; cellsY: number } | undefined {
+  if (ctx.own === undefined) return undefined;
+  const { viewport: v } = ctx;
+  const cellsX = Math.min(600, ctx.own);
+  const aspect = (v.yMax - v.yMin) / Math.max(1e-12, v.tMax - v.tMin);
+  return { cellsX, cellsY: Math.max(8, Math.min(600, Math.round(cellsX * aspect))) };
+}
+
+/** Evaluate one point spec (a literal point or a point-variable reference). */
+function evalPoint(sp: PointSpec, scope: Record<string, number>, pointScope: Map<string, [number, number]>): Pt | null {
+  if (sp.ref) return pointScope.get(sp.ref) ?? null;
+  if (!sp.tNode || !sp.yNode) return null;
+  const t = compileNode(sp.tNode).evaluate(scope);
+  const y = compileNode(sp.yNode).evaluate(scope);
+  return typeof t === 'number' && typeof y === 'number' && Number.isFinite(t) && Number.isFinite(y) ? [t, y] : null;
+}
+
+/**
+ * A point path with smooth pieces: plain points are corners, `spline(…)` runs a
+ * centripetal Catmull-Rom curve through its points, `bezier(…)` and `arc(…)`
+ * continue from the previous point. Built as path ops (lib/geom/path, Script
+ * mode's format), then flattened to one polyline (~2 px per piece, or the
+ * entry's own `samples` per cubic). `points` are the corners only (no dots).
+ */
+function samplePath(
+  parsed: Extract<Parsed, { kind: 'points' }>,
+  scope: Record<string, number>,
+  ctx: SampleCtx,
+): CurveResult {
+  const { pointScope, viewport } = ctx;
+  const P = (sp: PointSpec): Pt => {
+    const p = evalPoint(sp, scope, pointScope);
+    if (!p) throw new Error('A path point is undefined');
+    return p;
+  };
+  const b = new PathBuilder();
+  const corners: [number, number][] = [];
+  const specs = parsed.points;
+  // A single top-level spline whose last point equals its first is a closed loop.
+  const lone = specs.length === 1 && specs[0].seg?.kind === 'spline';
+  specs.forEach((sp, i) => {
+    const seg = sp.seg;
+    if (!seg) {
+      const p = P(sp);
+      b.lineTo(p);
+      corners.push(p);
+      return;
+    }
+    if (seg.kind === 'spline') {
+      const pts = seg.points.map(P);
+      // Neighbouring corners shape the end tangents so the curve leaves and
+      // joins the straight parts naturally.
+      const prevSpec = specs[i - 1];
+      const nextSpec = specs[i + 1];
+      const before = prevSpec && !prevSpec.seg && specs[i - 2] && !specs[i - 2].seg ? P(specs[i - 2]) : undefined;
+      const after = nextSpec && !nextSpec.seg ? P(nextSpec) : undefined;
+      b.splineThrough(pts, { closed: lone, before, after });
+    } else if (seg.kind === 'bezier') {
+      const pts = seg.points.map(P);
+      if (pts.length === 3) b.cubicTo(pts[0], pts[1], pts[2]);
+      else b.quadTo(pts[0], pts[1]);
+    } else {
+      const angle = compileNode(seg.angle).evaluate(scope);
+      if (typeof angle !== 'number') throw new Error('arc angle must be a number');
+      b.arcAround(P(seg.center), angle);
+    }
+  });
+  const unitsPerPx = (viewport.tMax - viewport.tMin) / Math.max(1, ctx.samples / 1.5);
+  const segments = flattenOps(b.ops, unitsPerPx * 2, ctx.own);
+  return { parsed, curve: { segments }, points: corners, path: b.ops };
+}
+
 function sampleInequality(
   parsed: Extract<Parsed, { kind: 'inequality' }>,
   scope: Record<string, number>,
   entry: Entry,
   viewport: Viewport,
+  ctx: SampleCtx,
 ): CurveResult {
   // Each constraint contributes a boundary curve; the region is their AND.
   const TWO_PI = Math.PI * 2;
@@ -371,7 +509,7 @@ function sampleInequality(
   const polarScope: Record<string, number> = { ...scope };
   const samplePolarBoundary = (ev: ReturnType<typeof compileNode>): Point[][] => {
     const span = thMax - thMin;
-    const N = Math.max(2, Math.min(12000, Math.round((Math.abs(span) / TWO_PI) * 720)));
+    const N = ctx.own ?? Math.max(2, Math.min(12000, Math.round((Math.abs(span) / TWO_PI) * 720)));
     const segs: Point[][] = [];
     let cur: Point[] = [];
     const at = (th: number, r: number): number => {
@@ -406,7 +544,7 @@ function sampleInequality(
   const boundaries = parts.map((p) => ({
     segments: p.polar
       ? samplePolarBoundary(p.ev)
-      : sampleImplicit(p.ev as unknown as Parameters<typeof sampleImplicit>[0], scope, viewport).segments,
+      : sampleImplicit(p.ev as unknown as Parameters<typeof sampleImplicit>[0], scope, viewport, gridFor(ctx)).segments,
     strict: p.op === '<' || p.op === '>',
   }));
   return {
@@ -428,16 +566,23 @@ function sampleRepeat(
   const points: [number, number][] = [];
   const tests: ((t: number, y: number) => boolean)[] = [];
   const boundaries: { segments: Point[][]; strict: boolean }[] = [];
+  let culled = 0;
+  const copyRanges: CopyRange[] = [];
   for (const combo of combos) {
     const r = sampleDrawable(body, { ...scope, ...combo }, ctx);
+    if (r.culled) culled += r.culled;
+    const s0 = segments.length;
+    const p0 = points.length;
     for (const s of r.curve.segments) segments.push(s);
     if (r.points) for (const p of r.points) points.push(p);
+    copyRanges.push({ seg: [s0, segments.length], pts: [p0, points.length], vars: combo });
     if (r.inequality) {
       tests.push(r.inequality.test);
       boundaries.push(...r.inequality.boundaries);
     }
   }
-  const out: CurveResult = { parsed, curve: { segments }, copies: combos.length };
+  const out: CurveResult = { parsed, curve: { segments }, copies: combos.length, copyRanges };
+  if (culled) out.culled = culled;
   if (body.kind === 'points') out.points = points;
   // A repeated inequality is the UNION of its copies.
   if (body.kind === 'inequality') {
@@ -655,14 +800,15 @@ export function computeAll(
         const curve = sampleFunction(ev as unknown as ReturnType<typeof compileNode>, scope, {
           tMin,
           tMax,
-          samples,
+          samples: entrySamples(entry) ?? samples,
           yMin: viewport.yMin,
           yMax: viewport.yMax,
         });
         return { parsed, curve };
       }
 
-      if (!entry.visible) {
+      if (!entry.visible || parsed.kind === 'layer') {
+        // Layers draw nothing themselves; PlotCanvas evaluates their transform.
         return { parsed, curve: EMPTY_CURVE };
       }
 
@@ -680,7 +826,14 @@ export function computeAll(
           if (err) return { parsed, curve: EMPTY_CURVE, error: err };
           return { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE };
         }
-        const sctx: SampleCtx = { entry, viewport, samples, pointScope };
+        const sctx: SampleCtx = {
+          entry,
+          viewport,
+          samples,
+          pointScope,
+          own: entrySamples(entry),
+          cullMargin: cullMarginFor(entry, viewport, samples),
+        };
         if (parsed.kind === 'repeat') return sampleRepeat(parsed, scope, sctx);
         return sampleDrawable(parsed as Drawable, scope, sctx);
       } catch (err) {
@@ -703,7 +856,8 @@ export function computeAll(
       const key =
         `${parsed.kind}|${entry.raw}|${entry.visible ? 1 : 0}|` +
         `${tMin},${tMax},${viewport.yMin},${viewport.yMax}|${samples}|` +
-        `${entry.thetaMin ?? ''},${entry.thetaMax ?? ''}|${depKey(parsed.deps)}|${definedKey}|` +
+        `${entry.thetaMin ?? ''},${entry.thetaMax ?? ''}|${entry.samples ?? ''}|${entry.layer ?? ''}|` +
+        `${entry.glow ?? ''},${entry.blur ?? ''}|${depKey(parsed.deps)}|${definedKey}|` +
         `${callsUser(parsed) ? ectx.fnKey : ''}|${parsed.kind === 'frames' ? entry.frames ?? '' : ''}`;
       const hit = RESULT_CACHE.get(entry.id);
       if (hit && hit.key === key) {

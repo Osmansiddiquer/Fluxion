@@ -1,6 +1,6 @@
 import { parse as mjParse, derivative, simplify, type MathNode } from 'mathjs';
 import { normalizeInput } from './normalize';
-import { parsePoints, looksLikePoints, type PointSpec } from './points';
+import { parsePoints, looksLikePoints, specNodes, specRefs, type PointSpec } from './points';
 import { KNOWN_FUNCTIONS } from './builtins';
 import { HELPER_NAMES } from './helpers';
 
@@ -62,6 +62,8 @@ export type Parsed =
       kind: 'points';
       points: PointSpec[];
       polyline: boolean;
+      /** Contains spline / bezier / arc pieces (drawn smooth, no vertex dots). */
+      smooth?: boolean;
       scattered: boolean;
       deps: string[];
       raw: string;
@@ -120,6 +122,15 @@ export type Parsed =
       loops: LoopSpec[];
       deps: string[];
       bodyRaw: string;
+      raw: string;
+    }
+  | {
+      /** `name = layer(dx, dy[, scale[, angle[, cx, cy]]])` — a shared transform
+       * (and z-position) for entries whose `layer` option names it. */
+      kind: 'layer';
+      name: string;
+      args: MathNode[];
+      deps: string[];
       raw: string;
     }
   | {
@@ -386,6 +397,28 @@ export function loopValues(from: number, to: number, step = 1, cap = 4096): numb
   return out;
 }
 
+/** Layer arguments: dx, dy, then optional scale, angle (radians) and pivot cx, cy. */
+function parseLayer(name: string, argText: string, raw: string): Parsed {
+  if (RESERVED.has(name) || name === 'x' || name === 'y' || name === 'r') {
+    return { kind: 'error', message: `A layer can't be called ${name}` };
+  }
+  const parts = splitTopChar(argText, ',').map((a) => a.trim());
+  if (parts.length < 2 || parts.length > 6 || parts.some((p) => !p)) {
+    return { kind: 'error', message: 'Write layer(dx, dy) or layer(dx, dy, scale, angle, cx, cy)' };
+  }
+  try {
+    const args = parts.map((p) => mjParse(p));
+    if (args.some((a) => hasSymbol(a, 't') || hasSymbol(a, 'x') || hasSymbol(a, 'y'))) {
+      return { kind: 'error', message: 'A layer moves with sliders, not with t, x or y' };
+    }
+    const deps = new Set<string>();
+    for (const a of args) for (const s of freeSymbols(a)) deps.add(s);
+    return { kind: 'layer', name, args, deps: [...deps], raw };
+  } catch (err) {
+    return { kind: 'error', message: friendlyError(err) };
+  }
+}
+
 function parseRepeat(trimmed: string, at: number, raw: string): Parsed {
   const bodyRaw = trimmed.slice(0, at).trim();
   const loopText = trimmed.slice(at + 3).trim();
@@ -458,9 +491,104 @@ export function parseEntry(raw: string): Parsed {
   return parsed;
 }
 
+/** Index of the first top-level `where` keyword (outside brackets), or -1. */
+function findWhere(s: string): number {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (
+      depth === 0 &&
+      c === 'w' &&
+      s.startsWith('where', i) &&
+      !/[A-Za-z0-9_]/.test(s[i - 1] ?? ' ') &&
+      !/[A-Za-z0-9_]/.test(s[i + 5] ?? ' ')
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/** Does this entry use local definitions (`… where a = …`)? */
+export function hasWhere(raw: string): boolean {
+  return findWhere(raw.trim()) > 0;
+}
+
+const WHERE_RESERVED = new Set([...RESERVED, 'x', 'y', 'r', 'theta', 'θ', 'where', 'for', 'step']);
+
+/** Replace every standalone identifier `name` in `text` (not part of a longer
+ * name, not a number's exponent like 1e5) with `(value)`. */
+function substituteName(text: string, name: string, value: string): string {
+  return text.replace(/[A-Za-z_]\w*/g, (m, at: number) => {
+    if (m !== name) return m;
+    if (/[0-9.]/.test(text[at - 1] ?? '') && /^e\d*$/.test(m)) return m;
+    return `(${value})`;
+  });
+}
+
+/**
+ * Local definitions: `body where a = expr, b = expr` is `body` with each local
+ * substituted (later locals may use earlier ones, and `for` loop variables). A
+ * trailing `for …` clause may follow the definitions. Repeated uses are shared
+ * at evaluation time (fastCompile CSE + hoisting), so a local is computed once.
+ * Returns the expanded text, an error, or null when there's no `where`.
+ */
+export function expandWhere(trimmed: string): { text: string } | { error: string } | null {
+  const at = findWhere(trimmed);
+  if (at < 0) return null;
+  const body = trimmed.slice(0, at).trim();
+  let defsText = trimmed.slice(at + 5).trim();
+  if (!body) return { error: 'Nothing before "where"' };
+  // `body where a = … for k = 0..3`: the loop belongs to the body.
+  let loop = '';
+  const forAt = findFor(defsText);
+  if (forAt >= 0) {
+    loop = defsText.slice(forAt);
+    defsText = defsText.slice(0, forAt).trim();
+  }
+  const clauses = splitTopChar(defsText, ',').map((c) => c.trim()).filter(Boolean);
+  if (!clauses.length) return { error: 'Expected definitions after "where", like: where a = 2t' };
+  const seen = new Map<string, string>();
+  for (const clause of clauses) {
+    const m = /^([A-Za-z]\w*)\s*=(?!=)\s*(.+)$/.exec(clause);
+    if (!m) return { error: `Expected name = value after "where", got "${clause}"` };
+    const [, name, valueRaw] = m;
+    if (WHERE_RESERVED.has(name)) return { error: `A local can't be called ${name}` };
+    if (seen.has(name)) return { error: `Local ${name} is defined twice` };
+    let value = valueRaw.trim();
+    for (const [n, v] of seen) value = substituteName(value, n, v);
+    if (findWhere(value) >= 0) return { error: 'Nested "where" is not supported' };
+    seen.set(name, value);
+  }
+  let text = body;
+  // Substitute the last-defined first so earlier locals inside later ones (already
+  // expanded above) aren't revisited.
+  for (const [n, v] of [...seen].reverse()) text = substituteName(text, n, v);
+  if (loop) {
+    let l = loop;
+    for (const [n, v] of [...seen].reverse()) l = substituteName(l, n, v);
+    text = `${text} ${l}`;
+  }
+  return { text };
+}
+
 function parseEntryUncached(raw: string): Parsed {
   const trimmed = raw.trim();
   if (!trimmed) return { kind: 'empty' };
+
+  // Locals: `body where a = …` → body with the locals substituted (see expandWhere).
+  const local = expandWhere(trimmed);
+  if (local) {
+    if ('error' in local) return { kind: 'error', message: local.error };
+    const inner = parseEntry(local.text);
+    return 'raw' in inner ? { ...inner, raw } : inner;
+  }
+
+  // Layer: `fg = layer(dx, dy, scale, angle, cx, cy)` (a draw-time transform).
+  const lm = /^([A-Za-z]\w*)\s*=\s*layer\s*\((.*)\)$/.exec(normalizeInput(trimmed));
+  if (lm) return parseLayer(lm[1], lm[2], raw);
 
   // Repeat: `body for k = 0..5` — split before anything else so the body can be
   // any repeatable kind (inequalities included).
@@ -495,14 +623,14 @@ function parseEntryUncached(raw: string): Parsed {
       if (pts) {
         const deps = new Set<string>();
         for (const p of pts.points) {
-          if (p.ref) deps.add(p.ref);
-          if (p.tNode) for (const s of freeSymbols(p.tNode)) deps.add(s);
-          if (p.yNode) for (const s of freeSymbols(p.yNode)) deps.add(s);
+          for (const r of specRefs(p)) deps.add(r);
+          for (const n of specNodes(p)) for (const s of freeSymbols(n)) deps.add(s);
         }
         return {
           kind: 'points',
           points: pts.points,
           polyline: pts.polyline,
+          ...(pts.smooth ? { smooth: true } : {}),
           scattered: pts.scattered,
           deps: [...deps],
           raw,

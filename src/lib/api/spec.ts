@@ -6,13 +6,17 @@ import { PALETTE, nextColor } from '../../utils/colors';
 import type { GraphData } from '../graphFile';
 import { isColorExpr } from '../color';
 import { SCRIPT_LIMITS } from '../script/protocol';
+import { BLEND_MODES } from '../style';
+import { entriesAtTime } from '../anim';
 import type {
   AnimMode,
+  BlendMode,
   Entry,
   FeatureToggles,
   LineStyle,
   PointDir,
   Projections,
+  ToggleKey,
   Viewport,
 } from '../../store/types';
 
@@ -35,9 +39,9 @@ export const SPEC_VERSION = 1;
 
 export const LIMITS = {
   /** Max expressions in one graph. Each one is sampled on every recompute. */
-  maxExpressions: 100,
+  maxExpressions: 300,
   /** Max characters in one expression. */
-  maxExprLength: 1000,
+  maxExprLength: 3000,
   maxLabelLength: 100,
   /** Max initial-condition values (= ODE order). */
   maxIcLength: 10,
@@ -49,17 +53,27 @@ export const LIMITS = {
   /** Max length of a constant-expression string such as "2*pi". */
   maxConstLength: 100,
   /** Max serialized spec size accepted from a link / file (bytes of JSON). */
-  maxSpecBytes: 200_000,
+  maxSpecBytes: 1_000_000,
   /** Slider play speed (1 = a full sweep in ~4 s). Tiny speeds play long clips in real time. */
   minSpeed: 1e-4,
   maxSpeed: 100,
   /** Stroke width in px, and max length of a colour expression like "hsv(360*a, 1, 1)". */
   maxLineWidth: 20,
-  maxColorExprLength: 200,
+  maxColorExprLength: 600,
   /** Frame-sequence assets carried by a graph file (imported clips). */
   maxAssets: 8,
   maxAssetChars: 8_000_000,
   maxAssetsTotalChars: 16_000_000,
+  /** Per-entry sample count, glow / blur radius (px), layer-name length. */
+  minSamples: 8,
+  maxSamples: 20000,
+  maxEffectPx: 50,
+  maxLayerName: 32,
+  /** Letterbox aspect (width / height), playback fps, render-at time (s). */
+  minAspect: 0.1,
+  maxAspect: 10,
+  maxFps: 240,
+  maxTime: 1e6,
   /** Script mode program (JavaScript, run sandboxed). */
   maxScriptChars: SCRIPT_LIMITS.maxCodeChars,
 } as const;
@@ -102,6 +116,18 @@ export interface ExpressionSpec {
   fillColor?: string;
   /** Slider: start playing when the graph opens. */
   autoplay?: boolean;
+  /** Animation & rendering (all optional; defaults draw exactly as before). */
+  /** Own sample count (function / parametric / polar; grid cells for implicit). */
+  samples?: number;
+  /** Polylines: show (true) or hide (false) vertex dots. */
+  dots?: boolean;
+  /** Blend mode: normal, add, screen, multiply, overlay, lighten, darken. */
+  blend?: BlendMode;
+  /** Glow / blur radius in px (0–50). */
+  glow?: number;
+  blur?: number;
+  /** Name of a `name = layer(…)` row this expression is drawn on. */
+  layer?: string;
 }
 
 export interface ViewportSpec {
@@ -131,6 +157,14 @@ export interface FluxionSpec {
   sigFigs?: number;
   /** A Script mode program: JavaScript using the Fluxion drawing API (runs sandboxed). */
   script?: string;
+  /** Letterbox the plot to this aspect ratio (width / height), e.g. 2.39 or "16/9". */
+  aspect?: NumLike;
+  /** Fixed playback rate (deterministic: frame N is a pure function of N). */
+  fps?: number;
+  /** Open paused at this time (seconds after start) — every autoplay slider is
+   * set to its value then. `frame` is the same in frames (at `fps`, default 30). */
+  time?: NumLike;
+  frame?: number;
 }
 
 /** A validated spec with every number resolved and every expression an object. */
@@ -158,6 +192,12 @@ export interface NormalizedExpression {
   colorExpr?: string;
   fillColor?: string;
   autoplay?: boolean;
+  samples?: number;
+  dots?: boolean;
+  blend?: BlendMode;
+  glow?: number;
+  blur?: number;
+  layer?: string;
 }
 
 export interface NormalizedSpec {
@@ -168,6 +208,8 @@ export interface NormalizedSpec {
   projections: Projections;
   sigFigs: number;
   script?: string;
+  /** Render-at time in seconds (from `time` / `frame`), applied by specToGraph. */
+  time?: number;
 }
 
 export interface Issue {
@@ -213,6 +255,10 @@ export const ANIM_MODES: readonly AnimMode[] = ['loop', 'bounce', 'once'];
 export const POINT_DIRS: readonly PointDir[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 export const DRAG_MODES: readonly DragMode[] = ['auto', 'off', 'x', 'y', 'both'];
 export const LINE_STYLES: readonly LineStyle[] = ['solid', 'dashed', 'dotted'];
+/** A layer name (a `name = layer(…)` row). */
+export const LAYER_NAME = /^[A-Za-z]\w*$/;
+/** Frames per second assumed by `frame` when the graph sets no `fps`. */
+export const DEFAULT_FPS = 30;
 
 export const TOP_KEYS = [
   '$schema',
@@ -223,6 +269,10 @@ export const TOP_KEYS = [
   'panels',
   'sigFigs',
   'script',
+  'aspect',
+  'fps',
+  'time',
+  'frame',
 ] as const;
 export const EXPRESSION_KEYS = [
   'expr',
@@ -248,10 +298,16 @@ export const EXPRESSION_KEYS = [
   'colorExpr',
   'fillColor',
   'autoplay',
+  'samples',
+  'dots',
+  'blend',
+  'glow',
+  'blur',
+  'layer',
 ] as const;
 export const VIEWPORT_KEYS = ['xmin', 'xmax', 'ymin', 'ymax'] as const;
 /** Feature toggles a spec may set; `grid` (grid lines + axes) defaults to shown. */
-export const FEATURE_KEYS = [...Object.keys(DEFAULT_FEATURES), 'grid'] as (keyof FeatureToggles)[];
+export const FEATURE_KEYS = [...Object.keys(DEFAULT_FEATURES), 'grid'] as ToggleKey[];
 export const PANEL_KEYS = ['right', 'bottom', 'sliceX', 'sliceY'] as const;
 
 /** Common mistakes → the key that was probably meant. */
@@ -574,6 +630,20 @@ function validateExpression(
     } else out[k] = v.trim();
   }
   if (obj.autoplay !== undefined) out.autoplay = c.bool(obj.autoplay, `${path}.autoplay`);
+  if (obj.samples !== undefined) {
+    const n = c.num(obj.samples, `${path}.samples`, { min: LIMITS.minSamples, max: LIMITS.maxSamples });
+    if (n !== undefined) out.samples = Math.round(n);
+  }
+  if (obj.dots !== undefined) out.dots = c.bool(obj.dots, `${path}.dots`);
+  if (obj.blend !== undefined) out.blend = c.oneOf(obj.blend, BLEND_MODES, `${path}.blend`);
+  for (const k of ['glow', 'blur'] as const) {
+    if (obj[k] !== undefined) out[k] = c.num(obj[k], `${path}.${k}`, { min: 0, max: LIMITS.maxEffectPx });
+  }
+  if (obj.layer !== undefined) {
+    if (typeof obj.layer !== 'string' || !LAYER_NAME.test(obj.layer) || obj.layer.length > LIMITS.maxLayerName) {
+      c.error(`${path}.layer`, `must be the name of a layer row like "far" (from far = layer(dx, dy)), got ${describe(obj.layer)}`);
+    } else out.layer = obj.layer;
+  }
 
   // Drop keys whose value failed validation (left as undefined above).
   for (const k of Object.keys(out) as (keyof typeof out)[]) if (out[k] === undefined) delete out[k];
@@ -614,6 +684,18 @@ export function validateSpec(input: unknown): ValidateResult {
     else if (obj.script.length > LIMITS.maxScriptChars) {
       c.error('script', `is too long (${obj.script.length} characters; max ${LIMITS.maxScriptChars})`);
     } else if (obj.script.trim()) script = obj.script;
+  }
+
+  let aspect: number | undefined;
+  if (obj.aspect !== undefined) aspect = c.num(obj.aspect, 'aspect', { min: LIMITS.minAspect, max: LIMITS.maxAspect });
+  let fps: number | undefined;
+  if (obj.fps !== undefined) fps = c.num(obj.fps, 'fps', { min: 1, max: LIMITS.maxFps });
+  let time: number | undefined;
+  if (obj.time !== undefined) time = c.num(obj.time, 'time', { min: 0, max: LIMITS.maxTime });
+  if (obj.frame !== undefined) {
+    const f = c.num(obj.frame, 'frame', { min: 0, max: LIMITS.maxTime * LIMITS.maxFps });
+    if (obj.time !== undefined) c.error('frame', 'give either "time" (seconds) or "frame", not both');
+    else if (f !== undefined) time = Math.floor(f) / (fps ?? DEFAULT_FPS);
   }
 
   const expressions: (Omit<NormalizedExpression, 'color'> & { color?: string })[] = [];
@@ -661,6 +743,8 @@ export function validateSpec(input: unknown): ValidateResult {
   }
 
   const features: FeatureToggles = { ...DEFAULT_FEATURES };
+  if (aspect !== undefined) features.aspect = aspect;
+  if (fps !== undefined) features.fps = fps;
   if (obj.features !== undefined) {
     if (!isPlainObject(obj.features)) c.error('features', 'must be an object of booleans');
     else {
@@ -733,7 +817,16 @@ export function validateSpec(input: unknown): ValidateResult {
 
   return {
     ok: true,
-    spec: { version: 1, expressions: normalized, viewport: vp, features, projections, sigFigs, ...(script !== undefined ? { script } : {}) },
+    spec: {
+      version: 1,
+      expressions: normalized,
+      viewport: vp,
+      features,
+      projections,
+      sigFigs,
+      ...(script !== undefined ? { script } : {}),
+      ...(time !== undefined ? { time } : {}),
+    },
     warnings: c.warnings,
   };
 }
@@ -768,11 +861,18 @@ export function specToGraph(spec: NormalizedSpec): GraphData {
     if (e.colorExpr !== undefined) entry.colorExpr = e.colorExpr;
     if (e.fillColor !== undefined) entry.fillColor = e.fillColor;
     if (e.autoplay) entry.autoplay = true;
+    if (e.samples !== undefined) entry.samples = e.samples;
+    if (e.dots !== undefined) entry.dots = e.dots;
+    if (e.blend !== undefined) entry.blend = e.blend;
+    if (e.glow !== undefined) entry.glow = e.glow;
+    if (e.blur !== undefined) entry.blur = e.blur;
+    if (e.layer !== undefined) entry.layer = e.layer;
     return entry;
   });
   const g: GraphData = {
     v: 1,
-    entries,
+    // `time` / `frame`: open paused on that frame (a pure function of the time).
+    entries: spec.time !== undefined ? entriesAtTime(entries, spec.time) : entries,
     viewport: { ...spec.viewport },
     features: { ...spec.features },
     projections: { ...spec.projections },
@@ -835,6 +935,12 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
     if (e.colorExpr) x.colorExpr = e.colorExpr;
     if (e.fillColor) x.fillColor = e.fillColor;
     if (e.autoplay) x.autoplay = true;
+    if (e.samples !== undefined) x.samples = e.samples;
+    if (e.dots !== undefined) x.dots = e.dots;
+    if (e.blend !== undefined && e.blend !== 'normal') x.blend = e.blend;
+    if (e.glow) x.glow = e.glow;
+    if (e.blur) x.blur = e.blur;
+    if (e.layer) x.layer = e.layer;
     // A slider's current value lives in varValue; fold it back into the text.
     if (e.varValue !== undefined) {
       const m = e.raw.match(/^\s*([A-Za-z]\w*)\s*=/);
@@ -850,7 +956,7 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
   }
   if (g.features) {
     // grid is optional (undefined = shown), so compare effective values.
-    const eff = (fs: Partial<FeatureToggles>, k: keyof FeatureToggles) => (k === 'grid' ? fs[k] !== false : !!fs[k]);
+    const eff = (fs: Partial<FeatureToggles>, k: ToggleKey) => (k === 'grid' ? fs[k] !== false : !!fs[k]);
     const f: Partial<FeatureToggles> = {};
     for (const k of FEATURE_KEYS) if (eff(g.features, k) !== eff(DEFAULT_FEATURES, k)) f[k] = eff(g.features, k);
     if (Object.keys(f).length) spec.features = f;
@@ -868,5 +974,7 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
   }
   if (g.sigFigs !== undefined && g.sigFigs !== DEFAULT_SIG_FIGS) spec.sigFigs = g.sigFigs;
   if (g.script?.code.trim()) spec.script = g.script.code;
+  if (g.features?.aspect) spec.aspect = g.features.aspect;
+  if (g.features?.fps) spec.fps = g.features.fps;
   return spec;
 }

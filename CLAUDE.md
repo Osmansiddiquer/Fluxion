@@ -40,7 +40,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 
 1. **`lib/math/parse.ts`** classifies `raw` → `Parsed` union: `function | ode | variable
    | implicit | polar | points | pointvar | inequality | parametric | fndef | repeat |
-   frames | error | empty`. Normalisation
+   layer | frames | error | empty`. Normalisation
    (`normalize.ts`) and LaTeX↔text bridges (`fromlatex.ts` / `tolatex.ts`) wrap it.
 2. **`lib/compute.ts` `computeAll(entries, viewport, samples)`** is the heart: builds the
    evaluation scope (`lib/scope.ts` `buildEvalContext`), groups + integrates coupled
@@ -62,6 +62,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Compute orchestration | `lib/compute.ts`, `lib/analysis/eval.ts` |
 | Analysis | `lib/analysis/features.ts` (extrema/roots/intercepts/endpoints), `singularities.ts` (removable holes vs asymptotes), `intersections.ts`, `types.ts` |
 | Geometry / format | `lib/geom/transform.ts` (data↔screen), `lib/format.ts` (`fmtSig`), `lib/graphFile.ts` (export/share), `lib/math/resolveSlice.ts` (parametric cuts) |
+| Animation / rendering | `lib/math/fastCompile.ts` (evaluator + hoisting), `lib/math/bounds.ts` (interval culling), `lib/geom/path.ts` (spline/bezier/arc), `lib/geom/cull.ts`, `lib/render/canvas.ts` + `layers.ts` (shared with Script mode), `state/frameApi.ts` (`window.fluxion`), `lib/demos/sunset.ts`, `scripts/bench.ts` |
 | Scripting | `lib/scope.ts` (shared eval scope: helpers + sliders + derived values + user fns), `lib/math/helpers.ts` (`lerp`/`keys`/`skeys`/`rotx`/`projx`…), `lib/color.ts` (colour literals + `rgb/hsv/…` expressions), `lib/style.ts` (per-frame `resolveStyle`), `lib/raster.ts` (adaptive inequality shading), `lib/anim.ts` + `state/player.ts` + `state/animate.ts` + `components/AnimationLoop.tsx` (shared slider clock) |
 | Frames ("Bad Apple") | `lib/frames/codec.ts` (FXF1 clip format), `trace.ts` (marching-squares contours + Douglas–Peucker), `assets.ts` (content-addressed asset store), `netpbm.ts`, `clipGraph.ts`; `scripts/frames-import.ts` (CLI, run with `npx vite-node`) |
 | Demos | `lib/demos/scripted.ts` (Script mode programs: Sharingan, cube, Mangekyō, mandala, pendulum-from-ODE, silhouette clip) = `DEMOS` → GraphMenu "Examples", Script mode → Examples, `#example=<id>` links, `public/examples/*.json` (via `lib/api/examples.ts`). The older expression-row builders (`sharingan.ts`, `cube.ts`, …) are `EXPRESSION_DEMOS`, kept only as engine regression fixtures |
@@ -260,7 +261,54 @@ Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU
    any entry/ODE group that calls a user function, derived + function names in
    `definedKey`, and the `frames` asset id. Cosmetic style fields (`lineWidth`,
    `lineStyle`, `fill*`, `colorExpr`, `fillColor`, `autoplay`) are deliberately NOT in
-   the signature — colour expressions are re-evaluated at draw time.
+   the signature — colour expressions are re-evaluated at draw time. Animation fields
+   that change *what is sampled* ARE in both the signature and the key: `samples`,
+   `layer` (layered entries are never culled), `glow` / `blur` (they widen the cull
+   margin). `blend` and `dots` are cosmetic.
+3. **The evaluator** (`lib/math/fastCompile.ts`, behind `compileNode`): mathjs trees
+   become native closures (number arithmetic native, everything else delegated to the
+   mathjs function — results bit-identical, see `fastCompile.test.ts`). Costly subtrees
+   that don't read the sample variables (`SAMPLE_VARS` t/x/y/r/θ, `D1_y` state, plus the
+   `varying` hint: ODE state, fndef params) are **memoised on the values they read**
+   (correct however a caller mutates its scope); repeated subtrees share one memo (CSE).
+   Only `FastMiss` errors fall back to a full mathjs evaluation — never re-run user-fn
+   errors (that was exponential with mutual recursion). mathjs `floor`/`mod`/`round`
+   snap nearly-integer values: native versions only run away from integers.
+4. **Culling** (`lib/math/bounds.ts`): interval arithmetic proves a parametric/polar
+   copy's box misses the view (+ stroke/glow margin) before sampling; anything it
+   can't bound is never culled. `CurveResult.culled` counts skipped copies. PlotCanvas
+   also skips off-screen segments (`lib/geom/cull.ts`).
+
+Benchmark: `npx vite-node scripts/bench.ts [-- tuned]` (animator-style scene, ms/frame).
+
+## Animation & rendering layer (feat/animator)
+
+All optional; defaults render pixel-identically (verified against main in light/dark).
+
+- **Syntax** (`parse.ts`): `… where a = …` (`expandWhere`: textual substitution of whole
+  identifiers before classification; `raw` stays as typed; such rows render as typed),
+  `name = layer(dx, dy[, s, angle, cx, cy])` → kind `layer`, smooth paths
+  `spline(…)` / `bezier(…)` / `arc(center, angle)` inside point lists (`points.ts`
+  `PathSeg`; `Parsed.points.smooth`; geometry in `lib/geom/path.ts` as Script-mode
+  op arrays, flattened in `compute.ts` `samplePath`; `CurveResult.path` keeps the ops).
+- **Rendering** (`lib/render/canvas.ts`, shared with Script mode's `scriptLayer.ts`):
+  matrices, op paths, `paintToCanvas` (Script mode's `Paint`: data-space linear/radial
+  gradients), `applyEffects` (blend / glow = shadowBlur / blur = ctx.filter, px × dpr),
+  `layerMatrix`, `letterboxRect`. `lib/render/layers.ts`: `evalLayers` (per frame, from
+  the scope) + `drawOrder` (members drawn at the layer row's index; `camera` composes
+  onto everything). Layered entries aren't traceable / don't show dots.
+- **Style** (`style.ts`): `ResolvedStyle.stroke/fill` are `Paint`s; `resolveCopyStyles`
+  resolves per copy when colour expressions read a loop variable
+  (`CurveResult.copyRanges`). `showsVertexDots` + `Entry.dots` decide polyline dots.
+- **Letterbox**: `features.aspect` (numbers ride in `FeatureToggles`; `ToggleKey` =
+  the booleans). PlotCanvas measures the panel (`box`) and draws in the centred frame
+  (`size` = frame), so all interaction code is unchanged.
+- **Clock**: `lib/anim.ts` `valueAt` (pure), `entriesAtTime`; `features.fps` switches
+  `AnimationLoop` to whole frames from each run's start; `time` / `frame` (spec, params,
+  or `&frame=` appended to any link via `readUrlPayload`) open paused on that frame;
+  `state/frameApi.ts` installs `window.fluxion` (`setFrame`, `setTime`, `capture`,
+  `info`; PlotCanvas calls `notifyDrawn`).
+- **UI**: only the style popover's collapsed **Advanced** section (`ColorPopover`).
 
 ## Verifying changes
 
@@ -367,7 +415,7 @@ strips them; bad links show an error toast and keep the current graph.
 - **Untrusted input**: specs never reach anything but the mathjs pipeline, and calls to
   functions outside `KNOWN_FUNCTIONS` are never *evaluated* (guards in `parse.ts`
   variable branch, `compute.ts` pointvar resolution, `evalConstant`). Legacy graphs go
-  through `sanitizeGraph`. Limits live in `LIMITS` (100 exprs, θ-span ≤ 50 turns, …).
+  through `sanitizeGraph`. Limits live in `LIMITS` (300 exprs × 3000 chars, colour exprs 600, 1 MB of spec JSON, θ-span ≤ 50 turns, …).
   The scripting layer follows the same rule: user-function bodies and derived values
   may only call `KNOWN_FUNCTIONS` + the graph's own functions (`scope.ts`), and colour
   expressions only built-ins, colour constructors and user functions (`evalColor`).

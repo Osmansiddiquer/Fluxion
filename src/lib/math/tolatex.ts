@@ -1,5 +1,5 @@
 import { parse as mjParse } from 'mathjs';
-import type { Parsed } from './parse';
+import { hasWhere, type Parsed } from './parse';
 import { greekWordToTex } from './greek';
 import { fmtSig } from '../format';
 
@@ -40,6 +40,8 @@ function texOf(src: string): string {
 /** Build a KaTeX-ready LaTeX string for an entry, or null if not renderable.
  *  `varValue` overrides a variable's displayed value (the live slider value). */
 export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
+  // Locals (`… where a = …`) are shown as typed: the parse is of the expanded text.
+  if ('raw' in parsed && typeof parsed.raw === 'string' && hasWhere(parsed.raw)) return null;
   switch (parsed.kind) {
     case 'variable':
       return `${greekWordToTex(parsed.name)} = ${fmtNum(varValue ?? parsed.value)}`;

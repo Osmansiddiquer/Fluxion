@@ -1,7 +1,9 @@
 import { decodeGraph, isGraph, type GraphData } from '../graphFile';
 import { DEMOS } from '../demos';
+import { entriesAtTime } from '../anim';
 import {
   COLOR_NAMES,
+  DEFAULT_FPS,
   LIMITS,
   graphToSpec,
   suggestKey,
@@ -29,7 +31,7 @@ import {
 export const DEFAULT_BASE_URL = 'https://osmansiddiquer.github.io/Fluxion/';
 
 /** Largest URL payload we'll even try to decode (characters). */
-export const MAX_PAYLOAD_CHARS = 300_000;
+export const MAX_PAYLOAD_CHARS = 1_400_000;
 
 export type LinkFormat = 'z' | 'json' | 'b64' | 'params';
 
@@ -142,7 +144,7 @@ export function encodeValue(s: string): string {
 // ── simple params form ───────────────────────────────────────────────────────
 
 /** Graph-level params. */
-export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers', 'grid', 'script'] as const;
+export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers', 'grid', 'script', 'aspect', 'fps', 'time', 'frame'] as const;
 /** Per-expression params; each applies to the most recent `expr`. */
 export const EXPR_PARAMS = [
   'color',
@@ -167,6 +169,12 @@ export const EXPR_PARAMS = [
   'colorexpr',
   'fillcolor',
   'autoplay',
+  'samples',
+  'dots',
+  'blend',
+  'glow',
+  'blur',
+  'layer',
 ] as const;
 const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> = {
   color: 'color',
@@ -191,6 +199,12 @@ const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> =
   colorexpr: 'colorExpr',
   fillcolor: 'fillColor',
   autoplay: 'autoplay',
+  samples: 'samples',
+  dots: 'dots',
+  blend: 'blend',
+  glow: 'glow',
+  blur: 'blur',
+  layer: 'layer',
 };
 /** The marker toggles `markers=off` turns off (everything but the grid). */
 const MARKER_KEYS = ['extrema', 'xIntercepts', 'yIntercept', 'endpoints', 'discontinuities', 'intersections'] as const;
@@ -266,6 +280,11 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
       viewport[key] = numish(value);
     } else if (key === 'script') {
       spec.script = value;
+    } else if (key === 'aspect' || key === 'time') {
+      // May be a constant like 16/9 or 2.39.
+      spec[key] = numish(value);
+    } else if (key === 'fps' || key === 'frame') {
+      spec[key] = numish(value) as number;
     } else if (key === 'sigfigs') {
       spec.sigFigs = numish(value) as number;
     } else if (key === 'panels') {
@@ -294,9 +313,9 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
       }
       const k = PARAM_TO_KEY[key as (typeof EXPR_PARAMS)[number]];
       const rec = last as unknown as Record<string, unknown>;
-      if (k === 'hidden' || k === 'fill' || k === 'autoplay') rec[k] = bool(value);
+      if (k === 'hidden' || k === 'fill' || k === 'autoplay' || k === 'dots') rec[k] = bool(value);
       else if (k === 'ic') rec[k] = value.split(',').map(numish);
-      else if (['t0', 'min', 'max', 'step', 'speed', 'thetaMin', 'thetaMax', 'pointSize', 'lineWidth', 'fillOpacity'].includes(k)) {
+      else if (['t0', 'min', 'max', 'step', 'speed', 'thetaMin', 'thetaMax', 'pointSize', 'lineWidth', 'fillOpacity', 'samples', 'glow', 'blur'].includes(k)) {
         rec[k] = numish(value);
       } else if (k === 'color' || k === 'colorExpr' || k === 'fillColor') {
         // `#` can't appear raw in a fragment; accept "c74440" and "%23c74440".
@@ -324,7 +343,7 @@ export function specToParams(spec: FluxionSpec): string | null {
       const v = (e as unknown as Record<string, unknown>)[PARAM_TO_KEY[p]];
       if (v === undefined) continue;
       if (p === 'ic') push(p, (Array.isArray(v) ? v : [v]).join(','));
-      else if (p === 'hidden' || p === 'fill' || p === 'autoplay') push(p, v ? 1 : 0);
+      else if (p === 'hidden' || p === 'fill' || p === 'autoplay' || p === 'dots') push(p, v ? 1 : 0);
       else if (p === 'color' || p === 'colorexpr' || p === 'fillcolor') {
         const c = String(v);
         push(p, /^#/.test(c) && HEX.test(c.slice(1)) ? c.slice(1) : c);
@@ -334,6 +353,7 @@ export function specToParams(spec: FluxionSpec): string | null {
   }
   if (spec.viewport) for (const k of VIEWPORT_PARAMS) if (spec.viewport[k] !== undefined) push(k, spec.viewport[k]!);
   if (spec.sigFigs !== undefined) push('sigfigs', spec.sigFigs);
+  for (const k of ['aspect', 'fps', 'time', 'frame'] as const) if (spec[k] !== undefined) push(k, spec[k]!);
   if (spec.script !== undefined) push('script', spec.script);
   if (spec.panels) {
     const { right, bottom, ...rest } = spec.panels;
@@ -373,6 +393,36 @@ function firstValue(pairs: [string, string][], key: string): string | undefined 
  * Never throws: decode problems come back as `{ kind: 'error' }`.
  */
 export async function readUrlPayload(hash: string, search: string): Promise<UrlPayload> {
+  const p = await readPayloadRaw(hash, search);
+  // `&frame=N` / `&time=s` (and `&fps=`) may follow any payload — `#z=…&frame=120`,
+  // `#example=mandala&time=3` — to open paused on that frame (headless capture).
+  if (p.kind !== 'spec' && p.kind !== 'legacy') return p;
+  const part = hash && hash.length > 1 ? hash : search;
+  const pairs = splitParams(part, part === search);
+  const time = firstValue(pairs, 'time');
+  const frame = firstValue(pairs, 'frame');
+  const fps = firstValue(pairs, 'fps');
+  if (time === undefined && frame === undefined) return p;
+  if (p.kind === 'spec') {
+    if (p.format === 'params' || !p.spec || typeof p.spec !== 'object' || Array.isArray(p.spec)) return p;
+    const spec = { ...(p.spec as Record<string, unknown>) };
+    if (fps !== undefined && spec.fps === undefined) spec.fps = numish(fps);
+    if (time !== undefined) {
+      spec.time = numish(time);
+      delete spec.frame;
+    } else {
+      spec.frame = numish(frame!);
+      delete spec.time;
+    }
+    return { ...p, spec };
+  }
+  const f = Number(fps ?? p.graph.features?.fps ?? DEFAULT_FPS);
+  const secs = time !== undefined ? Number(time) : Math.floor(Number(frame)) / (f > 0 ? f : DEFAULT_FPS);
+  if (!Number.isFinite(secs) || secs < 0 || secs > LIMITS.maxTime) return p;
+  return { kind: 'legacy', graph: { ...p.graph, entries: entriesAtTime(p.graph.entries ?? [], secs) } };
+}
+
+async function readPayloadRaw(hash: string, search: string): Promise<UrlPayload> {
   for (const [part, isQuery] of [
     [hash, false],
     [search, true],

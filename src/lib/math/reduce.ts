@@ -43,7 +43,7 @@ export function buildSystem(
   }
   const dim = offset;
 
-  const compiled = odes.map((o) => compileNode(o.node));
+  const compiled = odes.map((o) => compileNode(o.node, Object.keys(index)));
   const stateNames = Object.keys(index);
   // One reusable scope object; constants copied in, state symbols overwritten.
   const evalScope: Record<string, number> = { ...scope };

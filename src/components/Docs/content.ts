@@ -560,9 +560,96 @@ const drawing: DocSection = {
     }),
     H('Examples'),
     P(
-      'The share menu’s **Examples** open complete drawings: Rotating Sharingan, Rotating cube, Eye → Sharingan → Mangekyō, Mandala bloom, Pendulum from an ODE and Silhouette clip. They are written as short **Script mode** programs (see Scripting below), which is the easier way to make drawings like these. Opening one replaces your graph, with **Undo** in the notice that appears.',
+      'The share menu’s **Examples** open complete drawings: Rotating Sharingan, Rotating cube, Eye → Sharingan → Mangekyō, Mandala bloom, Pendulum from an ODE and Silhouette clip. They are written as short **Script mode** programs (see Scripting below), which is the easier way to make drawings like these. **Cinematic sunset** is the exception: a Graph-mode scene made with the [animation features](#animation). Opening one replaces your graph, with **Undo** in the notice that appears.',
     ),
     EX({ id: 'mandala-demo', title: 'Mandala bloom', blurb: 'A petal() helper in three counter-rotating rings, on one looping clock.', lines: [], demo: 'mandala' }),
+  ],
+};
+
+// ── 6b. Animation & performance ────────────────────────────────────────────
+
+const SKY = 'linear(0, 6, 0, -6, #0b1d3a, #f28c38)';
+
+const animation: DocSection = {
+  id: 'animation',
+  title: 'Animation & performance',
+  summary: 'Smooth paths, locals, gradients, glow and blend modes, layers, letterbox frames and exact frame timing.',
+  blocks: [
+    P(
+      'Everything here is optional and lives in the style popover’s **Advanced** section, in the row syntax, or in a link / JSON spec ([For AI agents](#agents)). A graph that doesn’t use it looks and behaves exactly as before.',
+    ),
+    H('It’s already fast'),
+    P(
+      'Every row is compiled once. A part of an expression that doesn’t change along a curve (say a drift term `mod(T*0.4 + 3k, 48)` in a `for` repeat) is computed once per copy, not at every sample, and a term that appears twice is computed once. Shapes that are entirely off-screen are skipped. Write the natural formula.',
+    ),
+    LIST(
+      '**Samples** (Advanced): a row’s own resolution, 8 to 20000. Raise it for a smooth hero curve, lower it for a sky full of soft shapes.',
+    ),
+    H('Local definitions'),
+    P('`… where a = …, b = …` names parts of one row. Later locals may use earlier ones and the loop variable of a `for`.'),
+    SYNTAX(
+      row('y = a*x^2 + a where a = 0.5', 'function', 'A local a'),
+      row('(s*cos(t) + 3k, s*sin(t)) where s = 1 + 0.2sin(5t) for k = -1..1', 'repeat', 'Locals in a repeat'),
+    ),
+    H('Smooth paths'),
+    P(
+      '`spline(P0, P1, …)` draws a smooth curve through points (closed and smooth when the last point equals the first). Inside a polyline, `spline(…)` runs smoothly from the previous point, and `bezier((c1), (c2), (end))`, `bezier((c), (end))` and `arc((cx, cy), angle)` continue from it, so one outline mixes sharp corners and curves. Smooth paths have no vertex dots; the **Vertex dots** switch (Advanced) shows or hides dots on any polyline.',
+    ),
+    SYNTAX(
+      row('spline((-4, -1), (-2, 2), (0, 0), (2, 2), (4, -1))', 'points', 'Through five points'),
+      row('spline((2, 0), (0, 2), (-2, 0), (0, -2), (2, 0))', 'points', 'A closed blob', { opts: { fill: true } }),
+      row('((-3, -2), (0, 3), spline((1, 1), (2, 0)), bezier((3, -1), (2, -2), (-3, -2)))', 'points', 'Corners, a spline and a Bézier', { opts: { fill: true } }),
+      row('((2, 0), arc((0, 0), pi), (-2, -2))', 'points', 'An arc by π around the origin'),
+    ),
+    H('Gradients, glow and blend modes'),
+    P('Fill and line colours can be gradients, in graph coordinates. In a `for` repeat, colours may use the loop variable, so every copy can differ.'),
+    TABLE(
+      ['Colour', 'Arguments'],
+      ['`linear(x0, y0, x1, y1, c0, c1, …)`', 'from (x0, y0) to (x1, y1); colours evenly spaced, or `offset, colour` pairs'],
+      ['`radial(cx, cy, r, c0, c1, …)`', 'from the centre out to radius r'],
+    ),
+    LIST(
+      '**Blend** (Advanced): `add` makes light add up (rays, flashes), `screen` is softer; also multiply, overlay, lighten, darken.',
+      '**Glow** and **Blur** (Advanced): a soft halo or a blur, radius in px. Use them on a few shapes; they are costly on thousands.',
+    ),
+    EX({
+      id: 'sunset',
+      title: 'Sky, sun and hills',
+      blurb: 'One gradient rectangle for the sky, a radial glow in screen blend, a spline hill and per-copy cloud colours.',
+      lines: [
+        L('((-10, -6), (10, -6), (10, 6), (-10, 6))', 'points', { fill: true, fillOpacity: 1, lineWidth: 0, fillColor: SKY }),
+        L('(2cos(t) + 4, 2sin(t) + 1)', 'parametric', {
+          fill: true, fillOpacity: 1, lineWidth: 0, blend: 'screen',
+          fillColor: 'radial(4, 1, 2, rgba(255, 240, 200, 1), rgba(255, 170, 80, 0))',
+        }),
+        L('(1.2cos(t) + 3k - 8, 0.5sin(t) + 4) for k = 0..5', 'repeat', { fill: true, fillOpacity: 0.9, lineWidth: 0, fillColor: 'hsv(210, 0.06k, 1)', samples: 64 }),
+        L('spline((-10, -6), (-6, -2), (-1, -4), (4, -1.5), (10, -6))', 'points', { fill: true, fillOpacity: 1, lineWidth: 0, color: '#000000' }),
+      ],
+      viewport: WIDE,
+      features: CLEAN,
+    }),
+    H('Layers and the camera'),
+    P(
+      'A row `name = layer(dx, dy, scale, angle, cx, cy)` (only dx and dy are needed; scale and rotation are about (cx, cy)) is a transform driven by sliders. Rows whose **Layer** (Advanced) is that name move with it and are drawn at the layer row’s place in the list, so dragging the layer row changes their depth. A layer called `camera` moves everything: a pan, a zoom or a shake is one value. Moving a layer never recomputes the curves.',
+    ),
+    SYNTAX(
+      row('far = layer(-0.2T, 0)', 'layer', 'Moves slower than the rest: parallax', {
+        with: [
+          L('T = 0', 'variable', { varMin: 0, varMax: 20, animMode: 'loop' }),
+          L('(cos(t) + 2, sin(t) + 1)', 'parametric', { layer: 'far', fill: true }),
+        ],
+      }),
+      row('camera = layer(0.05sin(40T), 0, 1 + 0.01T)', 'layer', 'Shake and a slow zoom', {
+        with: [L('T = 1', 'variable'), L('(cos(t), sin(t))', 'parametric')],
+      }),
+    ),
+    H('Frames and time'),
+    LIST(
+      '`aspect` (link / spec): letterbox the plot to a fixed frame such as 2.39 or 16/9, with black bars; the x-range spans the frame exactly, so it looks the same on every screen.',
+      '`fps`: deterministic playback. Sliders advance in whole frames, and frame N always looks the same.',
+      '`time` / `frame`: open a link paused at an exact moment (`…&frame=120`), handy for rendering frames one by one. In the page, `fluxion.setFrame(n)` and `fluxion.capture()` do the same from a script.',
+    ),
+    TIP('Drive everything from one clock slider `T` and derive the rest from it; with `fps` set, the whole animation is a pure function of the frame number.'),
   ],
 };
 
@@ -747,6 +834,7 @@ export const SECTIONS: DocSection[] = [
   sliders,
   inspect,
   drawing,
+  animation,
   clips,
   sharing,
   keyboard,

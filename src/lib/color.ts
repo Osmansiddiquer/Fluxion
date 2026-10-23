@@ -1,7 +1,8 @@
 import { parse as mjParse, type EvalFunction } from 'mathjs';
 import { normalizeInput } from './math/normalize';
-import { calledFunctions } from './math/parse';
+import { calledFunctions, freeSymbols } from './math/parse';
 import { KNOWN_FUNCTIONS } from './math/builtins';
+import type { GradientStop, Paint } from './script/protocol';
 
 /**
  * Colour values and colour *expressions*. An entry's colour can be a literal
@@ -97,7 +98,50 @@ const COLOR_FNS = {
       : NaN,
   // Same colour, new alpha: alpha(c, a).
   alpha: (c: RGBA, a: number) => (isRGBA(c) ? mk(c.r, c.g, c.b, a) : NaN),
+  // Gradient fills (data coordinates, Script mode's Paint shape):
+  //   linear(x0, y0, x1, y1, c0, c1, …)       colours evenly spaced
+  //   linear(x0, y0, x1, y1, 0, c0, 0.7, c1)   or offset, colour pairs
+  //   radial(cx, cy, r, c0, c1, …)             from the centre out to r
+  linear: (x0: number, y0: number, x1: number, y1: number, ...stops: unknown[]) =>
+    gradient({ type: 'linear', x0, y0, x1, y1 }, stops),
+  radial: (cx: number, cy: number, r: number, ...stops: unknown[]) =>
+    gradient({ type: 'radial', x0: cx, y0: cy, r0: 0, x1: cx, y1: cy, r1: Math.abs(r) }, stops),
 };
+
+/** A gradient under construction: RGBA stops (alpha applied when resolved). */
+export interface GradientValue {
+  gradient: Omit<Extract<Paint, { type: 'linear' }>, 'stops'> | Omit<Extract<Paint, { type: 'radial' }>, 'stops'>;
+  stops: { offset: number; color: RGBA }[];
+}
+
+/** Max gradient stops (Script mode's limit). */
+export const MAX_STOPS = 16;
+
+function gradient(g: GradientValue['gradient'], args: unknown[]): GradientValue | number {
+  const nums = Object.values(g).filter((v) => typeof v !== 'string') as unknown[];
+  if (!nums.every((v) => typeof v === 'number' && Number.isFinite(v))) return NaN;
+  let stops: { offset: number; color: RGBA }[];
+  if (args.length >= 2 && typeof args[0] === 'number') {
+    // offset, colour pairs
+    if (args.length % 2 !== 0) return NaN;
+    stops = [];
+    for (let i = 0; i < args.length; i += 2) {
+      const o = args[i];
+      const c = args[i + 1];
+      if (typeof o !== 'number' || !isRGBA(c)) return NaN;
+      stops.push({ offset: clamp(o, 0, 1), color: c });
+    }
+  } else {
+    if (args.length < 1 || !args.every(isRGBA)) return NaN;
+    const cs = args as RGBA[];
+    stops = cs.map((color, i) => ({ offset: cs.length === 1 ? 0 : i / (cs.length - 1), color }));
+  }
+  return { gradient: g, stops: stops.slice(0, MAX_STOPS) };
+}
+
+function isGradient(v: unknown): v is GradientValue {
+  return !!v && typeof v === 'object' && 'gradient' in (v as object) && Array.isArray((v as GradientValue).stops);
+}
 
 export const COLOR_FUNCTION_NAMES = Object.keys(COLOR_FNS);
 
@@ -125,6 +169,8 @@ interface CompiledColor {
   fn: EvalFunction;
   /** Called names that aren't built in — must be user functions in the scope. */
   extern: string[];
+  /** Variable names read. */
+  symbols: string[];
 }
 const compiled = new Map<string, CompiledColor | null>();
 
@@ -134,7 +180,7 @@ function compileColor(expr: string): CompiledColor | null {
   try {
     const node = mjParse(rewriteHex(normalizeInput(expr)));
     const extern = [...calledFunctions(node)].filter((f) => !KNOWN_FUNCTIONS.has(f) && !(f in COLOR_FNS));
-    fn = { fn: node.compile(), extern };
+    fn = { fn: node.compile(), extern, symbols: [...freeSymbols(node)] };
   } catch {
     fn = null;
   }
@@ -165,6 +211,53 @@ export function evalColor(expr: string | undefined, scope: Record<string, unknow
   } catch {
     return null;
   }
+}
+
+/**
+ * Evaluate a fill / stroke paint: a colour (→ CSS string) or a gradient
+ * (`linear(…)` / `radial(…)` → Script mode's Paint data, stops as CSS strings
+ * with `alphaMul` applied). Null when it isn't a colour or gradient.
+ */
+export function evalPaint(
+  expr: string | undefined,
+  scope: Record<string, unknown> = {},
+  alphaMul = 1,
+): Paint | null {
+  if (!expr || !expr.trim()) return null;
+  const lit = parseColorLiteral(expr);
+  if (lit) return toCss(lit, alphaMul);
+  const v = evalValue(expr, scope);
+  if (isRGBA(v)) return toCss(v, alphaMul);
+  if (isGradient(v)) {
+    const stops: GradientStop[] = v.stops.map((st) => ({ offset: st.offset, color: toCss(st.color, alphaMul) }));
+    return { ...v.gradient, stops } as Paint;
+  }
+  return null;
+}
+
+/** First stop colour of a gradient / the colour itself (for swatches, glows). */
+export function paintSolid(p: Paint | null): string | null {
+  if (!p) return null;
+  return typeof p === 'string' ? p : (p.stops[0]?.color ?? null);
+}
+
+function evalValue(expr: string, scope: Record<string, unknown>): unknown {
+  const c = compileColor(expr.trim());
+  if (!c) return null;
+  if (c.extern.some((f) => typeof scope[f] !== 'function')) return null;
+  try {
+    const local = Object.create(scope) as Record<string, unknown>;
+    Object.assign(local, COLOR_FNS);
+    return c.fn.evaluate(local);
+  } catch {
+    return null;
+  }
+}
+
+/** Names a colour expression reads (variables, e.g. a loop variable `k`). */
+export function colorExprSymbols(expr: string | undefined): string[] {
+  if (!expr || parseColorLiteral(expr)) return [];
+  return compileColor(expr.trim())?.symbols ?? [];
 }
 
 /** Does this text parse as a colour expression at all (for input validation)? */

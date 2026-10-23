@@ -62,6 +62,11 @@ https://osmansiddiquer.github.io/Fluxion/#example=mandala
 | `fill`, `opacity` | fill a closed curve or polygon (`1`/`0`) and the fill opacity 0 to 1 | `fill=1&opacity=0.3` |
 | `colorexpr`, `fillcolor` | line / fill colour as an expression over sliders: `hsv(h,s,v)`, `hsl(h,s,l)`, `rgb(r,g,b)`, `rgba(r,g,b,a)`, or hex without `#` | `colorexpr=hsv(57*a,0.8,0.9)` |
 | `autoplay` | start a slider playing when the link opens (`1`/`0`); pair with `anim` | `anim=loop&autoplay=1` |
+| `samples` | the expression's own sample count, 8 to 20000 (see "Animation & performance") | `samples=96` |
+| `dots` | polylines: show (`1`) or hide (`0`) the vertex dots | `dots=0` |
+| `blend` | blend mode: `normal`, `add`, `screen`, `multiply`, `overlay`, `lighten`, `darken` | `blend=add` |
+| `glow`, `blur` | glow / blur radius in px, 0 to 50 | `glow=12` |
+| `layer` | draw on the layer row `name = layer(...)` of that name | `layer=far` |
 
 ### Graph params
 
@@ -73,6 +78,9 @@ https://osmansiddiquer.github.io/Fluxion/#example=mandala
 | `markers` | `off` hides extrema/intercept/intersection dots | `markers=off` |
 | `sigfigs` | significant figures in labels, 1 to 12 (default 3) | `sigfigs=4` |
 | `grid` | `off` hides the grid lines and axes, for drawings | `grid=off` |
+| `aspect` | letterbox the plot to this width / height ratio | `aspect=2.39`, `aspect=16/9` |
+| `fps` | fixed, deterministic playback rate (1 to 240) | `fps=24` |
+| `time`, `frame` | open paused at this time (s) or frame (at `fps`, default 30); may follow any link | `frame=120` |
 | `example` | open a built-in example instead of an expression list (see "Built-in examples") | `example=cube` |
 | `script` | a Script mode program (JavaScript, percent-encoded; see "Script mode") | `script=circle(0,0,2)` |
 
@@ -350,7 +358,7 @@ For full control (initial conditions, slider ranges, panels, markers) use a JSON
 }
 ```
 
-- Only `expressions` is required (or `script`, see "Script mode"). An expression is a string, or an object with `expr` plus options: `color`, `hidden`, `t0`, `ic`, `min`, `max`, `step`, `anim`, `speed`, `autoplay`, `thetaMin`, `thetaMax`, `label`, `labelDir`, `pointSize`, `drag`, `lineWidth`, `lineStyle`, `fill`, `fillOpacity`, `colorExpr`, `fillColor`.
+- Only `expressions` is required (or `script`, see "Script mode"). An expression is a string, or an object with `expr` plus options: `color`, `hidden`, `t0`, `ic`, `min`, `max`, `step`, `anim`, `speed`, `autoplay`, `thetaMin`, `thetaMax`, `label`, `labelDir`, `pointSize`, `drag`, `lineWidth`, `lineStyle`, `fill`, `fillOpacity`, `colorExpr`, `fillColor`, `samples`, `dots`, `blend`, `glow`, `blur`, `layer`. Top level, besides `expressions`: `viewport`, `features`, `panels`, `sigFigs`, `script`, and for animations `aspect`, `fps`, `time`, `frame`.
 - `color`: `"#rrggbb"`, `"#rgb"` or a palette name. Without one, colours are assigned from the palette in order.
 - Numbers may be given as constant strings: `"2pi"`, `"-pi/2"`, `"sqrt(2)"`.
 - `features` turns marker families on/off, and `grid` the grid lines and axes. `panels.sliceX` / `panels.sliceY` position the cross-section cursors; they may be a slider expression like `"k"`.
@@ -410,6 +418,7 @@ Fluxion ships example scripts (Script mode programs). Open one as-is with `#exam
 | `mandala` | Mandala bloom | https://osmansiddiquer.github.io/Fluxion/#example=mandala | https://osmansiddiquer.github.io/Fluxion/examples/mandala.json |
 | `pendulum` | Pendulum from an ODE (`graph.ode`) | https://osmansiddiquer.github.io/Fluxion/#example=pendulum | https://osmansiddiquer.github.io/Fluxion/examples/pendulum.json |
 | `silhouette` | Silhouette clip | https://osmansiddiquer.github.io/Fluxion/#example=silhouette | link only (carries a frame clip) |
+| `sunset` | Cinematic sunset (Graph mode: gradients, layers, splines, letterbox) | https://osmansiddiquer.github.io/Fluxion/#example=sunset | https://osmansiddiquer.github.io/Fluxion/examples/sunset.json |
 
 Tips for your own drawings, learned from these:
 
@@ -422,6 +431,67 @@ With expression rows instead of a script:
 - Define a shape once as a function (`Px(u, L, W) = ...`) and place copies with `(rotx(Px(t, ...), Py(t, ...), angle), roty(...)) for k = 0..11`.
 - A compound radius needs explicit multiplication: `((0.5 + 0.1 sin(w))*cos(t), (0.5 + 0.1 sin(w))*sin(t))`.
 - Colours: `colorExpr` for the line, `fillColor` with `"fill": true` for the inside, and `"lineWidth": 0` for a borderless fill.
+
+## Animation & performance (for agent-animators)
+
+Fluxion is an ODE plotter first, but everything below makes it a good place to render animations too. All of it is optional: nothing changes for a graph that doesn't use it.
+
+**Speed you get for free.** Each expression is compiled once to native code. A sub-expression that doesn't depend on `t`, `x`, `y`, `r` or `theta` (a drift term like `mod(T*0.4 + 3k, 48)`) is computed once per copy per frame, not once per sample, and a term that appears twice is computed once. Shapes whose bounds are entirely off-screen (or behind the letterbox bars) are skipped before sampling. So write the natural formula: there's no need to pre-compute, flatten or inline anything.
+
+**Your own levers.**
+
+- `samples` sets an expression's resolution (8 to 20000): raise it for a smooth hero shape, lower it (say 48) for a sky full of soft clouds. Defaults: parametric curves 480 per 2π, functions about 1.5 per pixel.
+- `expr where a = ..., b = ...` defines locals for one row (later ones may use earlier ones and the loop variable), instead of pasting the same formula several times.
+- `spline((x0, y0), (x1, y1), ...)` is a smooth curve through points (closed and smooth if the last point equals the first). Inside a polyline, `spline(...)` runs smoothly from the previous point, `bezier((c1), (c2), (end))` / `bezier((c), (end))` and `arc((cx, cy), angle)` continue from it, so a silhouette can mix sharp corners and curves. Send 10 control points, not 300 pre-subdivided ones.
+- In a `for` repeat, colour expressions may use the loop variable: one row `... for k = 0..21` with `"fillColor": "hsv(210, 0.4 + k/40, 1)"` gives 22 differently coloured copies.
+
+```fluxion
+T = 0                                                                              # variable
+(s*cos(t) + d, 0.6s*sin(t) + 4) where s = 1.2, d = mod(T + 3k, 30) - 15 for k = 0..3   # repeat
+spline((-6, -3), (-3, 0), (0, -1), (3, 1), (6, -3))                                # points
+((-2, -4), (0, 0), spline((1, 1), (2, 0.5)), bezier((3, -1), (2, -3), (1, -4)), (-2, -4))   # points
+((3, 0), arc((0, 0), pi), (-3, -1))                                                # points
+far = layer(-0.2T, 0)                                                              # layer
+camera = layer(0.05sin(40T), 0)                                                    # layer
+```
+
+**Cinematic rendering.**
+
+- Gradients are colour expressions: `linear(x0, y0, x1, y1, c0, c1, ...)` (colours evenly spaced, or `offset, colour` pairs) and `radial(cx, cy, r, c0, c1, ...)`, in graph coordinates. A sky is one rectangle with `"fillColor": "linear(0, 9, 0, -9, #0b1d3a, #f28c38)"`; a sun glow is one disc with a `radial(...)` fading to `rgba(..., 0)`.
+- `"blend"`: `add` (light adds up: god-rays, flashes), `screen` (soft light), `multiply`, `overlay`, `lighten`, `darken`. `"glow"` / `"blur"`: radius in px (0 to 50; use on a few shapes, not on 2000 copies).
+- Layers: a row `name = layer(dx, dy, scale, angle, cx, cy)` (only dx, dy required; scale and rotation are about (cx, cy)) and `"layer": "name"` on expressions. Members are moved by the layer's transform at draw time (moving a layer never re-samples anything) and are drawn at the layer row's position in the list, so the row order is the z-order. A layer named `camera` moves everything: `camera = layer(0.05sin(40T), 0)` is a screen shake. Shapes on a layer aren't traceable by hover.
+- `"aspect": 2.39` (or `"16/9"`) letterboxes the plot to that frame with black bars; xmin..xmax spans the frame exactly, so frame N looks the same on every screen. Don't draw bars as geometry.
+
+**Time.** Drive everything from one clock slider `T` with `"anim": "loop", "autoplay": true` (speed 1 sweeps the slider's range in 4 s, so for T in seconds over 0..60 use `"speed": 0.0667`).
+
+- `"fps": 24` makes playback deterministic: sliders advance in whole frames, and frame N is a pure function of N (no drift from irregular browser frames).
+- `"time": 2.5` or `"frame": 60` opens the graph paused at that moment (every autoplay slider set to its value then). `&frame=N` or `&time=s` can also be appended to any link (`#z=...&frame=120`, `#expr=...&time=2`).
+- Headless capture: browsers throttle background tabs to about 1 fps, so don't record by waiting. Load the link with `&frame=N` per frame, or in the page call `await fluxion.setFrame(n)` (or `setTime(seconds)`), which resolves after the redraw, then `fluxion.capture()` for a PNG data URL. `fluxion.info()` gives the fps, aspect and animated sliders. Graph-mode sliders only; Script mode has its own clock.
+
+A complete little scene (open it, then press nothing: it plays):
+
+```json
+{
+  "expressions": [
+    { "expr": "T = 0", "min": 0, "max": 60, "anim": "loop", "speed": 0.0667, "autoplay": true },
+    { "expr": "((-16, -9), (16, -9), (16, 9), (-16, 9))", "fill": true, "fillOpacity": 1, "lineWidth": 0, "fillColor": "linear(0, 9, 0, -9, #0b1d3a, #f28c38)" },
+    { "expr": "(2.5cos(t) + 6, 2.5sin(t) + 2)", "fill": true, "fillOpacity": 1, "lineWidth": 0, "fillColor": "radial(6, 2, 2.5, rgba(255, 240, 200, 1), rgba(255, 170, 80, 0))", "blend": "screen" },
+    "far = layer(-0.1*T, 0)",
+    { "expr": "(1.5cos(t) + 4k - 12, 0.6sin(t) + 5) for k = 0..6", "layer": "far", "fill": true, "fillOpacity": 0.9, "lineWidth": 0, "fillColor": "hsv(210, 0.05*k, 1)", "samples": 64 },
+    { "expr": "spline((-16, -9), (-10, -4), (-4, -6), (2, -3), (8, -6), (16, -9))", "fill": true, "fillOpacity": 1, "lineWidth": 0, "color": "#000000" },
+    { "expr": "(t, 0.4sin(3t - 4T) - 1)", "thetaMin": -2, "thetaMax": 1, "lineWidth": 5, "glow": 12, "colorExpr": "#ff3b30" }
+  ],
+  "viewport": { "xmin": -16, "xmax": 16, "ymin": -9, "ymax": 9 },
+  "features": { "grid": false, "extrema": false, "xIntercepts": false, "yIntercept": false, "intersections": false },
+  "panels": { "right": false, "bottom": false },
+  "aspect": 2.39,
+  "fps": 24
+}
+```
+
+The same Lissajous animation opened paused at t = 1.5 s:
+
+https://osmansiddiquer.github.io/Fluxion/#expr=a=0&min=0&max=2pi&anim=loop&autoplay=1&expr=(3cos(t),2sin(3t+a))&width=3&grid=off&markers=off&panels=none&time=1.5
 
 ## Checking a graph before you send it
 
@@ -449,6 +519,6 @@ npm run fluxion -- script pendulum.js --spec spec.json           # ... reading t
 ## Behaviour and limits
 
 - Opening a link replaces the graph in that browser tab. The user's previous graph is only kept elsewhere if they saved or shared it. The URL is cleaned up after loading.
-- Limits: a script of at most 100,000 characters; at most 100 expressions, 1000 characters per expression, 10 initial conditions, |numbers| ≤ 1e9, a θ-range of at most 50 turns, and 200 KB of JSON.
+- Limits: a script of at most 100,000 characters; at most 300 expressions, 3000 characters per expression, 600 characters per colour expression, 10 initial conditions, |numbers| ≤ 1e9, a θ-range of at most 50 turns, and 1 MB of JSON.
 - A bad link never shows a blank page: Fluxion keeps the current graph and shows the problem. Expressions that don't parse still load, shown with an error mark so the user can fix them.
 - In the app, the share menu has "Copy share link" and "Copy as JSON spec". Users can paste the JSON to an assistant, which edits it and returns a new link.
