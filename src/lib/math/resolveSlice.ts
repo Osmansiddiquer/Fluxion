@@ -1,15 +1,12 @@
 import { parse as mjParse } from 'mathjs';
 import { parseEntry, normalizeInput } from './parse';
 import type { Entry } from '../../store/types';
+import { buildEvalContext } from '../scope';
 
-/** Variable name → current value, gathered from the variable entries. */
+/** The evaluation scope for these entries: variable values, derived values,
+ * user functions and scripting helpers (see lib/scope.ts). */
 export function buildVarScope(entries: Entry[]): Record<string, number> {
-  const scope: Record<string, number> = {};
-  for (const e of entries) {
-    const p = parseEntry(e.raw);
-    if (p.kind === 'variable') scope[p.name] = e.varValue ?? p.value;
-  }
-  return scope;
+  return buildEvalContext(entries.map((entry) => ({ entry, parsed: parseEntry(entry.raw) }))).scope;
 }
 
 /** Evaluate a panel slice expression against the variable scope, or null if it

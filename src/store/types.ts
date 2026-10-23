@@ -35,7 +35,8 @@ export interface Entry {
   varMax?: number;
   varStep?: number;
 
-  /** Polar entry (`r = f(θ)`): the θ sweep range (defaults to 0 … 2π). */
+  /** Polar entry (`r = f(θ)`): the θ sweep range (defaults to 0 … 2π). Also the
+   * t-range of a parametric curve `(x(t), y(t))`. */
   thetaMin?: number;
   thetaMax?: number;
 
@@ -51,7 +52,27 @@ export interface Entry {
   pointSize?: number;
   /** Draggability: auto (variable coords), off, or forced x / y / both axes. */
   pointDrag?: 'auto' | 'off' | 'x' | 'y' | 'both';
+
+  /** Drawing style — all optional; defaults depend on the entry kind (lib/style.ts). */
+  /** Stroke width in px (0 hides the stroke, e.g. for fill-only shapes). */
+  lineWidth?: number;
+  lineStyle?: LineStyle;
+  /** Fill closed shapes (parametric / polar / polygons / frames). Inequalities fill by default. */
+  fill?: boolean;
+  /** Fill opacity 0…1. */
+  fillOpacity?: number;
+  /** Dynamic colour expression (`hsv(360a, 1, 1)`, `rgba(…)`) overriding `color`. */
+  colorExpr?: string;
+  /** Fill colour (literal or expression); defaults to the stroke colour. */
+  fillColor?: string;
+
+  /** Variable slider: start playing when the graph loads (used by demos). */
+  autoplay?: boolean;
+  /** `frames(i)` entry: id of its imported frame sequence (lib/frames/assets.ts). */
+  frames?: string;
 }
+
+export type LineStyle = 'solid' | 'dashed' | 'dotted';
 
 export type PointDir = 'n' | 'ne' | 'e' | 'se' | 's' | 'sw' | 'w' | 'nw';
 export type AnimMode = 'loop' | 'bounce' | 'once';

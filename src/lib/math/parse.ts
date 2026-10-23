@@ -401,10 +401,10 @@ function parseRepeat(trimmed: string, at: number, raw: string): Parsed {
   const loopNames = new Set(loops.map((l) => l.name));
   const deps = new Set<string>();
   for (const d of (body as { deps: string[] }).deps) if (!loopNames.has(d)) deps.add(d);
-  // Bounds may use earlier loop variables? Keep it simple: only globals.
+  // Bounds may use globals and earlier loop variables (for i = 0..3, j = i..3).
   for (const l of loops) {
     for (const n of [l.from, l.to, l.step]) {
-      if (n) for (const s of freeSymbols(n)) deps.add(s);
+      if (n) for (const s of freeSymbols(n)) if (!loopNames.has(s)) deps.add(s);
     }
   }
   return { kind: 'repeat', body, loops, deps: [...deps], bodyRaw, raw };
