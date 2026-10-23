@@ -70,7 +70,7 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
     case 'fndef':
       // Ternaries render as a cases environment that can't round-trip through the
       // editor — show those definitions as typed.
-      if (parsed.rhs.includes('?')) return null;
+      if (/[?[]/.test(parsed.rhs)) return null;
       return `${greekWordToTex(parsed.name)}\\left(${parsed.params
         .map(greekWordToTex)
         .join(',')}\\right) = ${texOf(parsed.rhs)}`;

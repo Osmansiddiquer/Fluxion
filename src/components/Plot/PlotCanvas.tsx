@@ -232,8 +232,14 @@ export default function PlotCanvas() {
       if (!entry.visible) continue;
       const res = analysis.results.get(entry.id);
       if (!res?.points) continue;
-      if (res.parsed.kind !== 'points' && res.parsed.kind !== 'pointvar') continue;
-      const setting = entry.pointDrag ?? 'auto';
+      // Repeated points (`(k, k²) for k = …`) are markers too, but never draggable.
+      const repeated = res.parsed.kind === 'repeat' && res.parsed.body.kind === 'points';
+      if (res.parsed.kind !== 'points' && res.parsed.kind !== 'pointvar' && !repeated) continue;
+      // A filled polygon reads as a shape: no vertex dots.
+      if (res.parsed.kind === 'points' && res.parsed.polyline && styles.get(entry.id)?.fillMode === 'shape') {
+        continue;
+      }
+      const setting = repeated ? 'off' : (entry.pointDrag ?? 'auto');
       const size = entry.pointSize ?? 6;
       res.points.forEach((coord, index) => {
         let xSym: string | undefined;
@@ -285,7 +291,12 @@ export default function PlotCanvas() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const tf = makeTransform(viewport, size.w, size.h);
-    drawGrid(ctx, tf, readGridColors());
+    if (toggles.grid === false) {
+      ctx.fillStyle = readGridColors().bg;
+      ctx.fillRect(0, 0, size.w, size.h);
+    } else {
+      drawGrid(ctx, tf, readGridColors());
+    }
 
     // Entries draw in list order (later rows on top): each one's fill, then its
     // stroke. Inequality regions are rasterised adaptively (cached per result +
@@ -485,7 +496,7 @@ export default function PlotCanvas() {
       if (rightOpen) grip(tf.tx(sliceT), 10, false);
       if (bottomOpen) grip(size.w - 11, tf.ty(sliceY), true);
     }
-  }, [analysis, viewport, size, entries, styles, markers, pointMarkers, projections, pin, theme, sigFigs]);
+  }, [analysis, viewport, size, entries, styles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid]);
 
   // --- Interaction ---------------------------------------------------------
   const interaction = useRef<

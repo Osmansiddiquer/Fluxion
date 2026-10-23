@@ -185,7 +185,7 @@ export function SpeedSlider({ speed, onSpeed }: { speed: number; onSpeed: (n: nu
         value={speed}
         onChange={(e) => onSpeed(Number(e.target.value))}
       />
-      <span className="speed-val">{speed}×</span>
+      <span className="speed-val">{+speed.toFixed(2)}×</span>
     </label>
   );
 }

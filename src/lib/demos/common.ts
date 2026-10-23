@@ -17,7 +17,8 @@ export function entryMaker(prefix: string) {
   });
 }
 
-/** Art looks best without inspection markers. */
+/** Art looks best without inspection markers or grid (both re-enable from the
+ * Points menu on the plot). */
 export const NO_FEATURES: FeatureToggles = {
   extrema: false,
   xIntercepts: false,
@@ -25,6 +26,7 @@ export const NO_FEATURES: FeatureToggles = {
   endpoints: false,
   discontinuities: false,
   intersections: false,
+  grid: false,
 };
 
 export const PANELS_OFF: Projections = { rightOpen: false, bottomOpen: false, sliceT: 0, sliceY: 1 };

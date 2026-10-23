@@ -85,6 +85,8 @@ export interface FeatureToggles {
   endpoints: boolean;
   discontinuities: boolean;
   intersections: boolean;
+  /** Grid lines + axes (default shown). Off gives a clean canvas for drawings. */
+  grid?: boolean;
 }
 
 export type ThemeMode = 'light' | 'dark' | 'system';

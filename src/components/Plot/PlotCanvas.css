@@ -120,6 +120,11 @@
   font-size: 13px;
   cursor: pointer;
 }
+.feat-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--border);
+}
 .feat-item:hover {
   background: var(--surface-2);
 }

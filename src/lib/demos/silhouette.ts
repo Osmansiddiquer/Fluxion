@@ -11,8 +11,8 @@ import { entryMaker, graph } from './common';
  * Every frame is rasterised, traced into contours and encoded exactly like an
  * imported clip (scripts/frames-import.ts), so this exercises the full path.
  */
-export const CLIP_W = 128;
-export const CLIP_H = 96;
+export const CLIP_W = 192;
+export const CLIP_H = 144;
 export const CLIP_FPS = 24;
 export const CLIP_FRAMES = 120;
 
@@ -26,14 +26,17 @@ function apple(x: number, y: number, cx: number, cy: number, sx: number, sy: num
   // Undo the squash / spin (spin squeezes horizontally like a 3D turn).
   const u = (x - cx) / (sx * Math.max(0.06, Math.abs(Math.cos(spin))));
   const v = (y - cy) / sy;
-  // Body: two overlapping discs with a notch on top.
-  const body = Math.hypot(u - 0.42, v + 0.05) < 0.78 || Math.hypot(u + 0.42, v + 0.05) < 0.78;
-  const notch = Math.hypot(u, v - 0.95) < 0.28;
-  const bottom = Math.hypot(u, v + 1.05) < 0.16;
-  // Stem and leaf.
-  const stem = Math.abs(u - 0.08 - 0.12 * (v - 0.7)) < 0.07 && v > 0.62 && v < 1.15;
-  const leaf = Math.hypot((u - 0.42) / 0.36, (v - 1.02) / 0.15) < 1 && Math.abs(Math.atan2(v - 1.02, u - 0.42)) < 2.6;
-  return (body && !notch && !bottom) || stem || leaf;
+  // Body: two overlapping lobes (a dimple top and bottom where they meet).
+  const body = Math.hypot((u - 0.34) / 0.95, v + 0.02) < 0.74 || Math.hypot((u + 0.34) / 0.95, v + 0.02) < 0.74;
+  const notch = Math.hypot(u / 1.4, v - 0.86) < 0.16;
+  // Stem (a slightly leaning bar) and a leaf (a rotated ellipse).
+  const stem = Math.abs(u - 0.05 - 0.22 * (v - 0.62)) < 0.055 && v > 0.55 && v < 1.12;
+  const lu = u - 0.36;
+  const lv = v - 0.98;
+  const c = Math.cos(0.5);
+  const s = Math.sin(0.5);
+  const leaf = ((lu * c + lv * s) / 0.3) ** 2 + ((-lu * s + lv * c) / 0.11) ** 2 < 1;
+  return (body && !notch) || stem || leaf;
 }
 
 /** Ink mask for frame f. */
@@ -84,7 +87,7 @@ export function silhouetteFrame(f: number, W = CLIP_W, H = CLIP_H): Uint8Array {
 export function buildSilhouetteClip(frames = CLIP_FRAMES): string {
   const out: IPoly[][] = [];
   for (let f = 0; f < frames; f++) {
-    out.push(vectorize({ width: CLIP_W, height: CLIP_H, data: silhouetteFrame(f) }, 0.9, 3));
+    out.push(vectorize({ width: CLIP_W, height: CLIP_H, data: silhouetteFrame(f) }, 1.1, 3));
   }
   return encodeClip({ w: 2 * CLIP_W, h: 2 * CLIP_H, fps: CLIP_FPS, box: [-4, -3, 4, 3], frames: out });
 }

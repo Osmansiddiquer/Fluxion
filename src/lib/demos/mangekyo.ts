@@ -40,17 +40,17 @@ export function mangekyoDemo(): GraphData {
     E('Bx(u, k) = Br(u)*cos(p(k) + Bq(u))', ink),
     E('By(u, k) = Br(u)*sin(p(k) + Bq(u))', ink),
     // The eye.
-    E('(5 cos(t), 2.6 sin(t) abs(sin(t)))', '#2b1d14', {
+    E('(5 cos(t), 2.6 sin(t) abs(sin(t)))', '#6e4a34', {
       fill: true,
       fillOpacity: 1,
       fillColor: '#f3ede4',
       lineWidth: 3.5,
     }),
-    E('(5.3 cos(t), 3.15 sin(t) abs(sin(t)))', '#2b1d14', {
+    E('(5.3 cos(t), 3.15 sin(t) abs(sin(t)))', '#8a6a55', {
       thetaMin: 0.35,
       thetaMax: Math.PI - 0.35,
       lineWidth: 2,
-      colorExpr: 'rgba(43, 29, 20, 0.55)',
+      colorExpr: 'rgba(138, 106, 85, 0.75)',
     }),
     // Iris: brown → red, with a soft inner glow.
     E(circle(2), '#1d0d08', {

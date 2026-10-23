@@ -40,6 +40,15 @@ export default function FeatureToggle() {
               <span>{i.label}</span>
             </label>
           ))}
+          <div className="feat-sep" role="separator" />
+          <label className="feat-item">
+            <input
+              type="checkbox"
+              checked={toggles.grid !== false}
+              onChange={(e) => setFeatures({ grid: e.target.checked })}
+            />
+            <span>Grid &amp; axes</span>
+          </label>
         </div>
       )}
     </div>

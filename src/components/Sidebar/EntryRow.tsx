@@ -44,7 +44,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
   const hasError = !!error || undefinedVars.length > 0;
   const plottable =
     kind === 'ode' ||
-    kind === 'function' ||
+    (kind === 'function' && res?.value === undefined) ||
     kind === 'implicit' ||
     kind === 'polar' ||
     kind === 'inequality' ||
