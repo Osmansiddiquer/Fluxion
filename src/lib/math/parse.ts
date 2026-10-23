@@ -423,7 +423,7 @@ function parseFnDef(lhs: string, rhs: string, raw: string): Parsed | null {
   if (new Set(params).size !== params.length) {
     return { kind: 'error', message: `Repeated parameter in ${name}(…)` };
   }
-  if (params.some((p) => ['e', 'pi', 'tau', 'phi', 'i'].includes(p))) {
+  if (params.some((p) => ['e', 'pi', 'tau', 'phi'].includes(p))) {
     return { kind: 'error', message: 'A parameter name is a constant' };
   }
   try {

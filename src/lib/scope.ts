@@ -44,17 +44,29 @@ function makeUserFn(def: FnDef, global: Record<string, unknown>, depth: { n: num
   const compiled = compileNode(def.node);
   const local = Object.create(global) as Record<string, unknown>;
   const { params, name } = def;
+  // Last-call memo. A user function is pure in (arguments, globals) and the
+  // globals are fixed for this scope's lifetime (derived values are assigned
+  // once; a read before that throws, and throws aren't cached). Samplers call
+  // the same function with the same arguments back to back — x(t) and y(t) of a
+  // parametric both calling f(t), or p(k) constant across a repeat copy — so
+  // this one-slot cache removes most nested evaluations.
+  let lastArgs: unknown[] | null = null;
+  let lastResult: unknown;
   return (...args: unknown[]) => {
     if (args.length !== params.length) {
       throw new Error(`${name} expects ${params.length} argument${params.length === 1 ? '' : 's'}`);
     }
+    if (lastArgs && args.every((a, i) => a === lastArgs![i])) return lastResult;
     if (depth.n >= MAX_DEPTH) throw new Error('Functions nest too deeply');
     // Save/restore so re-entrant calls (f(f(1))) each see their own arguments.
     const saved = params.map((p) => local[p]);
     for (let i = 0; i < params.length; i++) local[params[i]] = args[i];
     depth.n++;
     try {
-      return compiled.evaluate(local);
+      const result = compiled.evaluate(local);
+      lastArgs = args;
+      lastResult = result;
+      return result;
     } finally {
       depth.n--;
       for (let i = 0; i < params.length; i++) local[params[i]] = saved[i];

@@ -133,6 +133,18 @@ describe('user functions', () => {
     const r = run([f, y]).get(y.id)!;
     expect(r.curve.segments).toHaveLength(0);
   });
+  it('nested and repeated calls stay correct with the last-call memo', () => {
+    const scope = buildVarScope([E('f(u) = u^2 + 1')]);
+    const f = scope.f as unknown as (u: number) => number;
+    expect(f(2)).toBe(5);
+    expect(f(2)).toBe(5);
+    expect(f(f(1))).toBe(5); // f(2) via f(1)
+    expect(f(3)).toBe(10);
+    const y = E('y = f(f(t)) - f(t)');
+    const fd = E('f(u) = 2u');
+    const seg = run([fd, y]).get(y.id)!.curve.segments[0];
+    for (const [t, v] of seg) expect(v).toBeCloseTo(4 * t - 2 * t);
+  });
   it('mutual recursion is stopped', () => {
     const f = E('f(u) = g(u)');
     const g = E('g(u) = f(u)');

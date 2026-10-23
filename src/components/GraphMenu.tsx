@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { makeGraph, encodeGraph, decodeGraph, parseGraphFile } from '../lib/graphFile';
+import { makeGraph, encodeGraph, decodeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
+import { registerAssets } from '../lib/frames/assets';
+import { DEMOS } from '../lib/demos';
 
 const ShareIcon = (
   <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -25,7 +27,10 @@ export default function GraphMenu() {
     const m = location.hash.match(/^#g=(.+)$/);
     if (!m) return;
     const g = decodeGraph(m[1]);
-    if (g) loadGraph(g);
+    if (g) {
+      registerAssets(g.assets);
+      loadGraph(g);
+    }
     history.replaceState(null, '', location.pathname + location.search);
   }, [loadGraph]);
 
@@ -38,9 +43,28 @@ export default function GraphMenu() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  const flash = (msg: string) => {
+  // A toast may carry an Undo (restores the graph an example replaced).
+  const [undo, setUndo] = useState<GraphData | null>(null);
+  const toastTimer = useRef(0);
+  const flash = (msg: string, restore: GraphData | null = null, ms = 2200) => {
     setToast(msg);
-    window.setTimeout(() => setToast(''), 2200);
+    setUndo(restore);
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => {
+      setToast('');
+      setUndo(null);
+    }, ms);
+  };
+
+  const openDemo = (id: string) => {
+    setOpen(false);
+    const demo = DEMOS.find((d) => d.id === id);
+    if (!demo) return;
+    const prev = current();
+    const g = demo.build();
+    registerAssets(g.assets);
+    loadGraph(g);
+    flash(`Opened “${demo.title}”`, prev, 6000);
   };
 
   const current = () => makeGraph(useStore.getState());
@@ -72,6 +96,7 @@ export default function GraphMenu() {
     if (!f) return;
     const g = parseGraphFile(await f.text());
     if (g) {
+      registerAssets(g.assets);
       loadGraph(g);
       flash('Graph loaded');
     } else {
@@ -94,9 +119,33 @@ export default function GraphMenu() {
           <button onClick={share}>Copy share link</button>
           <button onClick={exportFile}>Export to file…</button>
           <button onClick={() => fileRef.current?.click()}>Import from file…</button>
+          <div className="graph-menu-sep" role="separator" />
+          <div className="graph-menu-label">Examples</div>
+          {DEMOS.map((d) => (
+            <button key={d.id} className="graph-menu-demo" title={d.blurb} onClick={() => openDemo(d.id)}>
+              {d.title}
+            </button>
+          ))}
         </div>
       )}
-      {toast && <div className="graph-toast">{toast}</div>}
+      {toast && (
+        <div className="graph-toast" role="status">
+          {toast}
+          {undo && (
+            <button
+              className="graph-toast-undo"
+              onClick={() => {
+                registerAssets(undo.assets);
+                loadGraph(undo);
+                setToast('');
+                setUndo(null);
+              }}
+            >
+              Undo
+            </button>
+          )}
+        </div>
+      )}
       <input
         ref={fileRef}
         type="file"

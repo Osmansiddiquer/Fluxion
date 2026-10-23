@@ -152,8 +152,8 @@ function samplePolar(
 }
 
 /**
- * Sample a parametric curve (x(t), y(t)) over t ∈ [tMin, tMax]. ~720 samples per
- * 2π of parameter (at least 360), breaking where either coordinate is undefined.
+ * Sample a parametric curve (x(t), y(t)) over t ∈ [tMin, tMax]. ~480 samples per
+ * 2π of parameter (at least 200), breaking where either coordinate is undefined.
  */
 export function sampleParametric(
   xEval: { evaluate: (scope: object) => unknown },
@@ -164,7 +164,7 @@ export function sampleParametric(
 ): SampledCurve {
   const span = tMax - tMin;
   if (!Number.isFinite(span)) return EMPTY_CURVE;
-  const N = Math.max(360, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 720)));
+  const N = Math.max(200, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 480)));
   const ps = { ...scope } as Record<string, number>;
   const segments: Point[][] = [];
   let cur: Point[] = [];

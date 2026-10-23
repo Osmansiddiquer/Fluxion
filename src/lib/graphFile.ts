@@ -1,4 +1,5 @@
 import type { Entry, FeatureToggles, Projections, Viewport } from '../store/types';
+import { assetsFor } from './frames/assets';
 
 /** The portable part of a graph — what gets exported to a file or a share link.
  * UI-only preferences (theme, sidebar/panel sizes) are intentionally excluded. */
@@ -9,6 +10,8 @@ export interface GraphData {
   features: FeatureToggles;
   projections: Projections;
   sigFigs: number;
+  /** Large payloads referenced by entries (frame sequences), keyed by asset id. */
+  assets?: Record<string, string>;
 }
 
 export function makeGraph(s: {
@@ -18,7 +21,7 @@ export function makeGraph(s: {
   projections: Projections;
   sigFigs: number;
 }): GraphData {
-  return {
+  const g: GraphData = {
     v: 1,
     entries: s.entries,
     viewport: s.viewport,
@@ -26,6 +29,10 @@ export function makeGraph(s: {
     projections: s.projections,
     sigFigs: s.sigFigs,
   };
+  // Carry referenced frame sequences along so an exported file is self-contained.
+  const assets = assetsFor(s.entries.map((e) => e.frames));
+  if (Object.keys(assets).length) g.assets = assets;
+  return g;
 }
 
 /** A loose shape-check so a bad file / link can't wedge the app. */
