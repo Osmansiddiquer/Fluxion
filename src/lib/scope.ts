@@ -42,7 +42,7 @@ export function isPlottableFnDef(parsed: Parsed): parsed is FnDef {
 const MAX_DEPTH = 64;
 
 function makeUserFn(def: FnDef, global: Record<string, unknown>, depth: { n: number }) {
-  const compiled = compileNode(def.node);
+  const compiled = compileNode(def.node, def.params);
   const local = Object.create(global) as Record<string, unknown>;
   const { params, name } = def;
   // Last-call memo. A user function is pure in (arguments, globals) and the
