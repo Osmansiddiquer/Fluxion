@@ -74,11 +74,11 @@ describe('specific examples', () => {
     const g = byId('pendulum');
     expect(g.entries[0].raw).toMatch(/theta''/);
     const at = (t: number) => run(g, t).frame.items.find((i) => i.k === 'point')!;
-    // The dot rides the solution curve: (t, θ(t)); θ(0) = 2.2.
-    expect(at(0)).toMatchObject({ x: 0, y: 2.2 });
+    // The dot rides the solution curve: (t, θ(t)); θ(0) = 1.6.
+    expect(at(0)).toMatchObject({ x: 0, y: 1.6 });
     const p = at(3);
     expect(p.k === 'point' && p.x).toBe(3);
-    expect(p.k === 'point' && Math.abs(p.y)).toBeLessThan(2.2);
+    expect(p.k === 'point' && Math.abs(p.y)).toBeLessThan(1.6);
   });
   it('silhouette plays its clip by name, frame by frame', () => {
     const g = byId('silhouette');

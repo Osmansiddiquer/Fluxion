@@ -14,6 +14,7 @@ import {
   traceGray,
 } from '../../lib/frames/videoImport';
 import { insertSnippet } from './scriptBus';
+import { clipPlayerScript } from '../../lib/frames/clipScript';
 import './ClipImporter.css';
 
 /**
@@ -22,6 +23,8 @@ import './ClipImporter.css';
  * scaled onto a canvas, thresholded to black and white, traced into outlines
  * and encoded — one frame at a time, so the page stays responsive.
  */
+
+const NO_CLIPS: Record<string, string> = {};
 
 type Source =
   | { kind: 'video'; url: string; video: HTMLVideoElement; duration: number; w: number; h: number; name: string }
@@ -38,7 +41,7 @@ interface Opts {
 }
 
 export default function ClipImporter({ onClose }: { onClose: () => void }) {
-  const clips = useStore((s) => s.script?.clips ?? {});
+  const clips = useStore((s) => s.script?.clips) ?? NO_CLIPS;
   const removeClip = useStore((s) => s.removeScriptClip);
   const addClip = useStore((s) => s.addScriptClip);
   const [src, setSrc] = useState<Source | null>(null);
@@ -134,7 +137,7 @@ export default function ClipImporter({ onClose }: { onClose: () => void }) {
           video.onloadeddata = () => res();
           video.onerror = () => rej(new Error("This browser can't play that video file. Try an .mp4 or .webm."));
         });
-        const duration = Number.isFinite(video.duration) ? video.duration : 0;
+        const duration = await videoDuration(video);
         if (!(duration > 0)) throw new Error("Couldn't read the video's length.");
         setSrc({ kind: 'video', url, video, duration, w: video.videoWidth, h: video.videoHeight, name: first.name });
         setOpts((o) => ({ ...o, name: cleanClipName(first.name, taken), start: 0, end: Math.min(duration, IMPORT_LIMITS.maxSeconds) }));
@@ -183,7 +186,7 @@ export default function ClipImporter({ onClose }: { onClose: () => void }) {
       setMessage({ text: `Imported “${name}”: ${frames.length} frames, ${kb} KB.`, name });
       const code = useStore.getState().script?.code ?? '';
       if (!code.trim()) {
-        useStore.getState().setScriptCode(`// ${name}: ${frames.length} frames at ${fps} fps\nbackground("#f6f4ef")\nclip("${name}").play({ fill: "#111" })\n`);
+        useStore.getState().setScriptCode(clipPlayerScript(name));
       }
     } catch (err) {
       setMessage({ text: err instanceof Error ? err.message : String(err), error: true });
@@ -361,6 +364,27 @@ export default function ClipImporter({ onClose }: { onClose: () => void }) {
       </div>
     </div>
   );
+}
+
+/**
+ * A video's length. WebM files from MediaRecorder (browser screen / canvas
+ * recordings) often report Infinity until you seek past the end, so do that.
+ */
+async function videoDuration(video: HTMLVideoElement): Promise<number> {
+  if (Number.isFinite(video.duration) && video.duration > 0) return video.duration;
+  await new Promise<void>((res) => {
+    const done = () => {
+      video.removeEventListener('durationchange', check);
+      res();
+    };
+    const check = () => Number.isFinite(video.duration) && done();
+    video.addEventListener('durationchange', check);
+    window.setTimeout(done, 4000);
+    video.currentTime = 1e7;
+  });
+  const d = Number.isFinite(video.duration) ? video.duration : 0;
+  video.currentTime = 0;
+  return d;
 }
 
 function seek(video: HTMLVideoElement, t: number): Promise<void> {

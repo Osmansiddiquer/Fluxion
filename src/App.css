@@ -322,3 +322,10 @@ a.report-bug {
     display: none;
   }
 }
+@media (max-width: 480px) {
+  /* Make room for the Graph | Script switch on phones. */
+  .topbar .sigfig,
+  .topbar a.report-bug {
+    display: none;
+  }
+}

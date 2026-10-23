@@ -181,6 +181,7 @@ export default function CodeEditor({ value, onChange, onRun, error, ariaLabel = 
       syntaxLinter,
       theme,
       EditorState.tabSize.of(2),
+      EditorView.lineWrapping,
       cmPlaceholder('// Draw something, e.g.\ncircle(0, 0, 2, { fill: "tomato" })'),
       EditorView.contentAttributes.of({ 'aria-label': ariaLabel, spellcheck: 'false', autocapitalize: 'off', autocorrect: 'off' }),
       keymap.of([

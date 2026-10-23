@@ -6,7 +6,7 @@ import { DEMOS } from '../../lib/demos';
 import type { SliderDecl } from '../../lib/script/protocol';
 import CodeEditor from './CodeEditor';
 import { focusLine, trySnippet } from './scriptBus';
-import { DOCS_SIDE_MIN, DOCS_W, SCRIPT_PANEL_W } from './layout';
+import { DOCS_PAGE, DOCS_SIDE_MIN, DOCS_W, SCRIPT_PANEL_W } from './layout';
 import './ScriptPanel.css';
 
 const ScriptDocs = lazy(() => import('./ScriptDocs'));
@@ -53,13 +53,25 @@ export default function ScriptPanel({ open = false }: { open?: boolean }) {
 
   const side = docsOpen && wide;
   const width = base + (side ? DOCS_W : 0);
+  // Narrow windows: the reference is a tab of the panel instead of a column.
+  const tabbed = docsOpen && !side;
 
   return (
     <aside
-      className={`sidebar script-panel${open ? ' sidebar-open' : ''}${docsOpen && !side ? ' docs-overlay' : ''}`}
+      className={`sidebar script-panel${open ? ' sidebar-open' : ''}${tabbed ? ' docs-tabbed' : ''}`}
       style={{ width }}
       aria-label="Script editor"
     >
+      {tabbed && (
+        <div className="sp-tabs" role="tablist" aria-label="Script panel">
+          <button role="tab" aria-selected={false} className="sp-tab" onClick={() => setDocsOpen(false)}>
+            Code
+          </button>
+          <button role="tab" aria-selected={true} className="sp-tab on">
+            Reference
+          </button>
+        </div>
+      )}
       <div className="sp-row">
         <section className="sp-main" style={side ? { width: base } : undefined}>
           <Toolbar
@@ -83,6 +95,9 @@ export default function ScriptPanel({ open = false }: { open?: boolean }) {
           <section className="sp-docs" aria-label="Scripting reference">
             <div className="sp-docs-head">
               <span className="sp-docs-title">Scripting reference</span>
+              <a className="sp-docs-full" href={DOCS_PAGE} target="_blank" rel="noopener" title="Open the full documentation in a new tab">
+                Full docs ↗
+              </a>
               <button className="icon-btn" title="Close the reference" aria-label="Close the reference" onClick={() => setDocsOpen(false)}>
                 ✕
               </button>
@@ -111,7 +126,7 @@ function Toolbar(p: {
   openClips: () => void;
 }) {
   const status = useScriptRuntime((s) => s.status);
-  const running = status === 'running' || status === 'starting';
+  const running = status === 'running';
   const [slow, setSlow] = useState(false);
   // Show Stop only when a run has been going for a while.
   useEffect(() => {
@@ -343,9 +358,9 @@ function Console() {
   } else if (!hasCode) {
     tone = 'idle';
     message = 'Empty script';
-  } else if (status === 'starting' && !frame) {
+  } else if (!frame) {
     tone = 'idle';
-    message = 'Starting the sandbox…';
+    message = status === 'running' ? 'Running…' : 'Starting the sandbox…';
   } else {
     message = `${shapes} shape${shapes === 1 ? '' : 's'} · ${lastMs < 1 ? '<1' : lastMs.toFixed(lastMs < 10 ? 1 : 0)} ms`;
   }

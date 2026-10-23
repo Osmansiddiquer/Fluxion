@@ -34,8 +34,11 @@ function sandboxRuntime() {
         legalComments: 'none',
         metafile: true,
       });
-      for (const f of Object.keys(r.metafile.inputs)) this.addWatchFile(resolve(f));
-      return `export default ${JSON.stringify(r.outputFiles[0].text)};`;
+      // Rebuild on change (skip esbuild's virtual inputs like "(disabled):crypto").
+      for (const f of Object.keys(r.metafile.inputs)) if (!f.startsWith('(')) this.addWatchFile(resolve(f));
+      // Escape "import" inside the string so Vite's import analysis never sees one.
+      const literal = JSON.stringify(r.outputFiles[0].text).replace(/import/g, '\\u0069mport');
+      return `export default ${literal};`;
     },
   };
 }

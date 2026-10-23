@@ -177,12 +177,12 @@ export const mandalaScript = () => scriptGraph(MANDALA, { tMin: -6, tMax: 6, yMi
 export function pendulumScript(): GraphData {
   const id = stamp('pnd');
   const entries: Entry[] = [
-    { id: `${id}-0`, raw: "theta'' = -g/L*sin(theta) - c*theta'", color: '#c74440', visible: true, expanded: true, t0: 0, ic: [2.2, 0] },
+    { id: `${id}-0`, raw: "theta'' = -g/L*sin(theta) - c*theta'", color: '#c74440', visible: true, expanded: true, t0: 0, ic: [1.6, 0] },
     { id: `${id}-1`, raw: 'g = 9.81', color: '#2d70b3', visible: true, expanded: false, varMin: 1, varMax: 20 },
     { id: `${id}-2`, raw: 'L = 3', color: '#388c46', visible: true, expanded: false, varMin: 0.5, varMax: 6 },
     { id: `${id}-3`, raw: 'c = 0.15', color: '#6042a6', visible: true, expanded: false, varMin: 0, varMax: 1 },
   ];
-  return scriptGraph(PENDULUM, { tMin: -1, tMax: 21, yMin: -4, yMax: 9 }, entries, {
+  return scriptGraph(PENDULUM, { tMin: -3.5, tMax: 21, yMin: -3, yMax: 9 }, entries, {
     features: { ...NO_FEATURES, grid: true },
   });
 }

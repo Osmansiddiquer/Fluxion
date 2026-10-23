@@ -5,7 +5,7 @@
       "expr": "theta'' = -g/L*sin(theta) - c*theta'",
       "t0": 0,
       "ic": [
-        2.2,
+        1.6,
         0
       ]
     },
@@ -26,9 +26,9 @@
     }
   ],
   "viewport": {
-    "xmin": -1,
+    "xmin": -3.5,
     "xmax": 21,
-    "ymin": -4,
+    "ymin": -3,
     "ymax": 9
   },
   "features": {

@@ -57,7 +57,7 @@ export default function ScriptEngine() {
         }));
       },
       onStatus(status) {
-        if (status === 'starting') rt.setState({ status: 'starting' });
+        if (status !== 'killed') rt.setState({ status });
       },
     });
 
