@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useRef, useState } from 'react';
 import PlotCanvas from './components/Plot/PlotCanvas';
 import Sidebar from './components/Sidebar/Sidebar';
 import RightPanel from './components/Projections/RightPanel';
@@ -8,6 +8,8 @@ import ThemeToggle from './components/ThemeToggle';
 import SigFigs from './components/SigFigs';
 import GraphMenu from './components/GraphMenu';
 import Tutorial from './components/Tutorial';
+import HelpMenu, { type HelpMenuHandle } from './components/HelpMenu';
+import { docsHash, parseDocsHash, type DocsRoute } from './components/Docs/hash';
 import Resizer from './components/Resizer';
 import AnimationLoop from './components/AnimationLoop';
 import { ResultsProvider } from './state/results';
@@ -15,6 +17,9 @@ import { useStore } from './store/useStore';
 import { APP_NAME } from './config';
 import { hasUrlPayload } from './lib/api/url';
 import './App.css';
+
+// The docs (content + panel) are a separate chunk, fetched the first time they open.
+const DocsPanel = lazy(() => import('./components/Docs/DocsPanel'));
 
 export default function App() {
   const resetView = useStore((s) => s.resetView);
@@ -24,13 +29,22 @@ export default function App() {
   // docked and this flag is irrelevant. Closed by default so the graph leads.
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // The getting-started tour auto-opens once per browser; the ? button reopens it.
-  // Not over a graph someone linked you to (share / API link) — show the graph.
+  // Documentation panel: open at a section, or null. Deep-linkable as #docs/<id>
+  // (see components/Docs/hash.ts; never collides with the URL API's key=value).
+  const [docs, setDocs] = useState<DocsRoute | null>(() =>
+    typeof location !== 'undefined' ? parseDocsHash(location.hash) : null,
+  );
+  const helpRef = useRef<HelpMenuHandle>(null);
+
+  // The getting-started tour auto-opens once per browser; the ? menu reopens it.
+  // Not over a graph someone linked you to (share / API link) — show the graph —
+  // nor over a docs link.
   const [tour, setTour] = useState(
     () =>
       typeof localStorage !== 'undefined' &&
       !localStorage.getItem('fluxion-tour-seen') &&
-      !hasUrlPayload(location.hash, location.search),
+      !hasUrlPayload(location.hash, location.search) &&
+      !parseDocsHash(location.hash),
   );
   const closeTour = () => {
     try {
@@ -40,6 +54,27 @@ export default function App() {
     }
     setTour(false);
   };
+
+  // Keep the address bar in step with the open docs section (replaceState: no
+  // history spam, no hashchange); clear it on close. A pasted/clicked #docs link
+  // opens the panel.
+  const openDocs = useCallback((section?: string) => {
+    setDocs({ section });
+    history.replaceState(null, '', location.pathname + location.search + docsHash(section));
+  }, []);
+  const closeDocs = useCallback(() => {
+    setDocs(null);
+    if (parseDocsHash(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+    helpRef.current?.focus();
+  }, []);
+  useEffect(() => {
+    const onHash = () => {
+      const route = parseDocsHash(location.hash);
+      if (route) setDocs(route);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   // Apply the theme during render (before child effects read CSS vars), so canvases
   // redraw with the correct palette the moment the theme changes.
@@ -64,14 +99,7 @@ export default function App() {
             <span className="beta-tag">beta</span>
           </div>
           <div className="topbar-spacer" />
-          <button
-            className="icon-btn"
-            title="Getting started"
-            aria-label="Getting started"
-            onClick={() => setTour(true)}
-          >
-            <HelpIcon />
-          </button>
+          <HelpMenu ref={helpRef} onTour={() => setTour(true)} onDocs={() => openDocs(docs?.section)} />
           <a
             className="icon-btn report-bug"
             href="https://github.com/Osmansiddiquer/Fluxion/issues"
@@ -107,25 +135,27 @@ export default function App() {
             />
           )}
         </div>
-        <Tutorial open={tour} onClose={closeTour} />
+        {docs && (
+          <Suspense fallback={null}>
+            <DocsPanel
+              section={docs.section}
+              onNavigate={openDocs}
+              onClose={closeDocs}
+              onTour={() => setTour(true)}
+            />
+          </Suspense>
+        )}
+        <Tutorial
+          open={tour}
+          onClose={closeTour}
+          onDocs={() => {
+            closeTour();
+            openDocs();
+          }}
+        />
         <AnimationLoop />
       </div>
     </ResultsProvider>
-  );
-}
-
-function HelpIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
-      <circle cx="9" cy="9" r="7" stroke="currentColor" strokeWidth="1.5" />
-      <path
-        d="M7.1 6.9a1.9 1.9 0 1 1 2.6 1.76c-.5.22-.7.6-.7 1.04v.4"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-      />
-      <circle cx="9" cy="12.7" r="0.85" fill="currentColor" />
-    </svg>
   );
 }
 

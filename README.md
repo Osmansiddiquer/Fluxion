@@ -81,8 +81,10 @@ browser storage separately from your per-tab graph state.
 - **Animatable sliders** — play / loop / bounce / once with a speed control.
 - **Linked projection panels** — per-curve cross-sections onto the y- and t-axes,
   with cut lines you drag on the graph (and that you can drive with a variable).
-- **Share & save** — export/import a graph file, or copy a shareable link; plus a
-  built-in getting-started tutorial.
+- **Share & save** — export/import a graph file, or copy a shareable link.
+- **Built-in help** — the **?** button offers a short tour and full in-app
+  documentation (every feature, searchable, with a *Try it* button on each example;
+  deep-linkable as `#docs/<section>`, e.g. `#docs/odes`).
 - **URL API for AI agents** — build a graph from a link (see below and `llms.txt`).
 - **Polished UX** — light/dark/system themes, configurable significant figures,
   drag-to-reorder, resizable sidebar and panels, equal-aspect grid, power-notation
