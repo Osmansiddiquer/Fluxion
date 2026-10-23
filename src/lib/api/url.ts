@@ -198,7 +198,7 @@ const MARKER_KEYS = ['extrema', 'xIntercepts', 'yIntercept', 'endpoints', 'disco
 const HEX = /^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
 const ALL_PARAMS: readonly string[] = ['expr', ...GLOBAL_PARAMS, ...EXPR_PARAMS];
 /** Keys that make a query string / fragment an API payload. */
-const PAYLOAD_KEYS = ['expr', 'spec', 'z', 'g', 'example', 'script'];
+const PAYLOAD_KEYS = ['expr', 'spec', 'z', 'g', 'gz', 'example', 'script'];
 
 /**
  * Split `a=1&b=2` into pairs. An `&` only separates parameters when it's followed
@@ -413,6 +413,13 @@ export async function readUrlPayload(hash: string, search: string): Promise<UrlP
         }
         return { kind: 'legacy', graph: demo.build() };
       }
+      const gz = firstValue(pairs, 'gz');
+      if (gz !== undefined) {
+        // Compressed internal graph (share links for graphs carrying frame clips).
+        const graph = decodeGraphJson(await inflateText(base64UrlToBytes(safeDecode(gz))));
+        if (graph) return { kind: 'legacy', graph };
+        throw new Error('damaged share link');
+      }
       const g = firstValue(pairs, 'g');
       if (g !== undefined) {
         const graph = decodeGraph(safeDecode(g));
@@ -431,7 +438,7 @@ export async function readUrlPayload(hash: string, search: string): Promise<UrlP
 
 /** Cheap synchronous test: does this location carry a graph? (e.g. to skip the tour) */
 export function hasUrlPayload(hash: string, search: string): boolean {
-  const re = /(?:^[#?]|&)(?:expr|spec|z|g|example|script)=/i;
+  const re = /(?:^[#?]|&)(?:expr|spec|z|g|gz|example|script)=/i;
   return re.test(hash) || re.test(search);
 }
 
@@ -472,6 +479,33 @@ export async function buildLink(spec: FluxionSpec, opts: LinkOptions = {}): Prom
   if (format === 'z') return withBase(base, `z=${bytesToBase64Url(await deflateText(json))}`);
   if (format === 'b64') return withBase(base, `spec=${textToBase64Url(json)}`);
   return withBase(base, `spec=${encodeValue(json)}`);
+}
+
+/**
+ * The "Copy share link" link: the compressed spec (`#z=`), which drops ids, UI
+ * state and defaults — typically 4-5× shorter than the old `#g=` base64 JSON.
+ * Graphs carrying frame clips can't be specs, so they go as compressed internal
+ * graphs (`#gz=`). Old `#g=` links still load.
+ */
+export async function buildShareLink(g: GraphData, base: string): Promise<string> {
+  // Frame clips (from rows or the script's clip table) only travel in GraphData.
+  if (g.assets || g.entries.some((e) => e.frames) || Object.keys(g.script?.clips ?? {}).length) {
+    const json = JSON.stringify({ ...g, entries: g.entries.map(({ id: _id, expanded: _x, ...e }) => e) });
+    return withBase(base, `gz=${bytesToBase64Url(await deflateText(json))}`);
+  }
+  return buildLink(graphToSpec(g), { base, format: 'z' });
+}
+
+/** Parse a decompressed `#gz=` payload; entries get fresh ids (dropped to save space). */
+function decodeGraphJson(json: string): GraphData | null {
+  try {
+    const obj = JSON.parse(json);
+    if (!isGraph(obj)) return null;
+    obj.entries = obj.entries.map((e, i) => ({ ...e, id: e.id || `s${i + 1}`, expanded: e.expanded ?? true }));
+    return obj;
+  } catch {
+    return null;
+  }
 }
 
 /** Decode any Fluxion link (or bare fragment) back into a spec, for editing. */

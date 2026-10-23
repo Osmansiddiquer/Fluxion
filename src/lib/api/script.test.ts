@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadFromUrl, sanitizeGraph, sanitizeScript } from './load';
 import { decodeGraph, encodeGraph, makeGraph, parseGraphFile, type GraphData } from '../graphFile';
 import { DEFAULT_FEATURES, DEFAULT_PROJECTIONS, DEFAULT_VIEWPORT, LIMITS, graphToSpec, specToGraph, validateSpec } from './spec';
-import { buildLink, hasUrlPayload, linkToSpec, readUrlPayload, specToParams } from './url';
+import { buildLink, buildShareLink, hasUrlPayload, linkToSpec, readUrlPayload, specToParams } from './url';
 import { _resetAssets, putAsset, registerAssets } from '../frames/assets';
 import { encodeClip } from '../frames/codec';
 
@@ -80,6 +80,29 @@ describe('links carry a script', () => {
     expect(r?.graph?.script).toEqual({ code: CODE, sliders: { k: 4 }, clips: { apple: id }, visible: false });
     expect(r?.graph?.assets?.[id]).toBe(clip);
   });
+  it('"Copy share link" (buildShareLink) carries the script: #z= without clips', async () => {
+    const g = makeGraph({ ...base(), script: { code: CODE } });
+    const link = await buildShareLink(g, 'https://x.example/');
+    expect(link).toMatch(/#z=/);
+    const r = await loadFromUrl(new URL(link).hash, '');
+    expect(r?.graph?.script?.code).toBe(CODE);
+    expect(r?.graph?.entries[0].raw).toBe("y'' = -y");
+  });
+  it('"Copy share link" uses #gz= when the script plays a clip, and keeps clip + sliders', async () => {
+    _resetAssets();
+    const clip = encodeClip({ w: 4, h: 4, fps: 10, box: [-1, -1, 1, 1], frames: [[[[0, 0], [4, 0], [4, 4]]]] });
+    const id = putAsset(clip);
+    const g = makeGraph({ ...base(), script: { code: CODE, sliders: { k: 3 }, clips: { apple: id } } });
+    const link = await buildShareLink(g, 'https://x.example/');
+    expect(link).toMatch(/#gz=/);
+    const r = await loadFromUrl(new URL(link).hash, '');
+    expect(r?.graph?.script).toEqual({ code: CODE, sliders: { k: 3 }, clips: { apple: id } });
+    expect(r?.graph?.assets?.[id]).toBe(clip);
+    // Even without the asset at hand, a clip table alone picks #gz=.
+    const bare = { ...base(), script: { code: CODE, clips: { apple: id } } };
+    expect(await buildShareLink(bare, 'https://x.example/')).toMatch(/#gz=/);
+  });
+
   it('linkToSpec decodes a share link with a script into a spec with it', async () => {
     const g = makeGraph({ ...base(), script: { code: CODE } });
     const d = await linkToSpec(`https://x.example/#g=${encodeGraph(g)}`);

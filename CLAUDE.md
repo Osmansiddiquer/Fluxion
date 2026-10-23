@@ -73,7 +73,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Docs content | `components/Docs/` — `content.ts` (all docs as data), `examples.ts` (example type + the tour's 4 examples), `search.ts`, `hash.ts` (legacy `#docs/<id>` redirect), `docs.test.ts` |
 | Docs page | `src/docs-page/` — `index.html` (template), `DocsPage.tsx` (the page), `main.tsx` (hydrate), `prerender.ts` + `scripts/prerender-docs.ts` (static HTML), `links.ts` (Try links), `tex.ts`, `theme.ts`, `docs-page.css`, `docs-page.test.ts`; `vite.docs.config.mjs` |
 | Tokens | `styles/theme.css` (all `--var`s, light+dark), `styles/global.css` |
-| URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
+| URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode; `buildShareLink` = the share button: compressed spec `#z=`, or `#gz=` deflated graph when it carries frame clips; old `#g=` still loads), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
 
 ## Conventions & gotchas (hard-won — don't relearn these)
 

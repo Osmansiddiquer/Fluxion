@@ -153,6 +153,9 @@ label(\`θ = \${a.toFixed(2)}\`, t, a)
 text("θ(t)", 19.2, theta(19.2) + 0.6, { color: "#c74440", size: 14 })
 `;
 
+// Markers off but the grid shown (its default: no `grid` key).
+const { grid: _grid, ...GRID_ON } = NO_FEATURES;
+
 let seq = 0;
 const stamp = (p: string) => `${p}${Date.now().toString(36)}${(seq++).toString(36)}`;
 
@@ -183,7 +186,7 @@ export function pendulumScript(): GraphData {
     { id: `${id}-3`, raw: 'c = 0.15', color: '#6042a6', visible: true, expanded: false, varMin: 0, varMax: 1 },
   ];
   return scriptGraph(PENDULUM, { tMin: -3.5, tMax: 21, yMin: -3, yMax: 9 }, entries, {
-    features: { ...NO_FEATURES, grid: true },
+    features: GRID_ON,
   });
 }
 

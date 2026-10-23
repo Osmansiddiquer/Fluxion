@@ -552,7 +552,7 @@ function validateExpression(
   if (obj.labelDir !== undefined) out.labelDir = c.oneOf(obj.labelDir, POINT_DIRS, `${path}.labelDir`);
   if (obj.pointSize !== undefined) {
     const n = c.num(obj.pointSize, `${path}.pointSize`, { min: 2, max: 14 });
-    if (n !== undefined) out.pointSize = Math.round(n);
+    if (n !== undefined) out.pointSize = n;
   }
   if (obj.drag !== undefined) out.drag = c.oneOf(obj.drag, DRAG_MODES, `${path}.drag`);
   if (obj.lineWidth !== undefined) {
