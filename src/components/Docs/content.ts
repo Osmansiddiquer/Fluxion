@@ -1,12 +1,14 @@
-// The in-app documentation, as data. This file is the single source of truth for
-// what the Docs panel shows (DocsPanel.tsx renders it) and what the docs tests
+// The documentation, as data. This file is the single source of truth for what
+// the docs page shows (src/docs-page renders it to static HTML at build time) and
+// what the docs tests
 // check (docs.test.ts): every example and syntax row must parse as its documented
 // kind and compute without errors, and together they must cover every parse kind
 // and every scripting helper. To add a section, append to SECTIONS (the order is
 // the learning order); see CLAUDE.md "Docs".
 //
 // Inline markup in `text` strings: `code`, **bold**, $TeX$ (KaTeX), and
-// [label](href) — an href of `#docs/<id>` links to another section.
+// [label](href) — an href of `#<id>` links to another section; other hrefs are
+// relative to the docs page (/docs/), so the app is `../`.
 import { L, TOUR_HARMONIC, TOUR_LOGISTIC, TOUR_ROSE, TOUR_SPIRAL, type DocExample, type DocKind, type ExampleLine, type LineOptions } from './examples';
 import type { Viewport } from '../../store/types';
 
@@ -15,6 +17,8 @@ export interface SyntaxRow {
   input: string;
   kind: DocKind;
   note: string;
+  /** A derived value (`b = 2a + 1`): parses as a function but draws nothing. */
+  derived?: boolean;
   /** Rows the input needs to compute (e.g. the slider it uses). Loaded by "Try it". */
   with?: ExampleLine[];
   opts?: LineOptions;
@@ -31,7 +35,7 @@ export type Block =
   | { type: 'example'; example: DocExample }
   | { type: 'math'; tex: string }
   | { type: 'tip'; text: string }
-  /** "Replay the tour" call-to-action (docs home). */
+  /** "Open the app / take the tour" call-to-action (docs home). */
   | { type: 'tour' }
   /** The Script mode reference slot (see DocsPanel SCRIPT_DOCS). */
   | { type: 'script-docs' };
@@ -78,7 +82,7 @@ const gettingStarted: DocSection = {
     LIST(
       '**Expression list** (left; the ☰ button on phones): one expression per row. Click **+ Add expression** for a new row.',
       '**Graph** (centre): scroll to zoom around the cursor, drag empty space to pan, and press ⤢ in the top bar to reset the view.',
-      '**Cross-section panels** (right and bottom): read every curve along a vertical or horizontal cut. See [Inspecting graphs](#docs/inspect).',
+      '**Cross-section panels** (right and bottom): read every curve along a vertical or horizontal cut. See [Inspecting graphs](#inspect).',
       '**Top bar**: this help, bug reports, the share menu (save, export, Examples), significant figures, theme and reset view.',
     ),
     H('Your first graph'),
@@ -167,7 +171,7 @@ const curves: DocSection = {
     EX(TOUR_ROSE),
     H('Parametric curves'),
     P(
-      '$(x(t),\\ y(t))$ traces a curve as t sweeps from 0 to 2π (change the range by expanding the row). Closed parametric curves can be filled — see [Drawing & styling](#docs/drawing).',
+      '$(x(t),\\ y(t))$ traces a curve as t sweeps from 0 to 2π (change the range by expanding the row). Closed parametric curves can be filled — see [Drawing & styling](#drawing).',
     ),
     SYNTAX(
       row('(3cos(t), 2sin(t))', 'parametric', 'Ellipse'),
@@ -363,7 +367,7 @@ const sliders: DocSection = {
     }),
     H('Autoplay'),
     P(
-      'A slider can start playing as soon as a graph opens: the built-in Examples do this. Set it with `"autoplay": true` in a JSON spec or `autoplay=1` in a link (see [For AI agents](#docs/agents)). Pausing an autoplaying slider turns autoplay off, so it stays paused next time.',
+      'A slider can start playing as soon as a graph opens: the built-in Examples do this. Set it with `"autoplay": true` in a JSON spec or `autoplay=1` in a link (see [For AI agents](#agents)). Pausing an autoplaying slider turns autoplay off, so it stays paused next time.',
     ),
     EX({
       id: 'autoplay-lissajous',
@@ -378,7 +382,7 @@ const sliders: DocSection = {
     }),
     H('One shared clock'),
     P(
-      'Every playing slider is advanced by the same clock, in the same frame, so several playing sliders never drift apart. For animations it is simplest to play **one** clock slider (say `T`) and derive everything else from it, e.g. `s = skeys(T, 0, 1, 2, 3)` — see [Drawing & styling](#docs/drawing).',
+      'Every playing slider is advanced by the same clock, in the same frame, so several playing sliders never drift apart. For animations it is simplest to play **one** clock slider (say `T`) and derive everything else from it, e.g. `s = skeys(T, 0, 1, 2, 3)` — see [Drawing & styling](#drawing).',
     ),
     TIP('For a seamless loop, make every quantity return to its starting value at the end of the clock’s range.'),
   ],
@@ -472,7 +476,8 @@ const drawing: DocSection = {
       '`name = expression` without x or y is a value that updates live as its sliders change; the row shows its current value.',
     ),
     SYNTAX(
-      row('b = 2a + 1', 'function', 'A derived value', { with: [L('a = 1', 'variable'), L('y = b', 'function')] }),
+      row('b = 2a + 1', 'function', 'A derived value', {
+        derived: true, with: [L('a = 1', 'variable'), L('y = b', 'function')] }),
     ),
     H('Repeats'),
     P(
@@ -507,7 +512,7 @@ const drawing: DocSection = {
       blurb: 'One clock T; skeys eases the radius 1 → 3 → 1 while rotx/roty spin a point.',
       lines: [
         L('T = 0', 'variable', { varMin: 0, varMax: 4, animMode: 'loop', autoplay: true, expanded: true }),
-        L('s = skeys(T, 0, 1, 2, 3, 4, 1)', 'function'),
+        { ...L('s = skeys(T, 0, 1, 2, 3, 4, 1)', 'function'), derived: true },
         L('(s*cos(t), s*sin(t))', 'parametric', { lineWidth: 3, fill: true, fillOpacity: 0.15 }),
         L('(rotx(s, 0, pi*T/2), roty(s, 0, pi*T/2))', 'points', { pointSize: 7 }),
       ],
@@ -621,7 +626,7 @@ const sharing: DocSection = {
       'A new tab starts from the graph you edited last, and your work survives a browser restart.',
       'Nothing is uploaded. To keep a graph safe or move it to another device, export it or copy a share link.',
     ),
-    TIP('“Try it” in these docs and the Examples replace your graph, but the notice that appears has an **Undo** button for a few seconds.'),
+    TIP('**Try it** in these docs opens the example in a new tab, so the graph in your other tab is untouched. The Examples menu replaces your graph, but the notice that appears has an **Undo** button for a few seconds.'),
   ],
 };
 
@@ -638,9 +643,9 @@ const keyboard: DocSection = {
       ['↑ ↓', 'autocomplete', 'Choose a suggestion'],
       ['Tab or Enter', 'autocomplete', 'Accept the suggestion'],
       ['Esc', 'autocomplete', 'Dismiss suggestions'],
-      ['Esc', 'tour, docs', 'Close'],
+      ['Esc', 'tour', 'Close'],
       ['← →', 'tour', 'Previous / next card'],
-      ['/', 'docs', 'Jump to the search box'],
+      ['/', 'these docs', 'Jump to the search box'],
       ['Scroll', 'graph', 'Zoom around the cursor'],
       ['Drag', 'graph', 'Pan (or trace, when you grab a curve)'],
     ),
@@ -678,16 +683,16 @@ const agents: DocSection = {
       'An AI assistant can make a Fluxion graph by writing a link: no API key, no backend. Point it at the agent guide and it will hand back a link that opens straight to the plot.',
     ),
     LIST(
-      '[llms.txt](llms.txt): the full agent guide, with syntax, examples and link formats.',
-      '[fluxion-spec.schema.json](fluxion-spec.schema.json): the JSON Schema for graph specs.',
-      '[examples/index.json](examples/index.json): the built-in Examples as editable specs.',
+      '[llms.txt](../llms.txt): the full agent guide, with syntax, examples and link formats.',
+      '[fluxion-spec.schema.json](../fluxion-spec.schema.json): the JSON Schema for graph specs.',
+      '[examples/index.json](../examples/index.json): the built-in Examples as editable specs.',
     ),
     TABLE(
       ['Link', 'Opens'],
       ['`#expr=y=sin(x)`', 'One or more expressions, with options such as `ic`, `min`, `color`'],
       ['`#spec=…` or `#z=…`', 'A full JSON spec (readable, or compressed)'],
       ['`#example=mandala`', 'A built-in Example by id'],
-      ['`#docs/odes`', 'These docs, at a section'],
+      ['`docs/#odes`', 'These docs, at a section'],
     ),
     P('To have an assistant edit your graph: share menu → **Copy as JSON spec**, paste it to the assistant, and open the link it returns.'),
   ],
@@ -728,7 +733,7 @@ export function rowExample(sectionId: string, r: SyntaxRow, index: number): DocE
   return {
     id: `${sectionId}-row-${index}`,
     title: r.input,
-    lines: [...(r.with ?? []), { raw: r.input, kind: r.kind, opts: r.opts }],
+    lines: [...(r.with ?? []), { raw: r.input, kind: r.kind, opts: r.opts, derived: r.derived }],
     viewport: r.viewport ?? WIDE,
   };
 }
