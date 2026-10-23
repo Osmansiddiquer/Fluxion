@@ -1,0 +1,290 @@
+# Fluxion
+
+> Fluxion (https://osmansiddiquer.github.io/Fluxion/) is a free, browser-based grapher for differential equations, functions, implicit curves, polar curves, inequalities (shaded regions) and points. AI agents can make a graph for their user by building a URL: the link opens straight to the plot, and the link itself is the shareable result. No API key, no backend, nothing to install.
+
+Base URL: `https://osmansiddiquer.github.io/Fluxion/`
+
+The graph lives in the URL fragment (after `#`), so it never reaches a server. There are three ways to write it:
+
+1. **Params (no code needed)**: `#expr=...&expr=...&xmin=...`. Best for hand-written links.
+2. **JSON spec**: `#spec=<percent-encoded or base64url JSON>`. Full control, still writable by hand.
+3. **Compressed JSON spec**: `#z=<base64url(deflate-raw(JSON))>`. Shortest links; needs code (snippets below).
+
+Give the user the link (e.g. as a markdown link). Opening it shows the graph, which they can then edit, animate and re-share.
+
+## Quick start
+
+A sine curve:
+
+https://osmansiddiquer.github.io/Fluxion/#expr=y=sin(x)
+
+A damped oscillator `y'' = -0.3y' - sin(y)` with y(0) = 2, y'(0) = 0, plotted for 0 ≤ t ≤ 20:
+
+https://osmansiddiquer.github.io/Fluxion/#expr=y''=-0.3y'-sin(y)&ic=2,0&xmin=0&xmax=20
+
+Logistic growth with sliders for the rate `r0` and capacity `K`:
+
+https://osmansiddiquer.github.io/Fluxion/#expr=P'=r0*P*(1-P/K)&ic=0.5&color=green&expr=r0=0.8&min=0&max=3&expr=K=4&min=1&max=8&xmin=-1&xmax=12&ymin=-1&ymax=5
+
+A circle, the region inside it above the x-axis, and a point:
+
+https://osmansiddiquer.github.io/Fluxion/#expr=x^2+y^2=9&expr=x^2+y^2<9%26y>0&color=blue&expr=(1,2)&label=P
+
+## Writing params links
+
+- Start with the base URL, then `#`, then `key=value` pairs joined by `&`.
+- Each `expr=` adds one expression (one row in the app). Options such as `color`, `ic`, `min` apply to the **most recent** `expr`.
+- Use the fragment (`#`), not a query string (`?`). In the fragment `+` means plus. (A `?expr=` query also works, but there `+` means a space, so you must write `%2B`.)
+- Percent-encode only what's needed: a space as `%20` (or just leave spaces out; they are never required), `&` inside an expression as `%26`, `#` as `%23`, `%` as `%25`. Everything else (`= ' ( ) ^ * / , < >`) may be written as is.
+- Keys are case-insensitive. Unknown keys are ignored (with a warning) rather than breaking the link.
+
+### Per-expression params (apply to the latest `expr`)
+
+| param | meaning | example |
+| --- | --- | --- |
+| `color` | palette name (`red`, `blue`, `green`, `purple`, `orange`, `black`, `pink`, `teal`) or hex without `#` | `color=teal`, `color=ff8800` |
+| `hidden` | hide the curve (`1`/`0`) | `hidden=1` |
+| `ic` | ODE initial conditions at t0: `y(t0),y'(t0),...` (one value per order) | `ic=2,0` |
+| `t0` | ODE initial time (default 0) | `t0=1` |
+| `min`, `max`, `step` | slider range and step for a variable such as `k=2` | `min=0&max=5&step=0.1` |
+| `anim`, `speed` | slider play mode (`loop`, `bounce`, `once`) and speed (0.1 to 5) | `anim=bounce` |
+| `thetamin`, `thetamax` | θ range for polar curves and polar regions (default 0 to 2pi) | `thetamax=6pi` |
+| `label`, `labeldir`, `size`, `drag` | point label (LaTeX), its direction (`n ne e se s sw w nw`), marker radius 2 to 14, drag mode (`auto off x y both`) | `label=P&labeldir=ne` |
+
+### Graph params
+
+| param | meaning | example |
+| --- | --- | --- |
+| `xmin`, `xmax` | horizontal range (default -8 to 8) | `xmin=0&xmax=20` |
+| `ymin`, `ymax` | vertical centre/range, see "Viewport" below | `ymin=-2&ymax=2` |
+| `panels` | cross-section side panels: `none`, `right`, `bottom`, `both` (default both) | `panels=none` |
+| `markers` | `off` hides extrema/intercept/intersection dots | `markers=off` |
+| `sigfigs` | significant figures in labels, 1 to 12 (default 3) | `sigfigs=4` |
+
+Numbers may be constants: `2pi`, `pi/2`, `sqrt(2)`, `-e`.
+
+## Expression syntax
+
+Write plain text, not LaTeX. The horizontal axis is `x` (also called `t`), the vertical axis is `y`. Each block below is one complete graph, shown with what Fluxion understands each line as. Every block is checked by Fluxion's test suite.
+
+### Functions
+
+```fluxion
+y = sin(x)                 # function
+x^2 - 1                    # function
+y = 3sin(2x) + e^(-x/4)    # function
+y = ln(x)                  # function
+y = sqrt(abs(x))           # function
+y = sin^2(x)               # function
+y = arctan(x)              # function
+y = floor(x)               # function
+y = 1/(x - 1)              # function
+```
+
+A bare expression means `y = ...`. Implicit multiplication works: `2x`, `3sin(x)`, `pi x`. Available functions: `sin cos tan sec csc cot`, inverses `asin`/`arcsin` (also `sin^-1(x)`) etc., hyperbolic `sinh cosh tanh` and inverses, `sqrt cbrt nthRoot(x, n) exp ln log` (`log` is natural; `log10`, `log2`, `log(x, b)`), `abs sign floor ceil round mod(x, m) min max hypot atan2 gamma factorial` (`x!`). Constants: `pi` (or `π`), `e`, `tau`, `phi`. Powers: `x^2`, `e^(-x)`, `2^-x`.
+
+### Differential equations (ODEs)
+
+```fluxion
+y' = -y                    # ode
+dy/dt = t - y              # ode
+y'' = -y                   # ode
+y'' + 0.4y' + 4y = 0       # ode
+d^2u/dt^2 = -sin(u)        # ode
+```
+
+- **ODEs always use `t` as the independent variable** (it is the horizontal axis). Write `y' = t*y`, not `y' = x*y`.
+- Any name can be the unknown function: `y`, `u`, `P`, `theta` (or `θ`).
+- Orders 1 to 10. Derivatives: `y'`, `y''`, `y'''`, `dy/dt`, `d^2y/dt^2`. The equation may be in any form that is linear in the highest derivative (`y'' + 0.4y' + 4y = 0` is fine).
+- Fluxion solves numerically (RK4) forward and backward from t0 across the whole visible x-range.
+- Initial conditions: set `ic` (params: `ic=2,0`; JSON: `"ic": [2, 0]`) as `[y(t0), y'(t0), ...]`, and optionally `t0` (default 0). If you leave them out, Fluxion uses `y(t0) = 1` and zero for the higher derivatives.
+
+Coupled systems are written as one expression per equation; Fluxion detects the coupling and solves them together. Each unknown is plotted against t. (Shared t0 comes from the first equation.)
+
+```fluxion
+x' = y                     # ode
+y' = -x - 0.2y             # ode
+```
+
+```fluxion
+x' = 10*(y - x)            # ode
+y' = x*(28 - z) - y        # ode
+z' = x*y - 8/3*z           # ode
+```
+
+### Sliders (variables)
+
+Any `name = number` becomes a slider that other expressions can use. Every name you use must be defined (or be `x`, `y`, `t`, `r`, `theta`, or a constant).
+
+```fluxion
+k = 2                      # variable
+w = 2pi                    # variable
+y = k*sin(w*x)             # function
+y' = -k*y                  # ode
+```
+
+Set the slider range with `min`, `max`, `step` (default range: -10 to 10, widened to include the value).
+
+### Implicit curves
+
+Any other equation in x and y is drawn as the curve where it holds.
+
+```fluxion
+x^2 + y^2 = 9              # implicit
+x = 2                      # implicit
+x = y^2 - 3                # implicit
+x^2/9 + y^2/4 = 1          # implicit
+y^2 = x^3 - x              # implicit
+```
+
+### Polar curves
+
+`r = f(theta)`; write `theta` or `θ`. The default sweep is 0 to 2pi; set `thetamin`/`thetamax` (params) or `thetaMin`/`thetaMax` (JSON) for spirals.
+
+```fluxion
+r = 2 + 2cos(theta)        # polar
+r = θ/2                    # polar
+r = sin(4θ)                # polar
+```
+
+### Inequalities (shaded regions)
+
+Use `<`, `>`, `<=`, `>=` (or `≤`, `≥`). Chains like `1 < y < 2` work, and `&` joins conditions (write it as `%26` inside a params link). Polar regions use `r` and `theta`.
+
+```fluxion
+y < sin(x)                 # inequality
+x^2 + y^2 <= 9 & y > 0     # inequality
+-1 < x < 1                 # inequality
+r < 1 + cos(θ)             # inequality
+```
+
+### Points and segments
+
+```fluxion
+(1, 2)                     # points
+[(0, 0), (1, 1), (2, 4)]   # points
+((0, 0), (2, 1), (4, 0))   # points
+A = (a, 1)                 # pointvar
+a = 2                      # variable
+B = (-1, -2)               # pointvar
+(A, B)                     # points
+```
+
+`(x, y)` is a point, `[(...), (...)]` a list of points, `((...), (...), ...)` a connected polyline, `A = (x, y)` a named point (draggable when its coordinates are sliders), and `(A, B)` the segment between two named points. Points accept `label`, `labeldir`, `size` and `drag`.
+
+### Common mistakes
+
+Each line shows something that fails, then what to write instead. (The suite checks that the left side fails and the right side works.)
+
+```pitfalls
+y' = x*y              =>  y' = t*y
+y = sin(πx)           =>  y = sin(pi*x)
+P' = P(1 - P)         =>  P' = P*(1 - P)
+y = |x|               =>  y = abs(x)
+f(x) = x^2            =>  y = x^2
+y = a*x^2             =>  y = a*x^2 ; a = 1
+y = sin x             =>  y = sin(x)
+y = x^2 if x > 0      =>  y = max(x, 0)^2
+```
+
+- `πx` is read as one name, `pix`. Put an operator or a space between: `pi*x`, `pi x`, `2pi`.
+- `P(1 - P)` calls a function named P. Write `P*(1 - P)`.
+- Functions need parentheses: `sin(x)`, not `sin x`.
+- No absolute-value bars, no user-defined functions `f(x) = ...`, no piecewise syntax.
+- Don't reuse built-in names (`e`, `pi`, `tau`, `phi`, `i`, `t`, `x`, `y`, `r`, `theta`) as slider names.
+- LaTeX is converted when it can be, but plain text is more reliable.
+
+## JSON spec
+
+For full control (initial conditions, slider ranges, panels, markers) use a JSON spec. JSON Schema: https://osmansiddiquer.github.io/Fluxion/fluxion-spec.schema.json
+
+```json
+{
+  "version": 1,
+  "expressions": [
+    "y = sin(x)",
+    { "expr": "y'' = -0.3y' - sin(y)", "ic": [2, 0], "t0": 0, "color": "red" },
+    { "expr": "k = 1.5", "min": 0, "max": 3, "step": 0.1, "anim": "bounce" },
+    { "expr": "r = 1 + k*cos(theta)", "thetaMin": 0, "thetaMax": "2pi", "hidden": false },
+    { "expr": "A = (k, 1)", "label": "A", "labelDir": "ne", "pointSize": 7 }
+  ],
+  "viewport": { "xmin": -6, "xmax": 6, "ymin": -4, "ymax": 4 },
+  "features": { "extrema": true, "xIntercepts": true, "yIntercept": true, "endpoints": false, "discontinuities": true, "intersections": false },
+  "panels": { "right": false, "bottom": false, "sliceX": 0, "sliceY": 1 },
+  "sigFigs": 3
+}
+```
+
+- Only `expressions` is required. An expression is a string, or an object with `expr` plus options: `color`, `hidden`, `t0`, `ic`, `min`, `max`, `step`, `anim`, `speed`, `thetaMin`, `thetaMax`, `label`, `labelDir`, `pointSize`, `drag`.
+- `color`: `"#rrggbb"`, `"#rgb"` or a palette name. Without one, colours are assigned from the palette in order.
+- Numbers may be given as constant strings: `"2pi"`, `"-pi/2"`, `"sqrt(2)"`.
+- `features` turns marker families on/off. `panels.sliceX` / `panels.sliceY` position the cross-section cursors; they may be a slider expression like `"k"`.
+- Validation is strict: unknown keys, wrong types and out-of-range values are rejected with a message naming the field (and "did you mean ...?"). A link with an invalid spec shows that message instead of a graph.
+
+### Putting a JSON spec in a link
+
+Readable (percent-encode the JSON, e.g. with `encodeURIComponent`):
+
+https://osmansiddiquer.github.io/Fluxion/#spec=%7B%22expressions%22%3A%5B%22y%20%3D%20x%5E2%22%2C%7B%22expr%22%3A%22y'%20%3D%20-y%22%2C%22ic%22%3A%5B3%5D%7D%5D%7D
+
+Base64url of the JSON (`#spec=` also accepts this, standard base64 too):
+
+https://osmansiddiquer.github.io/Fluxion/#spec=eyJleHByZXNzaW9ucyI6WyJ5ID0geF4yIix7ImV4cHIiOiJ5JyA9IC15IiwiaWMiOlszXX1dfQ
+
+Compressed, shortest (raw DEFLATE, then base64url, no padding):
+
+https://osmansiddiquer.github.io/Fluxion/#z=PctLCoMwFIXhrYQzsS1XCZZOLrgScaA2bQOaSBJsQLIvV-Gain0Nf75zFqg4OeW9tsaD6-XdYGxrlolK5N1pWzORC6_NYVuPIOgeXJfFhWRD6O1g97lTVyT6vztRCVmcQRi1AUvC2EZwmRrCrNVzsi6AF8Qfx4_LRJhaowa_q9P3RwDf2sErQmdDsOM3U3oB
+
+Python:
+
+```python
+import base64, json, zlib
+
+def fluxion_link(spec: dict) -> str:
+    c = zlib.compressobj(9, zlib.DEFLATED, -15)  # -15 = raw DEFLATE
+    data = c.compress(json.dumps(spec).encode()) + c.flush()
+    z = base64.urlsafe_b64encode(data).decode().rstrip("=")
+    return "https://osmansiddiquer.github.io/Fluxion/#z=" + z
+
+print(fluxion_link({"expressions": ["y' = -y", "y = e^(-x)"]}))
+```
+
+JavaScript (browser, Deno, Node 18+):
+
+```javascript
+async function fluxionLink(spec) {
+  const bytes = new TextEncoder().encode(JSON.stringify(spec));
+  const stream = new Blob([bytes]).stream().pipeThrough(new CompressionStream("deflate-raw"));
+  const z = new Uint8Array(await new Response(stream).arrayBuffer());
+  let bin = "";
+  for (const b of z) bin += String.fromCharCode(b);
+  const b64 = btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return "https://osmansiddiquer.github.io/Fluxion/#z=" + b64;
+}
+```
+
+## Checking a graph before you send it
+
+There is no server to call, so Fluxion can't validate a link for you remotely. Check your expressions against the syntax above. In particular, every name must be defined, ODEs use t, and you need explicit `*` before parentheses. If you can run code inside a clone of the repository (https://github.com/Osmansiddiquer/Fluxion), the CLI uses the app's real parser:
+
+```bash
+npm ci
+npm run fluxion -- check '{"expressions":["y = a*x^2"]}'     # JSON report; exit 1 on errors
+npm run fluxion -- link --expr "y'' = -y" --ic 1,0 --xmin 0 --xmax 10
+npm run fluxion -- decode 'https://osmansiddiquer.github.io/Fluxion/#z=...'
+```
+
+`check` reports how each expression was understood (e.g. "2nd-order ODE in y(t)", "slider k = 2", "shaded region"), plus errors (unparseable, unknown function, undefined variable) and warnings (options that don't apply, nothing visible in the viewport).
+
+## Viewport
+
+- `xmin`/`xmax` are honoured exactly. Fluxion always keeps x and y at the same scale (a square grid, so circles stay round). The visible y-range is therefore set by the window shape, centred on `(ymin + ymax) / 2`, and is about 0.75 × (xmax − xmin) tall on a typical desktop.
+- So choose the x-range to fit the y-values you need. For quantities on very different scales (say, population in thousands over 10 years), rescale the equation, e.g. measure P in thousands.
+- Default view: x from -8 to 8, y centred on 0.
+
+## Behaviour and limits
+
+- Opening a link replaces the graph in that browser tab. The user's previous graph is only kept elsewhere if they saved or shared it. The URL is cleaned up after loading.
+- Limits: at most 100 expressions, 1000 characters per expression, 10 initial conditions, |numbers| ≤ 1e9, a θ-range of at most 50 turns, and 200 KB of JSON.
+- A bad link never shows a blank page: Fluxion keeps the current graph and shows the problem. Expressions that don't parse still load, shown with an error mark so the user can fix them.
+- In the app, the share menu has "Copy share link" and "Copy as JSON spec". Users can paste the JSON to an assistant, which edits it and returns a new link.
