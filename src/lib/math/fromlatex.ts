@@ -132,6 +132,7 @@ export function latexToText(latex: string): string {
   s = s.replace(/\\langle/g, '(').replace(/\\rangle/g, ')');
   s = s.replace(/\\,|\\;|\\:|\\!|\\>|\\ /g, ' ');
   s = s.replace(/\\quad|\\qquad/g, ' ');
+  s = s.replace(/~/g, ' '); // non-breaking space (KaTeX implicit-product spacing)
 
   // Primes (derivatives) come in many shapes; normalise everything to bare ' .
   s = s.replace(/[′]/g, "'"); // ′

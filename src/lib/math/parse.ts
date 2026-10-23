@@ -1,6 +1,7 @@
 import { parse as mjParse, derivative, simplify, type MathNode } from 'mathjs';
 import { normalizeInput } from './normalize';
 import { parsePoints, looksLikePoints, type PointSpec } from './points';
+import { KNOWN_FUNCTIONS } from './builtins';
 
 /**
  * Parsing & classification of a single sidebar entry.
@@ -89,7 +90,62 @@ export type Parsed =
       polar: boolean;
       deps: string[];
       raw: string;
+    }
+  | {
+      /** Parametric curve (x(t), y(t)) swept over a t-range (thetaMin…thetaMax). */
+      kind: 'parametric';
+      xNode: MathNode;
+      yNode: MathNode;
+      deps: string[];
+      raw: string;
+    }
+  | {
+      /** User function definition `f(a, b) = body`, callable from any expression. */
+      kind: 'fndef';
+      name: string;
+      params: string[];
+      node: MathNode;
+      /** Free names in the body other than the parameters. */
+      deps: string[];
+      rhs: string;
+      raw: string;
+    }
+  | {
+      /** `body for k = a..b[, j = c..d]` — the body drawn once per loop value. */
+      kind: 'repeat';
+      body: Parsed;
+      loops: LoopSpec[];
+      deps: string[];
+      bodyRaw: string;
+      raw: string;
+    }
+  | {
+      /** `frames(i)` — frame i of the entry's imported frame sequence (filled contours). */
+      kind: 'frames';
+      indexNode: MathNode;
+      deps: string[];
+      raw: string;
     };
+
+/** One loop of a repeat: name runs from..to (inclusive) in steps of `step`. */
+export interface LoopSpec {
+  name: string;
+  from: MathNode;
+  to: MathNode;
+  step?: MathNode;
+  /** Range text as typed (for display). */
+  text: string;
+}
+
+/** Entry kinds a `for` repeat can wrap. */
+export const REPEATABLE_KINDS = new Set([
+  'function',
+  'implicit',
+  'polar',
+  'parametric',
+  'points',
+  'inequality',
+]);
 
 export type IneqOp = '<' | '>' | '<=' | '>=';
 
@@ -261,6 +317,131 @@ function rewriteXtoTStr(expr: string): string {
   }
 }
 
+/** Index of the last top-level `for` keyword (outside brackets), or -1. */
+function findFor(s: string): number {
+  let depth = 0;
+  let found = -1;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (
+      depth === 0 &&
+      c === 'f' &&
+      s.startsWith('for', i) &&
+      !/[A-Za-z0-9_]/.test(s[i - 1] ?? ' ') &&
+      // …followed by a loop clause `k = a..b` (rules out names like "forward").
+      /^\s*[A-Za-z]\w*\s*=[^=]*\.\./.test(s.slice(i + 3))
+    ) {
+      found = i;
+    }
+  }
+  return found;
+}
+
+const LOOP_RESERVED = new Set(['t', 'x', 'y', 'r', 'theta', 'θ', 'e', 'pi', 'tau', 'phi']);
+
+/** Parse `k = 0..5`, `k = [0...5]`, `k = 1..9 step 2` loop clauses (comma separated). */
+export function parseLoops(text: string): LoopSpec[] {
+  const clauses = splitTopChar(text, ',').map((c) => c.trim()).filter(Boolean);
+  if (!clauses.length) throw new Error('Expected a loop like: for k = 0..5');
+  const loops: LoopSpec[] = [];
+  for (const clause of clauses) {
+    const m = /^([A-Za-z]\w*)\s*=\s*(.+)$/.exec(clause);
+    if (!m) throw new Error('Expected a loop like: for k = 0..5');
+    const name = m[1];
+    if (LOOP_RESERVED.has(name)) throw new Error(`Loop variable can't be ${name}`);
+    if (loops.some((l) => l.name === name)) throw new Error(`Loop variable ${name} repeated`);
+    let range = m[2].trim();
+    let stepText: string | undefined;
+    const sm = /^(.*?)\s+step\s+(.+)$/.exec(range);
+    if (sm) {
+      range = sm[1].trim();
+      stepText = sm[2].trim();
+    }
+    if (range.startsWith('[') && range.endsWith(']')) range = range.slice(1, -1).trim();
+    const dots = /^(.+?)\s*\.{2,3}\s*(.+)$/.exec(range);
+    if (!dots) throw new Error('Loop range must look like a..b');
+    loops.push({
+      name,
+      from: mjParse(dots[1]),
+      to: mjParse(dots[2]),
+      step: stepText ? mjParse(stepText) : undefined,
+      text: m[2].trim(),
+    });
+  }
+  return loops;
+}
+
+/** Concrete values of a loop given evaluated bounds (inclusive, capped). */
+export function loopValues(from: number, to: number, step = 1, cap = 4096): number[] {
+  if (![from, to, step].every(Number.isFinite) || step === 0) return [];
+  const s = Math.abs(step) * (to >= from ? 1 : -1);
+  const n = Math.floor((to - from) / s + 1e-9) + 1;
+  const out: number[] = [];
+  for (let i = 0; i < Math.min(n, cap); i++) out.push(from + i * s);
+  return out;
+}
+
+function parseRepeat(trimmed: string, at: number, raw: string): Parsed {
+  const bodyRaw = trimmed.slice(0, at).trim();
+  const loopText = trimmed.slice(at + 3).trim();
+  if (!bodyRaw) return { kind: 'error', message: 'Nothing to repeat before "for"' };
+  let loops: LoopSpec[];
+  try {
+    loops = parseLoops(normalizeInput(loopText));
+  } catch (err) {
+    return { kind: 'error', message: friendlyError(err) };
+  }
+  const body = parseEntry(bodyRaw);
+  if (body.kind === 'error') return body;
+  if (!REPEATABLE_KINDS.has(body.kind)) {
+    return { kind: 'error', message: `A ${body.kind} can't be repeated with "for"` };
+  }
+  const loopNames = new Set(loops.map((l) => l.name));
+  const deps = new Set<string>();
+  for (const d of (body as { deps: string[] }).deps) if (!loopNames.has(d)) deps.add(d);
+  // Bounds may use earlier loop variables? Keep it simple: only globals.
+  for (const l of loops) {
+    for (const n of [l.from, l.to, l.step]) {
+      if (n) for (const s of freeSymbols(n)) deps.add(s);
+    }
+  }
+  return { kind: 'repeat', body, loops, deps: [...deps], bodyRaw, raw };
+}
+
+const FNDEF_LHS = /^([A-Za-z]\w*)\s*\(\s*([A-Za-z]\w*(?:\s*,\s*[A-Za-z]\w*)*)\s*\)$/;
+const FN_RESERVED = new Set(['y', 'r', 't', 'x', 'frames', 'e', 'pi', 'tau', 'phi', 'i']);
+
+/** `f(a, b) = body` → a function definition, or null if lhs isn't that shape. */
+function parseFnDef(lhs: string, rhs: string, raw: string): Parsed | null {
+  const m = FNDEF_LHS.exec(lhs);
+  if (!m) return null;
+  const name = m[1];
+  if (FN_RESERVED.has(name) || KNOWN_FUNCTIONS.has(name) || DERIV_TOKEN.test(name)) return null;
+  const params = m[2].split(',').map((p) => p.trim());
+  if (new Set(params).size !== params.length) {
+    return { kind: 'error', message: `Repeated parameter in ${name}(…)` };
+  }
+  if (params.some((p) => ['e', 'pi', 'tau', 'phi', 'i'].includes(p))) {
+    return { kind: 'error', message: 'A parameter name is a constant' };
+  }
+  try {
+    const node = mjParse(rhs);
+    if (hasSymbol(node, 't') && !params.includes('t')) {
+      return { kind: 'error', message: `Add t as a parameter: ${name}(…, t)` };
+    }
+    if (calledFunctions(node).has(name)) {
+      return { kind: 'error', message: `${name} can't call itself` };
+    }
+    const ps = new Set(params);
+    const deps = [...freeSymbols(node)].filter((s) => !ps.has(s));
+    return { kind: 'fndef', name, params, node, deps, rhs, raw };
+  } catch (err) {
+    return { kind: 'error', message: friendlyError(err) };
+  }
+}
+
 // Parsing (especially the symbolic ODE solve) is expensive and viewport-independent,
 // so cache by raw text — this keeps pan/zoom and slider drags cheap.
 const parseCache = new Map<string, Parsed>();
@@ -278,12 +459,36 @@ function parseEntryUncached(raw: string): Parsed {
   const trimmed = raw.trim();
   if (!trimmed) return { kind: 'empty' };
 
+  // Repeat: `body for k = 0..5` — split before anything else so the body can be
+  // any repeatable kind (inequalities included).
+  const forAt = findFor(trimmed);
+  if (forAt > 0) return parseRepeat(trimmed, forAt, raw);
+
   const normalized = normalizeInput(trimmed);
+
+  // Frame sequence: frames(index expression).
+  const fm = /^frames\s*\((.*)\)$/.exec(normalized);
+  if (fm) {
+    try {
+      const indexNode = mjParse(fm[1].trim() || '0');
+      return { kind: 'frames', indexNode, deps: [...freeSymbols(indexNode)], raw };
+    } catch (err) {
+      return { kind: 'error', message: friendlyError(err) };
+    }
+  }
 
   // Point literals: (a,b), [(x,y),…], ((x,y),(x,y),…)
   if (looksLikePoints(normalized)) {
     try {
       const pts = parsePoints(normalized);
+      // A single point whose coordinates use t is a parametric curve (x(t), y(t)).
+      if (pts && pts.points.length === 1 && !pts.polyline && !pts.scattered) {
+        const p = pts.points[0];
+        if (p.tNode && p.yNode && (hasSymbol(p.tNode, 't') || hasSymbol(p.yNode, 't'))) {
+          const deps = new Set([...freeSymbols(p.tNode), ...freeSymbols(p.yNode)]);
+          return { kind: 'parametric', xNode: p.tNode, yNode: p.yNode, deps: [...deps], raw };
+        }
+      }
       if (pts) {
         const deps = new Set<string>();
         for (const p of pts.points) {
@@ -307,7 +512,14 @@ function parseEntryUncached(raw: string): Parsed {
 
   // Inequalities: y < f(t), t²+y² ≤ 9, 1 < y < sin(t), a<f & b>g … → a shaded
   // region where every LHS−RHS constraint satisfies its operator vs 0.
-  const ineq = parseInequality(normalized);
+  // Function definitions (and anything with a ternary `c ? a : b`) may contain
+  // comparisons, so they're recognised before inequalities.
+  const early = splitEquation(normalized);
+  if (early && early[1]) {
+    const fndef = parseFnDef(early[0], early[1], raw);
+    if (fndef) return fndef;
+  }
+  const ineq = normalized.includes('?') ? null : parseInequality(normalized);
   if (ineq) {
     try {
       // Canonicalise x → t across the whole inequality when x is the independent.
@@ -371,6 +583,10 @@ function parseEntryUncached(raw: string): Parsed {
 
   const [lhs, rhs] = split;
   if (!rhs) return { kind: 'error', message: 'Missing right-hand side' };
+
+  // Function definition: f(a, b) = …
+  const fndef = parseFnDef(lhs, rhs, raw);
+  if (fndef) return fndef;
 
   // Point-valued variable: A = (x, y)
   if (/^[A-Za-z]\w*$/.test(lhs) && lhs !== INDEP && looksLikePoints(rhs)) {
@@ -469,6 +685,16 @@ function parseODE(
 const IDENT = /^[A-Za-z]\w*$/;
 
 function parseRelation(lhs: string, rhs: string, F: MathNode, raw: string): Parsed {
+  // `name = expr` without y: a variable, derived value or named function of t.
+  // Decided without symbolic differentiation (which can't handle e.g. ternaries).
+  if (IDENT.test(lhs) && lhs !== INDEP && lhs !== 'y') {
+    try {
+      const node = mjParse(rhs);
+      if (!hasSymbol(node, 'y')) return namedValue(lhs, rhs, node, raw);
+    } catch {
+      /* fall through */
+    }
+  }
   // Try to read it as explicit-in-y: F linear in y -> y = f(t).
   try {
     const ay = simplify(derivative(F, 'y'));
@@ -482,16 +708,7 @@ function parseRelation(lhs: string, rhs: string, F: MathNode, raw: string): Pars
     if (ay.toString() === '0') {
       // No y. A lone identifier (not t/y) is a variable or named function of t.
       if (IDENT.test(lhs) && lhs !== INDEP && lhs !== 'y') {
-        const node = mjParse(rhs);
-        const deps = [...freeSymbols(node)];
-        const depsNoT = deps.filter((s) => s !== INDEP);
-        if (!deps.includes(INDEP) && depsNoT.length === 0) {
-          const value = (node as unknown as { evaluate: () => unknown }).evaluate();
-          if (typeof value === 'number' && Number.isFinite(value)) {
-            return { kind: 'variable', name: lhs, value, raw };
-          }
-        }
-        return { kind: 'function', name: lhs, node, deps: depsNoT, raw, lhs, rhs };
+        return namedValue(lhs, rhs, mjParse(rhs), raw);
       }
       // Relation in t only (t = 0, t² = 1, …) -> implicit.
     }
@@ -500,6 +717,20 @@ function parseRelation(lhs: string, rhs: string, F: MathNode, raw: string): Pars
   }
   const deps = [...freeSymbols(F)].filter((s) => s !== INDEP && s !== 'y');
   return { kind: 'implicit', node: F, deps, lhs, rhs, raw };
+}
+
+/** `name = expr` (no y): a constant → variable (slider); otherwise a named
+ * expression — a function of t when it uses t, else a derived value. */
+function namedValue(lhs: string, rhs: string, node: MathNode, raw: string): Parsed {
+  const deps = [...freeSymbols(node)];
+  const usesT = hasSymbol(node, INDEP);
+  if (!usesT && deps.length === 0) {
+    const value = (node as unknown as { evaluate: () => unknown }).evaluate();
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return { kind: 'variable', name: lhs, value, raw };
+    }
+  }
+  return { kind: 'function', name: lhs, node, deps, raw, lhs, rhs };
 }
 
 function friendlyError(err: unknown): string {
