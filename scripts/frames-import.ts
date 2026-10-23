@@ -9,6 +9,8 @@
  *   npx vite-node scripts/frames-import.ts -- frames clip.fluxion.json --fps 30
  *
  *   # 3. In Fluxion: Share menu → Import from file… → clip.fluxion.json
+ *   #    It opens in Script mode, playing clip("<name>").play(). (Short clips
+ *   #    can also be imported right in the app: Script mode → Clips.)
  *
  * Options:
  *   --fps <n>         playback rate (default 30; match ffmpeg's fps filter)
@@ -19,6 +21,7 @@
  *   --min-area <n>    drop specks smaller than this (half-pixels², default 4)
  *   --every <n>       keep every n-th frame (fps is divided accordingly)
  *   --width <n>       data-space width of the clip (default 8, centred)
+ *   --name <name>     the clip's name in the script (default: from the output file)
  *
  * Reads .pgm / .pbm (P1/P2/P4/P5) files in name order. Nothing is uploaded or
  * fetched; copyrighted footage stays on your machine.
@@ -28,11 +31,12 @@ import { join } from 'node:path';
 import { parseNetpbm } from '../src/lib/frames/netpbm';
 import { threshold, vectorize } from '../src/lib/frames/trace';
 import { encodeClip, type IPoly } from '../src/lib/frames/codec';
-import { clipGraph } from '../src/lib/frames/clipGraph';
+import { clipScriptGraph } from '../src/lib/frames/clipScript';
+import { cleanClipName } from '../src/lib/frames/videoImport';
 
 function usage(msg?: string): never {
   if (msg) console.error(`error: ${msg}\n`);
-  console.error('usage: npx vite-node scripts/frames-import.ts -- <frames-dir> <out.json> [--fps 30] [--threshold 128] [--invert] [--tol 1.1] [--min-area 4] [--every 1] [--width 8]');
+  console.error('usage: npx vite-node scripts/frames-import.ts -- <frames-dir> <out.json> [--fps 30] [--threshold 128] [--invert] [--tol 1.1] [--min-area 4] [--every 1] [--width 8] [--name clip]');
   process.exit(1);
 }
 
@@ -85,7 +89,9 @@ for (const [i, f] of files.entries()) {
 const halfW = widthData / 2;
 const halfH = (widthData * H) / W / 2;
 const data = encodeClip({ w: 2 * W, h: 2 * H, fps, box: [-halfW, -halfH, halfW, halfH], frames });
-const graph = clipGraph(data);
+// Opens in Script mode, playing the clip with clip(name).play().
+const name = cleanClipName(typeof opt.name === 'string' ? opt.name : out.replace(/^.*[\\/]/, '').replace(/\..*$/, ''));
+const graph = clipScriptGraph(data, name);
 writeFileSync(out, JSON.stringify(graph));
 const pts = frames.reduce((s, fr) => s + fr.reduce((t, p) => t + p.length, 0), 0);
 process.stderr.write(
