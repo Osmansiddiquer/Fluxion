@@ -23,6 +23,19 @@ import { useScriptRuntime } from '../../state/scriptRuntime';
 import { drawScriptBackground, drawScriptLayer } from './scriptLayer';
 import { getFrameSequence } from '../../lib/frames/assets';
 import ScriptChip from './ScriptChip';
+import {
+  drawAxisNames,
+  drawEquilibria,
+  drawIcDots,
+  drawOdeUnderlay,
+  placeEquilibria,
+  placeIcDots,
+  type OdeItem,
+} from './odeOverlays';
+import { addExtraIC, extraFromClick, icDragPatches, snapToPixel, type IcTarget } from '../../lib/ode/view';
+import { describeEquilibrium } from '../../lib/analysis/equilibria';
+import { stateAt } from '../../lib/ode/overlays';
+import { useOdeFocus } from '../../state/odeFocus';
 import './PlotCanvas.css';
 
 interface Size {
@@ -104,6 +117,15 @@ interface Tip {
   title?: string;
   t: number;
   y: number;
+  /** Extra detail lines (equilibrium eigenvalues / Jacobian). */
+  lines?: string[];
+}
+
+/** The curve a result is drawn as: its state-space curve in the phase plane. */
+function drawnCurve(res: CurveResult): { segments: [number, number][][] } {
+  const ph = res.ode?.phase;
+  if (!ph) return res.curve;
+  return ph.curve ?? { segments: [] };
 }
 
 interface Pin {
@@ -189,6 +211,7 @@ export default function PlotCanvas() {
           (x) =>
             x.res &&
             (x.res.parsed.kind === 'function' || x.res.parsed.kind === 'ode' || x.res.parsed.kind === 'fndef') &&
+            !x.res.ode?.phase &&
             x.res.curve.segments.length > 0,
         ),
     [entries, analysis],
@@ -208,8 +231,10 @@ export default function PlotCanvas() {
               x.res.parsed.kind === 'polar' ||
               x.res.parsed.kind === 'inequality' ||
               x.res.parsed.kind === 'parametric' ||
-              x.res.parsed.kind === 'repeat') &&
-            x.res.curve.segments.length > 0,
+              x.res.parsed.kind === 'repeat' ||
+              // Phase-plane trajectories are parametric curves (t is the parameter).
+              !!x.res.ode?.phase) &&
+            drawnCurve(x.res).segments.length > 0,
         ),
     [entries, analysis],
   );
@@ -225,6 +250,25 @@ export default function PlotCanvas() {
     if (toggles.intersections) for (const f of analysis.intersections) list.push({ f, color: '' });
     return list;
   }, [entries, analysis, toggles]);
+
+  // ODE qualitative overlays (fields, nullclines, equilibria, extra solutions,
+  // family ghosts, IC dots) — see odeOverlays.ts.
+  const focusId = useOdeFocus((s) => s.id);
+  const [icActive, setIcActive] = useState<string | null>(null);
+  const odeItems = useMemo<OdeItem[]>(() => {
+    const list: OdeItem[] = [];
+    for (const entry of entries) {
+      if (!entry.visible || entry.layer) continue;
+      const res = analysis.results.get(entry.id);
+      if (!res || res.error || (!res.ode && !res.ghosts)) continue;
+      const st = styles.get(entry.id);
+      const inGroup = (id: string | null) => !!id && (id === entry.id || !!res.ode?.groupIds.includes(id));
+      const focused = inGroup(focusId) || inGroup(icActive);
+      list.push({ id: entry.id, res, color: st?.solid ?? entry.color, lineWidth: st?.lineWidth ?? 2.25, focused });
+    }
+    return list;
+  }, [entries, analysis, styles, focusId, icActive]);
+  const showEquilibria = toggles.equilibria !== false;
 
   // variable name -> entry id, so dragging a point can update its variables.
   const varEntry = useMemo(() => {
@@ -324,6 +368,9 @@ export default function PlotCanvas() {
     } else {
       drawGrid(ctx, tf, readGridColors());
     }
+    // ODE fields, nullclines, equilibrium lines, ghosts and extra solutions sit
+    // under every curve.
+    if (odeItems.length) drawOdeUnderlay(ctx, tf, odeItems, readGridColors().bg, showEquilibria);
 
     // Entries draw in list order (later rows on top): each one's fill, then its
     // stroke. Inequality regions are rasterised adaptively (cached per result +
@@ -367,7 +414,7 @@ export default function PlotCanvas() {
             const [a, b] = res.copyRanges![i].seg;
             return { st, segs: res.curve.segments.slice(a, b) };
           })
-        : [{ st: st0, segs: res.curve.segments }];
+        : [{ st: st0, segs: drawnCurve(res).segments }];
 
       for (const { st, segs } of parts) {
         // Skip segments entirely off-screen (stroke half-width + glow + slack).
@@ -450,6 +497,33 @@ export default function PlotCanvas() {
     }
 
     drawMarkers(ctx, tf, markers);
+
+    // ODE view: equilibria, the slice time on phase trajectories, IC dots, axis names.
+    if (odeItems.length) {
+      const ring = readGridColors().bg;
+      if (showEquilibria) drawEquilibria(ctx, placeEquilibria(tf, odeItems), ring);
+      if (projections.rightOpen) {
+        const cur = getComputedStyle(document.documentElement).getPropertyValue('--cursor').trim() || '#f0a000';
+        for (const it of odeItems) {
+          const ph = it.res.ode?.phase;
+          if (!ph?.traj) continue;
+          const st = stateAt(ph.traj, projections.sliceT);
+          if (!st) continue;
+          ctx.beginPath();
+          ctx.arc(tf.tx(st[ph.axes[0]]), tf.ty(st[ph.axes[1]]), 4, 0, Math.PI * 2);
+          ctx.fillStyle = cur;
+          ctx.fill();
+          ctx.lineWidth = 1.5;
+          ctx.strokeStyle = ring;
+          ctx.stroke();
+        }
+      }
+      drawIcDots(ctx, placeIcDots(tf, odeItems), ring, icActive);
+      const phaseLeader = odeItems.find((it) => it.res.ode?.phase?.curve);
+      if (phaseLeader && toggles.grid !== false) {
+        drawAxisNames(ctx, tf, phaseLeader.res.ode!.phase!.labels, readGridColors().axisText);
+      }
+    }
 
     // Plotted points. Look reflects drag mode: free = haloed dot with 4-way ticks,
     // x/y = directional arrows, static (literal) = plain small dot.
@@ -572,7 +646,7 @@ export default function PlotCanvas() {
       if (bottomOpen) grip(size.w - 11, tf.ty(sliceY), true);
     }
     notifyDrawn();
-  }, [analysis, viewport, size, entries, styles, copyStyles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid, shownScript]);
+  }, [analysis, viewport, size, entries, styles, copyStyles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid, shownScript, odeItems, showEquilibria, icActive]);
 
   // --- Interaction ---------------------------------------------------------
   const interaction = useRef<
@@ -589,6 +663,7 @@ export default function PlotCanvas() {
       }
     | { type: 'cursorT' }
     | { type: 'cursorY' }
+    | { type: 'ic'; entryId: string; target: IcTarget }
     | null
   >(null);
 
@@ -631,7 +706,7 @@ export default function PlotCanvas() {
       }
     }
     for (const { entry, res } of traceableImplicit) {
-      const np = nearestPointOnCurve(res!.curve, mx, my, tf);
+      const np = nearestPointOnCurve(drawnCurve(res!), mx, my, tf);
       if (np && np.d < bestD) {
         bestD = np.d;
         best = { entryId: entry.id, color: entry.color, t: np.t, y: np.y };
@@ -664,9 +739,10 @@ export default function PlotCanvas() {
       res?.parsed.kind === 'polar' ||
       res?.parsed.kind === 'inequality' ||
       res?.parsed.kind === 'parametric' ||
-      res?.parsed.kind === 'repeat'
+      res?.parsed.kind === 'repeat' ||
+      res?.ode?.phase
     ) {
-      const np = nearestPointOnCurve(res.curve, mx, my, tf);
+      const np = nearestPointOnCurve(drawnCurve(res), mx, my, tf);
       if (np) return { entryId, t: np.t, y: np.y };
       return pin && pin.entryId === entryId ? pin : null;
     }
@@ -691,6 +767,33 @@ export default function PlotCanvas() {
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     const tf = makeTransform(viewport, size.w, size.h);
+
+    // Shift-click: add an extra solution through this point to the ODE whose
+    // field is showing (else the first one that can take one).
+    if (e.shiftKey) {
+      const targets = odeItems.filter((it) => it.res.ode?.canAddSolutions);
+      const tgt = targets.find((it) => it.res.ode?.field) ?? targets[0];
+      const ode = tgt?.res.ode;
+      const leader = ode && entries.find((x) => x.id === ode.leaderId);
+      if (ode && leader) {
+        const view = ode.phase ? { phase: true, axes: ode.phase.axes } : { phase: false, axes: [0, 1] as [number, number] };
+        const upp = (viewport.tMax - viewport.tMin) / size.w;
+        const ic = extraFromClick(view, ode.t0, ode.y0, snapToPixel(tf.ix(mx), upp), snapToPixel(tf.iy(my), upp));
+        updateEntry(leader.id, { extraICs: addExtraIC(leader.extraICs, ic) });
+        interaction.current = null;
+        return;
+      }
+    }
+
+    // Grab an initial-condition dot?
+    for (const d of placeIcDots(tf, odeItems)) {
+      if (Math.hypot(d.x - mx, d.y - my) < GRAB_PX) {
+        interaction.current = { type: 'ic', entryId: d.entryId, target: d.target };
+        setIcActive(d.entryId);
+        setPin(null);
+        return;
+      }
+    }
 
     // Grab a draggable plotted point (only when a coordinate is a variable)?
     for (const pm of pointMarkers) {
@@ -787,6 +890,23 @@ export default function PlotCanvas() {
       return;
     }
 
+    if (it?.type === 'ic') {
+      const upp = (viewport.tMax - viewport.tMin) / size.w;
+      const nx = snapToPixel(tf.ix(mx), upp);
+      const ny = snapToPixel(tf.iy(my), upp);
+      const patches = icDragPatches(it.target, nx, ny, entries);
+      // One store update per move (the group re-integrates once).
+      useStore.setState((s) => ({
+        entries: s.entries.map((en) => {
+          const p = patches.find((q) => q.id === en.id);
+          return p ? { ...en, ...p.patch } : en;
+        }),
+      }));
+      const color = odeItems.find((o) => o.id === it.entryId)?.color ?? '#000';
+      setTip({ px: mx, py: my, color, title: 'Initial condition', t: nx, y: ny });
+      return;
+    }
+
     if (it?.type === 'cursorT') {
       setProjections({ sliceT: tf.ix(mx), sliceTExpr: undefined });
       return;
@@ -843,6 +963,31 @@ export default function PlotCanvas() {
         };
       }
     }
+    for (const d0 of placeIcDots(tf, odeItems)) {
+      const d = Math.hypot(d0.x - mx, d0.y - my);
+      if (d < bestD) {
+        bestD = d;
+        best = { px: d0.x, py: d0.y, color: d0.color, title: 'Initial condition', t: d0.data[0], y: d0.data[1] };
+      }
+    }
+    if (showEquilibria) {
+      for (const m of placeEquilibria(tf, odeItems)) {
+        const d = Math.hypot(m.x - mx, m.y - my);
+        if (d < bestD) {
+          bestD = d;
+          const kind = m.eq.type.charAt(0).toUpperCase() + m.eq.type.slice(1);
+          best = {
+            px: m.x,
+            py: m.y,
+            color: m.color,
+            title: m.labels ? `${kind} equilibrium` : `Equilibrium y = ${fmt(m.eq.point[0])}: ${m.eq.type}`,
+            t: m.data[0],
+            y: m.data[1],
+            lines: describeEquilibrium(m.eq, fmt),
+          };
+        }
+      }
+    }
     for (const m of markers) {
       const d = Math.hypot(tf.tx(m.f.t) - mx, tf.ty(m.f.y) - my);
       if (d < bestD) {
@@ -870,6 +1015,7 @@ export default function PlotCanvas() {
   };
 
   const endInteraction = (e: React.PointerEvent) => {
+    if (interaction.current?.type === 'ic') setIcActive(null);
     interaction.current = null;
     try {
       (e.target as Element).releasePointerCapture(e.pointerId);
@@ -951,12 +1097,25 @@ export default function PlotCanvas() {
       <FeatureToggle />
       <ScriptChip />
       {tip && (
-        <div className="plot-tooltip" style={{ left: tip.px + frame.x, top: tip.py + frame.y }} role="status">
+        <div
+          className={`plot-tooltip${tip.lines?.length ? ' tt-rich' : ''}`}
+          style={{ left: tip.px + frame.x, top: tip.py + frame.y }}
+          role="status"
+        >
           <span className="tt-dot" style={{ background: tip.color }} />
           {tip.title && <span className="tt-kind">{tip.title}</span>}
-          <span className="tt-coords">
-            ({fmt(tip.t)}, {fmt(tip.y)})
-          </span>
+          {!tip.title?.startsWith('Equilibrium y') && (
+            <span className="tt-coords">
+              ({fmt(tip.t)}, {fmt(tip.y)})
+            </span>
+          )}
+          {tip.lines?.length ? (
+            <span className="tt-lines">
+              {tip.lines.map((l) => (
+                <span key={l}>{l}</span>
+              ))}
+            </span>
+          ) : null}
         </div>
       )}
       {labels.map((l) => (
