@@ -6,6 +6,8 @@ import { searchDocs, queryTerms } from './search';
 import { DEMOS } from '../../lib/demos';
 import { openGraphWithUndo } from '../../lib/openGraph';
 import { useStore } from '../../store/useStore';
+import { parseEntry } from '../../lib/math/parse';
+import { isDerived } from '../../lib/scope';
 import './Docs.css';
 
 // ── Script mode reference hook ──────────────────────────────────────────────
@@ -322,7 +324,7 @@ function SyntaxLine({ row, onTry }: { row: SyntaxRow; onTry: () => void }) {
         {row.input}
       </code>
       <span className="docs-syn-kind" role="cell">
-        <KindTag kind={row.kind} />
+        <KindTag kind={row.kind} raw={row.input} />
       </span>
       <span className="docs-syn-note" role="cell">
         <Inline text={row.note} />
@@ -357,7 +359,7 @@ function ExampleCard({ ex, onTry }: { ex: DocExample; onTry: () => void }) {
             <div className="docs-code-line" key={j}>
               <span className="docs-code-swatch" style={l.opts?.color ? { background: l.opts.color } : undefined} />
               <code>{l.raw}</code>
-              <KindTag kind={l.kind} />
+              <KindTag kind={l.kind} raw={l.raw} />
             </div>
           ))}
         </div>
@@ -366,7 +368,12 @@ function ExampleCard({ ex, onTry }: { ex: DocExample; onTry: () => void }) {
   );
 }
 
-function KindTag({ kind }: { kind: DocKind }) {
+/** A row's kind tag. A derived value (`b = 2a + 1`) parses as a function with no
+ * curve, so it gets its own label rather than a misleading "function". */
+function KindTag({ kind, raw }: { kind: DocKind; raw: string }) {
+  if (kind === 'function' && isDerived(parseEntry(raw))) {
+    return <span className="docs-kind docs-kind-derived">derived</span>;
+  }
   return <span className={`docs-kind docs-kind-${kind}`}>{KIND_LABEL[kind]}</span>;
 }
 

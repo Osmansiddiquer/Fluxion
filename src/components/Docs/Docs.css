@@ -396,6 +396,7 @@
   --ink: var(--docs-ink-param);
 }
 .docs-kind-fndef,
+.docs-kind-derived,
 .docs-kind-repeat {
   --ink: var(--docs-ink-def);
 }
