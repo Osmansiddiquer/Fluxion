@@ -123,6 +123,14 @@ describe('checkSpec', () => {
     expect(checkSpec({ expressions: ['y = x + 100'], viewport: { ymin: 90, ymax: 110 } }).warnings).toEqual([]);
   });
 
+  it('warns when the y-range cannot be honoured because of the square grid', () => {
+    const r = checkSpec({ expressions: ["P' = 0.5*P*(1 - P/1000)"], viewport: { xmin: 0, xmax: 20, ymin: 0, ymax: 1000 } });
+    const w = r.warnings.find((x) => x.path === 'viewport');
+    expect(w?.message).toMatch(/same scale.*about 15 units centred on 500/);
+    expect(checkSpec({ expressions: ['y=x'], viewport: { xmin: 0, xmax: 20, ymin: -7, ymax: 7 } }).warnings).toEqual([]);
+    expect(checkSpec({ expressions: ['y=x'], viewport: { xmin: -100, xmax: 100, ymin: -1, ymax: 1 } }).warnings[0].path).toBe('viewport');
+  });
+
   it('detects visible shaded regions even when no boundary is inside', () => {
     const r = checkSpec({ expressions: ['y < 1000'] });
     expect(r.expressions[0].visible).toBe(true);

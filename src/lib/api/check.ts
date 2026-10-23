@@ -174,6 +174,28 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
   return { errors, warnings, expressions };
 }
 
+/** Typical plot-area height/width on a desktop screen (the app's default layout). */
+export const TYPICAL_ASPECT = 0.75;
+
+/**
+ * The plot always keeps a square grid: x-range is honoured exactly and the
+ * y-range is re-derived from the canvas shape, centred on (ymin+ymax)/2. Warn
+ * when the requested y-range is far from what will actually show.
+ */
+function aspectWarning(spec: NormalizedSpec): Issue | null {
+  const { tMin, tMax, yMin, yMax } = spec.viewport;
+  const ratio = (yMax - yMin) / (tMax - tMin);
+  if (ratio > 0.3 && ratio < 1.6) return null;
+  const shown = ((tMax - tMin) * TYPICAL_ASPECT).toPrecision(2);
+  const c = ((yMin + yMax) / 2).toPrecision(3);
+  return {
+    path: 'viewport',
+    message:
+      `Fluxion keeps x and y at the same scale, so only xmin/xmax are exact: y will show about ${shown} units ` +
+      `centred on ${c} (not ${yMin}…${yMax}). Widen or narrow the x-range to match, or rescale the equation.`,
+  };
+}
+
 /** Validate a spec structurally and semantically. Never throws. */
 export function checkSpec(input: unknown): CheckReport {
   const v = validateSpec(input);
@@ -181,10 +203,11 @@ export function checkSpec(input: unknown): CheckReport {
   const g = specToGraph(v.spec);
   const sem = checkGraph(g);
   const errors = sem.errors;
+  const aspect = aspectWarning(v.spec);
   return {
     ok: errors.length === 0,
     errors,
-    warnings: [...v.warnings, ...sem.warnings],
+    warnings: [...v.warnings, ...(aspect ? [aspect] : []), ...sem.warnings],
     expressions: sem.expressions,
     spec: v.spec,
   };
