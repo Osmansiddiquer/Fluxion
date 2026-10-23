@@ -16,6 +16,10 @@ import { resolveStyle, type ResolvedStyle } from '../../lib/style';
 import { rasterizeRegion, type Rect } from '../../lib/raster';
 import type { CurveResult } from '../../lib/compute';
 import { segmentOutside } from '../../lib/geom/cull';
+import { useScriptRuntime } from '../../state/scriptRuntime';
+import { drawScriptBackground, drawScriptLayer } from './scriptLayer';
+import { getFrameSequence } from '../../lib/frames/assets';
+import ScriptChip from './ScriptChip';
 import './PlotCanvas.css';
 
 interface Size {
@@ -123,6 +127,10 @@ export default function PlotCanvas() {
   const theme = useStore((s) => s.theme);
   const sigFigs = useStore((s) => s.sigFigs);
   const analysis = useAnalysis();
+  // Script mode's drawing (validated display list from the sandbox).
+  const scriptFrame = useScriptRuntime((s) => s.frame);
+  const scriptOn = useStore((s) => !!s.script?.code.trim() && s.script.visible !== false);
+  const shownScript = scriptOn ? scriptFrame : null;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -295,7 +303,9 @@ export default function PlotCanvas() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const tf = makeTransform(viewport, size.w, size.h);
-    if (toggles.grid === false) {
+    if (shownScript && drawScriptBackground(ctx, shownScript, size.w, size.h)) {
+      // A script background replaces the grid.
+    } else if (toggles.grid === false) {
       ctx.fillStyle = readGridColors().bg;
       ctx.fillRect(0, 0, size.w, size.h);
     } else {
@@ -381,6 +391,15 @@ export default function PlotCanvas() {
         ctx.stroke();
       }
       ctx.setLineDash([]);
+    }
+
+    // Script layer: above the Graph-mode curves, below markers, points and cursors.
+    if (shownScript) {
+      const getClip = (id: string) => {
+        const seq = getFrameSequence(id);
+        return seq instanceof Error ? null : seq;
+      };
+      drawScriptLayer(ctx, tf, shownScript, getClip, dpr, readGridColors().bg);
     }
 
     drawMarkers(ctx, tf, markers);
@@ -505,7 +524,7 @@ export default function PlotCanvas() {
       if (rightOpen) grip(tf.tx(sliceT), 10, false);
       if (bottomOpen) grip(size.w - 11, tf.ty(sliceY), true);
     }
-  }, [analysis, viewport, size, entries, styles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid]);
+  }, [analysis, viewport, size, entries, styles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid, shownScript]);
 
   // --- Interaction ---------------------------------------------------------
   const interaction = useRef<
@@ -882,6 +901,7 @@ export default function PlotCanvas() {
         onWheel={onWheel}
       />
       <FeatureToggle />
+      <ScriptChip />
       {tip && (
         <div className="plot-tooltip" style={{ left: tip.px, top: tip.py }} role="status">
           <span className="tt-dot" style={{ background: tip.color }} />

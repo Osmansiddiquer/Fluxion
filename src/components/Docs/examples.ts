@@ -29,6 +29,8 @@ export interface ExampleLine {
   raw: string;
   kind: DocKind;
   opts?: LineOptions;
+  /** A derived value (`s = skeys(T, …)`): kind 'function', but tagged "derived". */
+  derived?: boolean;
 }
 
 export interface DocExample {

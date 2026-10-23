@@ -238,6 +238,7 @@
   font-weight: 600;
   color: var(--accent);
   border-radius: var(--radius-sm);
+  text-decoration: none;
 }
 .tut-docs-link span {
   transition: transform 0.14s var(--ease);

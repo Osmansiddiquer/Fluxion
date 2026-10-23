@@ -2,35 +2,42 @@
   {
     "id": "sharingan",
     "title": "Rotating Sharingan",
-    "blurb": "Parametric tomoe repeated with for k = 0..2, filled and spun by a slider.",
+    "blurb": "A tomoe() helper drawn three times with path() arcs, spun by the clock.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=sharingan",
     "spec": "examples/sharingan.json"
   },
   {
     "id": "cube",
     "title": "Rotating cube",
-    "blurb": "3D vertices projected with projx / projy; edges and faces from lookup tables.",
+    "blurb": "A 3D camera(): corners, faces sorted back to front, see-through hsv colours.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=cube",
     "spec": "examples/cube.json"
   },
   {
     "id": "mangekyo",
     "title": "Eye → Sharingan → Mangekyō",
-    "blurb": "One clock T, keyframed with skeys: colour, growth, spin and a shape morph.",
+    "blurb": "One 12 s clock and keyframes(): colour, growth, spin and a tomoe → blade morph.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=mangekyo",
     "spec": "examples/mangekyo.json"
   },
   {
     "id": "mandala",
     "title": "Mandala bloom",
-    "blurb": "Three rings of repeated petals counter-rotate while one clock eases the bloom and cycles hsv colours.",
+    "blurb": "A petal() helper in three counter-rotating rings; the bloom and the hues loop seamlessly.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=mandala",
     "spec": "examples/mandala.json"
   },
   {
+    "id": "pendulum",
+    "title": "Pendulum from an ODE",
+    "blurb": "graph.ode() reads the Graph-mode solution of θ'' = −(g/L)·sin θ − c·θ' to swing a pendulum along it.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=pendulum",
+    "spec": "examples/pendulum.json"
+  },
+  {
     "id": "silhouette",
     "title": "Silhouette clip",
-    "blurb": "A traced black-and-white frame sequence — the Bad Apple pipeline.",
+    "blurb": "A traced black-and-white video clip played with clip(\"apple\").play() — the Bad Apple pipeline.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=silhouette"
   }
 ]

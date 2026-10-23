@@ -1,8 +1,10 @@
-// Deep links into the docs: `#docs` (home) or `#docs/<section-id>`. Deliberately
+// Legacy deep links from the short-lived in-app docs panel: `#docs` or
+// `#docs/<section-id>`. main.tsx redirects them to the docs page (docs/#<id>);
+// the tour is skipped for them. Deliberately
 // a path-style fragment with no `=`, so it can never be mistaken for the URL API's
 // `key=value` payloads (`#expr=`, `#spec=`, `#z=`, `#g=`, `#example=`; see
 // lib/api/url.ts `hasUrlPayload`), and the API's fragments never parse as docs.
-// Main-bundle code (App) uses this, so it must stay tiny and import nothing heavy.
+// Main-bundle code uses this, so it must stay tiny and import nothing heavy.
 
 export interface DocsRoute {
   /** Section id, or undefined for the docs home page. */

@@ -111,6 +111,18 @@ localStorage.setItem('ode-plotter',JSON.stringify(st));location.reload();
       `(t, k) for k = 0..3` shows a `×4` badge; Points menu → **Grid & axes** toggles
       the grid.
 
+### Script mode
+Automated: `node scripts/e2e-script-mode.cjs http://localhost:5173/ --shots /tmp/shots`
+(sandbox isolation, runaway kill, every example light + dark, reference, sliders, clip
+import). By eye:
+- [ ] Header **Graph | Script** switch; Script mode shows the editor, the canvas keeps
+      pan / zoom; Graph mode shows a "Script layer · Hide · Edit" chip.
+- [ ] Typing re-runs (Auto-run); an error underlines its line and the console line
+      jumps there; `while (true) {}` is stopped after ~3 s with a clear message.
+- [ ] Reference: beside the editor on wide windows, a Code | Reference tab on narrow
+      ones; Try it / Insert work; both themes readable.
+- [ ] Clips: import a short video, preview threshold, import → `clip("name").play()`.
+
 ### Performance (4× CPU throttle)
 - [ ] Styling-only edits (colour, expanded, point size, anim speed) don't recompute curves.
 - [ ] Dragging/animating a variable re-samples only the curves that depend on it; an

@@ -6,7 +6,7 @@ import { HELPERS } from './helpers';
 import { parseEntry } from './parse';
 import { nodesOf } from '../compute';
 import { buildEvalContext } from '../scope';
-import { DEMOS } from '../demos';
+import { EXPRESSION_DEMOS as DEMOS } from '../demos';
 
 /** Same value, treating NaN = NaN and comparing complex / matrices by string. */
 function same(a: unknown, b: unknown): boolean {

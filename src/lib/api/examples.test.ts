@@ -75,7 +75,7 @@ describe('#example= links', () => {
       ]) {
         const p = await readUrlPayload(hash, search);
         expect(p.kind, hash + search).toBe('legacy');
-        if (p.kind === 'legacy') expect(p.graph.entries.length).toBeGreaterThan(0);
+        if (p.kind === 'legacy') expect(p.graph.entries.length + (p.graph.script?.code ? 1 : 0)).toBeGreaterThan(0);
       }
     }
   });

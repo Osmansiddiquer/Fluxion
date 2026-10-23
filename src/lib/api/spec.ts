@@ -5,6 +5,7 @@ import { latexToText } from '../math/fromlatex';
 import { PALETTE, nextColor } from '../../utils/colors';
 import type { GraphData } from '../graphFile';
 import { isColorExpr } from '../color';
+import { SCRIPT_LIMITS } from '../script/protocol';
 import type {
   AnimMode,
   Entry,
@@ -59,6 +60,8 @@ export const LIMITS = {
   maxAssets: 8,
   maxAssetChars: 8_000_000,
   maxAssetsTotalChars: 16_000_000,
+  /** Script mode program (JavaScript, run sandboxed). */
+  maxScriptChars: SCRIPT_LIMITS.maxCodeChars,
 } as const;
 
 export type DragMode = NonNullable<Entry['pointDrag']>;
@@ -126,6 +129,8 @@ export interface FluxionSpec {
   features?: Partial<FeatureToggles>;
   panels?: PanelsSpec;
   sigFigs?: number;
+  /** A Script mode program: JavaScript using the Fluxion drawing API (runs sandboxed). */
+  script?: string;
 }
 
 /** A validated spec with every number resolved and every expression an object. */
@@ -162,6 +167,7 @@ export interface NormalizedSpec {
   features: FeatureToggles;
   projections: Projections;
   sigFigs: number;
+  script?: string;
 }
 
 export interface Issue {
@@ -216,6 +222,7 @@ export const TOP_KEYS = [
   'features',
   'panels',
   'sigFigs',
+  'script',
 ] as const;
 export const EXPRESSION_KEYS = [
   'expr',
@@ -545,7 +552,7 @@ function validateExpression(
   if (obj.labelDir !== undefined) out.labelDir = c.oneOf(obj.labelDir, POINT_DIRS, `${path}.labelDir`);
   if (obj.pointSize !== undefined) {
     const n = c.num(obj.pointSize, `${path}.pointSize`, { min: 2, max: 14 });
-    if (n !== undefined) out.pointSize = Math.round(n);
+    if (n !== undefined) out.pointSize = n;
   }
   if (obj.drag !== undefined) out.drag = c.oneOf(obj.drag, DRAG_MODES, `${path}.drag`);
   if (obj.lineWidth !== undefined) {
@@ -601,8 +608,18 @@ export function validateSpec(input: unknown): ValidateResult {
   }
   if (obj.$schema !== undefined && typeof obj.$schema !== 'string') c.error('$schema', 'must be a string');
 
+  let script: string | undefined;
+  if (obj.script !== undefined) {
+    if (typeof obj.script !== 'string') c.error('script', `must be a string of JavaScript, got ${describe(obj.script)}`);
+    else if (obj.script.length > LIMITS.maxScriptChars) {
+      c.error('script', `is too long (${obj.script.length} characters; max ${LIMITS.maxScriptChars})`);
+    } else if (obj.script.trim()) script = obj.script;
+  }
+
   const expressions: (Omit<NormalizedExpression, 'color'> & { color?: string })[] = [];
-  if (!Array.isArray(obj.expressions)) {
+  if (obj.expressions === undefined && script !== undefined) {
+    // A script-only graph: no expressions needed.
+  } else if (!Array.isArray(obj.expressions)) {
     c.error(
       'expressions',
       obj.expressions === undefined
@@ -612,7 +629,7 @@ export function validateSpec(input: unknown): ValidateResult {
   } else if (obj.expressions.length > LIMITS.maxExpressions) {
     c.error('expressions', `too many expressions (${obj.expressions.length}; max ${LIMITS.maxExpressions})`);
   } else {
-    if (obj.expressions.length === 0) c.warn('expressions', 'no expressions — the graph will be empty');
+    if (obj.expressions.length === 0 && script === undefined) c.warn('expressions', 'no expressions — the graph will be empty');
     obj.expressions.forEach((item, i) => {
       const e = validateExpression(item, `expressions[${i}]`, c);
       if (e) expressions.push(e);
@@ -716,7 +733,7 @@ export function validateSpec(input: unknown): ValidateResult {
 
   return {
     ok: true,
-    spec: { version: 1, expressions: normalized, viewport: vp, features, projections, sigFigs },
+    spec: { version: 1, expressions: normalized, viewport: vp, features, projections, sigFigs, ...(script !== undefined ? { script } : {}) },
     warnings: c.warnings,
   };
 }
@@ -753,7 +770,7 @@ export function specToGraph(spec: NormalizedSpec): GraphData {
     if (e.autoplay) entry.autoplay = true;
     return entry;
   });
-  return {
+  const g: GraphData = {
     v: 1,
     entries,
     viewport: { ...spec.viewport },
@@ -761,6 +778,8 @@ export function specToGraph(spec: NormalizedSpec): GraphData {
     projections: { ...spec.projections },
     sigFigs: spec.sigFigs,
   };
+  if (spec.script) g.script = { code: spec.script };
+  return g;
 }
 
 function sameObj<T extends object>(a: T, b: T): boolean {
@@ -848,5 +867,6 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
     if (Object.keys(panels).length) spec.panels = panels;
   }
   if (g.sigFigs !== undefined && g.sigFigs !== DEFAULT_SIG_FIGS) spec.sigFigs = g.sigFigs;
+  if (g.script?.code.trim()) spec.script = g.script.code;
   return spec;
 }

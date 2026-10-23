@@ -1,6 +1,6 @@
 # Fluxion
 
-> Fluxion (https://osmansiddiquer.github.io/Fluxion/) is a free, browser-based grapher for differential equations, functions, implicit curves, polar and parametric curves, inequalities (shaded regions) and points, with user functions, repeats, keyframed animation and styling for drawings. AI agents can make a graph for their user by building a URL: the link opens straight to the plot, and the link itself is the shareable result. No API key, no backend, nothing to install.
+> Fluxion (https://osmansiddiquer.github.io/Fluxion/) is a free, browser-based grapher for differential equations, functions, implicit curves, polar and parametric curves, inequalities (shaded regions) and points, with user functions, repeats, keyframed animation and styling for drawings, plus a sandboxed JavaScript Script mode for drawings and animation that can read the graph's ODE solutions. AI agents can make a graph for their user by building a URL: the link opens straight to the plot, and the link itself is the shareable result. No API key, no backend, nothing to install.
 
 Base URL: `https://osmansiddiquer.github.io/Fluxion/`
 
@@ -73,7 +73,8 @@ https://osmansiddiquer.github.io/Fluxion/#example=mandala
 | `markers` | `off` hides extrema/intercept/intersection dots | `markers=off` |
 | `sigfigs` | significant figures in labels, 1 to 12 (default 3) | `sigfigs=4` |
 | `grid` | `off` hides the grid lines and axes, for drawings | `grid=off` |
-| `example` | open a built-in scripted demo instead of an expression list (see "Built-in examples") | `example=cube` |
+| `example` | open a built-in example instead of an expression list (see "Built-in examples") | `example=cube` |
+| `script` | a Script mode program (JavaScript, percent-encoded; see "Script mode") | `script=circle(0,0,2)` |
 
 Numbers may be constants: `2pi`, `pi/2`, `sqrt(2)`, `-e`.
 
@@ -261,6 +262,73 @@ y = x^2 if x > 0      =>  y = max(x, 0)^2
 - Don't reuse built-in names (`e`, `pi`, `tau`, `phi`, `i`, `t`, `x`, `y`, `r`, `theta`) as slider names.
 - LaTeX is converted when it can be, but plain text is more reliable.
 
+## Script mode (JavaScript drawings and animation)
+
+For drawings, diagrams and animation, a graph can carry a **script**: JavaScript using Fluxion's drawing API, drawn on the same axes as the expressions (so pan and zoom still work). The app has a Graph | Script switch; a link with a script opens in Script mode, with the code in an editor beside the canvas. Scripts run in a sandbox (a Web Worker in an opaque-origin iframe, no network): they can draw, nothing else. Prefer a script over expression rows for anything with many shapes, colour, motion or 3D.
+
+The script is the body of one function, run top to bottom and re-run every frame when it uses `time`. Every name below is built in; no imports. Coordinates are graph units, sizes in style objects are pixels.
+
+- Shapes: `circle(x, y, r)`, `ellipse(x, y, rx, ry)`, `rect(x, y, w, h)` (bottom-left corner; `radius` rounds it), `polygon(points)`, `polyline(points)`, `line(x1, y1, x2, y2)`, `arrow(x1, y1, x2, y2)`, `point(x, y)`, `arc(x, y, r, a0, a1)`, `text(s, x, y)`, `label(s, x, y)`, `path().moveTo(x, y).lineTo(x, y).quadTo(cx, cy, x, y).bezierTo(c1x, c1y, c2x, c2y, x, y).arc(cx, cy, r, a0, a1).close()`, `curve(t => [x, y], t0, t1)`, `plot(x => y)`, `background(color)`. Points are `[[x, y], ...]`.
+- Style (last argument of any shape): `{ color, fill, width, dash: "dashed" | "dotted" | [8, 4], opacity, size, radius, samples }`. Fill only means no outline. Fills may be `linearGradient(x0, y0, x1, y1, colors)` / `radialGradient(x, y, r, colors)`.
+- Colour: CSS strings, `rgb(r, g, b, a?)` (0 to 255), `hsv(h, s, v, a?)`, `hsl(h, s, l, a?)` (h in degrees), `mix(c1, c2, t)`, `alpha(c, a)`.
+- Transforms: `group({ translate: [x, y], rotate, scale, origin: [x, y] }, () => { ... })`, or `push()`, `translate(x, y)`, `rotate(a)`, `scale(s)`, `pop()`.
+- Animation: `time` (seconds), `frame` (60 per second), `loop(seconds)`, `lerp(a, b, t)`, `clamp(x, lo, hi)`, `map(x, a, b, c, d)`, `ease(t)`, `smoothstep(e0, e1, x)`, `keyframes(t, [[t0, v0], [t1, v1], ...])` (values may be numbers, arrays or colours).
+- Inputs: `slider(name, min, max, value?, step?)` returns the value and shows a real slider.
+- Maths: `sin cos tan atan2 sqrt abs floor min max pow exp log hypot mod`, `PI`, `TAU`, `E`, `range(n)` / `range(a, b, step)`, `rand(seed)` (stable 0 to 1), `random()`.
+- 3D: `camera({ yaw, pitch, dist, scale })` with `.point(p)`, `.line(a, b)`, `.polygon(points)`, `.project(p)`, `.depth(p)`; or `project3d([x, y, z], { yaw, pitch, dist, scale })`.
+- Graph mode: `graph.ode("y")(t)` is the solution of the graph's ODE for `y` at any t (`graph.ode("y", 1)` its derivative), `graph.fn("f")(x)` a graph function, `graph.value("k")` a slider value, `graph.has(name)`.
+- Also: `view` (`xmin`, `xmax`, `ymin`, `ymax`), `theme`, `ink` (default colour), `print(...)` / `console.log(...)`, `clip(name).play()` for imported video clips (files only, not links).
+
+A complete script (dots orbiting, with a slider):
+
+```fluxion-script
+// Coloured dots orbiting, with a slider for how many.
+const n = slider("dots", 3, 24, 12, 1)
+loop(6)
+for (const k of range(n)) {
+  const q = time / 6 * TAU + k * TAU / n
+  circle(3 * cos(q), 3 * sin(q), 0.35, { fill: hsv(360 * k / n, 0.7, 0.95) })
+}
+```
+
+Give it a name and a helper function for anything you draw more than once:
+
+```fluxion-script
+// Three tomoe on a red iris.
+function tomoe(angle, size) {
+  group({ translate: [1.25 * cos(angle), 1.25 * sin(angle)], rotate: angle }, () => {
+    path({ fill: "#120a0a" })
+      .arc(0, 0, 2 * size, PI / 2, -PI / 2)
+      .arc(0, -size, size, -PI / 2, PI / 2)
+      .arc(0, size, size, -PI / 2, -3 * PI / 2)
+      .close()
+  })
+}
+circle(0, 0, 2, { fill: "#b3121b", color: "#2a0505", width: 3 })
+circle(0, 0, 0.42, { fill: "#0b0b0b" })
+for (const k of range(3)) tomoe(-time + k * TAU / 3, 0.22)
+```
+
+Put a script in a link as the `"script"` string of a JSON spec (then `#spec=` or `#z=` as usual); `expressions` is optional when there is a script. Scripts can read the expressions, e.g. a pendulum driven by an ODE:
+
+```json
+{
+  "expressions": [{ "expr": "theta'' = -sin(theta) - 0.15theta'", "ic": [2, 0] }],
+  "script": "const a = graph.ode(\"theta\")(time)\nline(0, 2, 3 * sin(a), 2 - 3 * cos(a), { width: 3 })\ncircle(3 * sin(a), 2 - 3 * cos(a), 0.3, { fill: \"#c74440\" })",
+  "viewport": { "xmin": -6, "xmax": 6 }
+}
+```
+
+The orbit example above as a compressed link:
+
+https://osmansiddiquer.github.io/Fluxion/#z=NYzBTsMwEER_ZbQnp1hN20ARkXpA_AKcMIc0cRKr7m5quxQU5d9R2nJZjebN25HszxBsjE44Uvn5pSnWwQ2JSspzvImXc7ANGkkREvYuOe40Li71qBC9a2xAKwG9XHCs-HdpuBaOCYzdnStDs25Io9DYPGqsNxrrzLAXGdQ2Mzx_UDfvAGkRKu6s4izDaBi4kRN2SO5okWOLBd5fP_CAwz3l4OvShdpbVWCBWqI6ZRpzjo6vebUsnjRGtM77En38VsV2hQUOsz_j5_m8PGWYMsOTYdLU2iqdg41UjtQF11DZVj7aSdNQsfXXPriuT3egaS8pyfF_N_0B
+
+A short script also fits a params link (`script=`, percent-encoded; `&` as `%26`):
+
+https://osmansiddiquer.github.io/Fluxion/#script=circle(0,%200,%202,%20%7B%20fill:%20%22tomato%22%20%7D)
+
+Script pitfalls: it is JavaScript, so write `x * y` (no implicit multiplication), `**` or `pow` for powers, and `Math`-style names (`sqrt`, `PI`). Angles are radians. Keep a frame under a few milliseconds: fewer than about 20,000 shapes, and one `polyline` instead of thousands of `point`s. A script that runs for more than a few seconds (an endless loop) is stopped. Check a script with `npm run fluxion -- script file.js` (see "Checking a graph").
+
 ## JSON spec
 
 For full control (initial conditions, slider ranges, panels, markers) use a JSON spec. JSON Schema: https://osmansiddiquer.github.io/Fluxion/fluxion-spec.schema.json
@@ -282,7 +350,7 @@ For full control (initial conditions, slider ranges, panels, markers) use a JSON
 }
 ```
 
-- Only `expressions` is required. An expression is a string, or an object with `expr` plus options: `color`, `hidden`, `t0`, `ic`, `min`, `max`, `step`, `anim`, `speed`, `autoplay`, `thetaMin`, `thetaMax`, `label`, `labelDir`, `pointSize`, `drag`, `lineWidth`, `lineStyle`, `fill`, `fillOpacity`, `colorExpr`, `fillColor`.
+- Only `expressions` is required (or `script`, see "Script mode"). An expression is a string, or an object with `expr` plus options: `color`, `hidden`, `t0`, `ic`, `min`, `max`, `step`, `anim`, `speed`, `autoplay`, `thetaMin`, `thetaMax`, `label`, `labelDir`, `pointSize`, `drag`, `lineWidth`, `lineStyle`, `fill`, `fillOpacity`, `colorExpr`, `fillColor`.
 - `color`: `"#rrggbb"`, `"#rgb"` or a palette name. Without one, colours are assigned from the palette in order.
 - Numbers may be given as constant strings: `"2pi"`, `"-pi/2"`, `"sqrt(2)"`.
 - `features` turns marker families on/off, and `grid` the grid lines and axes. `panels.sliceX` / `panels.sliceY` position the cross-section cursors; they may be a slider expression like `"k"`.
@@ -332,7 +400,7 @@ async function fluxionLink(spec) {
 
 ## Built-in examples (templates for drawings and animation)
 
-Fluxion ships scripted demos. Open one as-is with `#example=<id>`, or start from its JSON spec: fetch it, edit it (colours, sizes, speeds, add or remove expressions), then put it in a link as shown above. They are the best reference for the scripting features: `for` repeats, user functions, keyframes (`skeys`), rotation (`rotx`/`roty`), 3D projection (`projx`/`projy`) and animated `hsv` colours. A machine-readable list is at https://osmansiddiquer.github.io/Fluxion/examples/index.json.
+Fluxion ships example scripts (Script mode programs). Open one as-is with `#example=<id>`, or start from its JSON spec: fetch it, edit its `"script"` (colours, sizes, speeds, shapes), then put it in a link as shown above. They are the best reference for Script mode: helper functions, `group` transforms, `keyframes`, `loop`, `camera` 3D, `hsv` colours and `graph.ode`. A machine-readable list is at https://osmansiddiquer.github.io/Fluxion/examples/index.json.
 
 | id | what it is | open | JSON spec |
 | --- | --- | --- | --- |
@@ -340,9 +408,15 @@ Fluxion ships scripted demos. Open one as-is with `#example=<id>`, or start from
 | `cube` | Rotating cube | https://osmansiddiquer.github.io/Fluxion/#example=cube | https://osmansiddiquer.github.io/Fluxion/examples/cube.json |
 | `mangekyo` | Eye → Sharingan → Mangekyō | https://osmansiddiquer.github.io/Fluxion/#example=mangekyo | https://osmansiddiquer.github.io/Fluxion/examples/mangekyo.json |
 | `mandala` | Mandala bloom | https://osmansiddiquer.github.io/Fluxion/#example=mandala | https://osmansiddiquer.github.io/Fluxion/examples/mandala.json |
+| `pendulum` | Pendulum from an ODE (`graph.ode`) | https://osmansiddiquer.github.io/Fluxion/#example=pendulum | https://osmansiddiquer.github.io/Fluxion/examples/pendulum.json |
 | `silhouette` | Silhouette clip | https://osmansiddiquer.github.io/Fluxion/#example=silhouette | link only (carries a frame clip) |
 
 Tips for your own drawings, learned from these:
+
+- In a script: one `loop(seconds)` clock and values derived from `time` (`keyframes`, `lerp`) keep everything in sync; for a seamless loop make everything return to its start at the end.
+- Name your shapes: `function petal(length, width, angle) { group({ rotate: angle }, () => curve(...)) }`, then call it in a `for` loop.
+
+With expression rows instead of a script:
 
 - One clock slider (`T = 0` with `"anim": "loop"`, `"autoplay": true`) and derived values from it (`s = skeys(T, ...)`, `w = pi T/6`) keep everything in sync. For a seamless loop, make every quantity return to its start value at the end of the clock's range.
 - Define a shape once as a function (`Px(u, L, W) = ...`) and place copies with `(rotx(Px(t, ...), Py(t, ...), angle), roty(...)) for k = 0..11`.
@@ -360,9 +434,11 @@ npm run fluxion -- link --expr "y'' = -y" --ic 1,0 --xmin 0 --xmax 10
 npm run fluxion -- decode 'https://osmansiddiquer.github.io/Fluxion/#z=...'
 npm run fluxion -- examples                                     # built-in demos and their links
 npm run fluxion -- example cube > cube.json                     # a demo's JSON spec, to edit
+npm run fluxion -- script orbit.js --time 0,1,2.5                # run a script headlessly: errors (with lines) and what it drew
+npm run fluxion -- script pendulum.js --spec spec.json           # ... reading that spec's expressions via graph.ode / graph.value
 ```
 
-`check` reports how each expression was understood (e.g. "2nd-order ODE in y(t)", "slider k = 2", "shaded region"), plus errors (unparseable, unknown function, undefined variable) and warnings (options that don't apply, nothing visible in the viewport).
+`check` and `link` also run a spec's `"script"` (sandboxed, with a time limit) and report its errors with line numbers. `check` reports how each expression was understood (e.g. "2nd-order ODE in y(t)", "slider k = 2", "shaded region"), plus errors (unparseable, unknown function, undefined variable) and warnings (options that don't apply, nothing visible in the viewport).
 
 ## Viewport
 
@@ -373,6 +449,6 @@ npm run fluxion -- example cube > cube.json                     # a demo's JSON 
 ## Behaviour and limits
 
 - Opening a link replaces the graph in that browser tab. The user's previous graph is only kept elsewhere if they saved or shared it. The URL is cleaned up after loading.
-- Limits: at most 100 expressions, 1000 characters per expression, 10 initial conditions, |numbers| ≤ 1e9, a θ-range of at most 50 turns, and 200 KB of JSON.
+- Limits: a script of at most 100,000 characters; at most 100 expressions, 1000 characters per expression, 10 initial conditions, |numbers| ≤ 1e9, a θ-range of at most 50 turns, and 200 KB of JSON.
 - A bad link never shows a blank page: Fluxion keeps the current graph and shows the problem. Expressions that don't parse still load, shown with an error mark so the user can fix them.
 - In the app, the share menu has "Copy share link" and "Copy as JSON spec". Users can paste the JSON to an assistant, which edits it and returns a new link.
