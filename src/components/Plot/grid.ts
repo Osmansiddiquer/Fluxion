@@ -9,7 +9,23 @@ export interface GridColors {
   axisText: string;
 }
 
+// getComputedStyle forces a style recalc when the DOM is dirty — every frame of
+// an animation (the sidebar updates first). The tokens only change with the theme,
+// so cache per (data-theme, OS dark preference).
+let cached: { key: string; colors: GridColors } | null = null;
+
 export function readGridColors(): GridColors {
+  const root = document.documentElement;
+  const key = `${root.dataset.theme}|${
+    typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches
+  }`;
+  if (cached && cached.key === key) return cached.colors;
+  const colors = readGridColorsUncached();
+  cached = { key, colors };
+  return colors;
+}
+
+function readGridColorsUncached(): GridColors {
   const s = getComputedStyle(document.documentElement);
   const get = (name: string, fallback: string) =>
     s.getPropertyValue(name).trim() || fallback;
