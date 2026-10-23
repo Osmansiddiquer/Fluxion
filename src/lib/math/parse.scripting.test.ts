@@ -179,3 +179,24 @@ describe('existing kinds are unaffected', () => {
     expect(parseEntry(raw).kind).toBe(kind);
   });
 });
+
+describe('parenthesised coordinates are not mistaken for points', () => {
+  it('reads ((a)*cos(t), (a)*sin(t)) as a parametric curve', () => {
+    for (const s of [
+      '((0.5 + 0.1 sin(w))*cos(t), (0.5 + 0.1 sin(w))*sin(t))',
+      '((1 + t)*cos(t), (1 + t)*sin(t))',
+      '((2)*cos(t), (3)*sin(t))',
+    ]) {
+      expect(parseEntry(s).kind, s).toBe('parametric');
+    }
+  });
+
+  it('still reads true point groups as points and polylines', () => {
+    const one = parseEntry('((1)*2, (3)*4)');
+    expect(one.kind).toBe('points');
+    const poly = parseEntry('((0, 0), (1, 2), (3, 1))');
+    expect(poly.kind).toBe('points');
+    if (poly.kind === 'points') expect(poly.polyline).toBe(true);
+    expect(parseEntry('((1, 2))').kind).toBe('points');
+  });
+});
