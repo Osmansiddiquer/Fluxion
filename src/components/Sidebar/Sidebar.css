@@ -265,6 +265,43 @@ math-field.math-field::part(virtual-keyboard-toggle) {
   background: #16271d;
   color: #6cc08b;
 }
+/* Scripting kinds: parametric/frames share the curve green, repeats the point
+   orange; function definitions read like ƒ; derived values like variables. */
+.badge-parametric,
+.badge-frames {
+  background: #e8f5ee;
+  color: #2f8a52;
+}
+.badge-repeat {
+  background: #fdeede;
+  color: #b9651b;
+  font-variant-numeric: tabular-nums;
+}
+.badge-fndef {
+  font-style: italic;
+}
+.badge-derived {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  background: #f3eefc;
+  color: #6042a6;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-theme='dark'] .badge-parametric,
+:root[data-theme='dark'] .badge-frames {
+  background: #16271d;
+  color: #6cc08b;
+}
+:root[data-theme='dark'] .badge-repeat {
+  background: #2b2013;
+  color: #e0954f;
+}
+:root[data-theme='dark'] .badge-derived {
+  background: #271e3a;
+  color: #b39ddb;
+}
 
 .entry-expand,
 .entry-del {
@@ -377,6 +414,63 @@ math-field.math-field::part(virtual-keyboard-toggle) {
 }
 .color-vis:hover {
   background: var(--surface-hover);
+}
+
+/* Style options (line / fill / colour expression) ------------------------- */
+.color-pop:has(.style-opts) {
+  width: 224px;
+}
+.style-opts .range {
+  flex: 1;
+  min-width: 0;
+}
+.style-opts .range:disabled {
+  opacity: 0.4;
+}
+.style-val {
+  width: 30px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.style-toggle {
+  position: relative;
+  flex-shrink: 0;
+  width: 28px;
+  height: 16px;
+  border-radius: 8px;
+  background: var(--border-strong);
+  transition: background 0.15s var(--ease);
+}
+.style-toggle span {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.15s var(--ease);
+}
+.style-toggle.on {
+  background: var(--accent);
+}
+.style-toggle.on span {
+  transform: translateX(12px);
+}
+.style-expr {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.style-expr::placeholder {
+  color: var(--text-faint);
+}
+.style-expr-bad,
+.style-expr-bad:focus {
+  border-color: var(--danger);
 }
 
 /* Point options (inside the colour popover) ------------------------------ */

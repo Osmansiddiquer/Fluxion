@@ -8,7 +8,7 @@ import {
   type ReactNode,
 } from 'react';
 import { computeAll, type CurveResult } from '../lib/compute';
-import type { Entry } from '../store/types';
+import { computeSignature } from './signature';
 import { computeFeatures } from '../lib/analysis/features';
 import { computeIntersections, curveIntersections } from '../lib/analysis/intersections';
 import { detectSingularities } from '../lib/analysis/singularities';
@@ -24,6 +24,9 @@ export interface Analysis {
   intersections: Feature[];
   /** Whether each panel's slice expression currently resolves (true if no expr). */
   sliceStatus: { tValid: boolean; yValid: boolean };
+  /** Evaluation scope (variables, derived values, helpers, user functions) — for
+   * colour expressions and other render-time evaluation. */
+  scope: Record<string, number>;
 }
 
 const EMPTY: Analysis = {
@@ -31,25 +34,9 @@ const EMPTY: Analysis = {
   features: new Map(),
   intersections: [],
   sliceStatus: { tValid: true, yValid: true },
+  scope: {},
 };
 const AnalysisContext = createContext<Analysis>(EMPTY);
-
-/**
- * A string capturing only the fields of `entries` that actually affect the
- * computed curves/features. Styling-and-UX-only edits (colour, expanded, point
- * size, label, animation, variable-slider bounds) leave this unchanged, so the
- * expensive recompute below is skipped entirely. Order is significant (ODE t0
- * ordering + intersection pairing), so we keep the entries in array order.
- */
-function computeSignature(entries: Entry[]): string {
-  let s = '';
-  for (const e of entries) {
-    s += `${e.id}${e.raw}${e.visible ? 1 : 0}${e.t0 ?? ''}${
-      e.ic?.join(',') ?? ''
-    }${e.varValue ?? ''}${e.thetaMin ?? ''}${e.thetaMax ?? ''}`;
-  }
-  return s;
-}
 
 /**
  * Computes every entry's curve and its inspection features once per
@@ -97,7 +84,7 @@ export function ResultsProvider({ children }: { children: ReactNode }) {
       const res = results.get(entry.id);
       if (!res || !entry.visible) continue;
       if (res.curve.segments.length === 0) continue;
-      if (res.parsed.kind === 'function' || res.parsed.kind === 'ode') {
+      if (res.parsed.kind === 'function' || res.parsed.kind === 'ode' || res.parsed.kind === 'fndef') {
         const feats = computeFeatures(res.curve, viewport);
         // Removable holes / undefined points (sin(t)/t at 0) need the symbolic
         // detector; only explicit functions have a node to analyse.
@@ -128,7 +115,7 @@ export function ResultsProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    return { results, features, intersections };
+    return { results, features, intersections, scope };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [computeSig, viewport, sampleCount, wantDiscontinuities]);
 

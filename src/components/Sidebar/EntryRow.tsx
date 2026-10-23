@@ -8,6 +8,7 @@ import IVPControls from './IVPControls';
 import PolarControls from './PolarControls';
 import EquationField from './EquationField';
 import ColorPopover from './ColorPopover';
+import { fmtSig } from '../../lib/format';
 
 function badgeFor(kind: string | undefined, order?: number): string | null {
   switch (kind) {
@@ -48,16 +49,37 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
     kind === 'polar' ||
     kind === 'inequality' ||
     kind === 'points' ||
-    kind === 'pointvar';
+    kind === 'pointvar' ||
+    kind === 'parametric' ||
+    kind === 'repeat' ||
+    kind === 'frames' ||
+    (kind === 'fndef' && (res?.curve.segments.length ?? 0) > 0);
   let badge = badgeFor(kind, parsed && parsed.kind === 'ode' ? parsed.order : undefined);
+  let badgeClass = `badge-${kind}`;
+  if (kind === 'parametric') badge = 'param';
+  else if (kind === 'fndef') badge = 'def';
+  else if (kind === 'frames') badge = 'frames';
+  else if (kind === 'repeat') badge = res?.copies != null ? `×${res.copies}` : '×';
+  else if (kind === 'function' && res?.value !== undefined) {
+    // A derived value (b = 2a): show its live value.
+    badge = `= ${fmtSig(res.value)}`;
+    badgeClass = 'badge-derived';
+  }
   if (parsed && (parsed.kind === 'points' || parsed.kind === 'pointvar')) {
     // Use the computed result: a connected line has curve segments.
     const isLine = (res?.curve.segments.length ?? 0) > 0;
     const n = res?.points?.length ?? (parsed.kind === 'points' ? parsed.points.length : 1);
     badge = isLine ? 'line' : n > 1 ? 'points' : 'point';
   }
-  const polarIneq = parsed?.kind === 'inequality' && parsed.polar;
-  const hasControls = kind === 'variable' || kind === 'ode' || kind === 'polar' || polarIneq;
+  // Sweep-range controls: θ for polar, t for parametric (also inside a repeat).
+  const sweep = parsed?.kind === 'repeat' ? parsed.body : parsed;
+  const sweepLabel =
+    sweep?.kind === 'polar' || (sweep?.kind === 'inequality' && sweep.polar)
+      ? 'θ'
+      : sweep?.kind === 'parametric'
+        ? 't'
+        : null;
+  const hasControls = kind === 'variable' || kind === 'ode' || !!sweepLabel;
 
   return (
     <div
@@ -119,7 +141,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
 
         <EquationField entry={entry} />
 
-        {badge && <span className={`entry-badge badge-${kind}`}>{badge}</span>}
+        {badge && <span className={`entry-badge ${badgeClass}`}>{badge}</span>}
         {hasControls && (
           <button
             className="icon-btn entry-expand"
@@ -157,7 +179,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
       {entry.expanded && parsed?.kind === 'ode' && (
         <IVPControls entry={entry} depVar={parsed.depVar} order={parsed.order} />
       )}
-      {entry.expanded && (parsed?.kind === 'polar' || polarIneq) && <PolarControls entry={entry} />}
+      {entry.expanded && sweepLabel && <PolarControls entry={entry} label={sweepLabel} />}
     </div>
   );
 }
