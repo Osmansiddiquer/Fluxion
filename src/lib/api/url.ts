@@ -144,7 +144,7 @@ export function encodeValue(s: string): string {
 // ── simple params form ───────────────────────────────────────────────────────
 
 /** Graph-level params. */
-export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers', 'grid', 'script', 'aspect', 'fps', 'time', 'frame'] as const;
+export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers', 'grid', 'equilibria', 'script', 'aspect', 'fps', 'time', 'frame'] as const;
 /** Per-expression params; each applies to the most recent `expr`. */
 export const EXPR_PARAMS = [
   'color',
@@ -175,6 +175,10 @@ export const EXPR_PARAMS = [
   'glow',
   'blur',
   'layer',
+  'field',
+  'phase',
+  'axes',
+  'family',
 ] as const;
 const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> = {
   color: 'color',
@@ -205,6 +209,10 @@ const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> =
   glow: 'glow',
   blur: 'blur',
   layer: 'layer',
+  field: 'field',
+  phase: 'phase',
+  axes: 'phaseAxes',
+  family: 'family',
 };
 /** The marker toggles `markers=off` turns off (everything but the grid). */
 const MARKER_KEYS = ['extrema', 'xIntercepts', 'yIntercept', 'endpoints', 'discontinuities', 'intersections'] as const;
@@ -301,10 +309,10 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
         spec.features = { ...spec.features };
         for (const k of MARKER_KEYS) spec.features[k] = false;
       } else if (typeof b !== 'boolean') warnings.push(`markers=${value}: expected on or off`);
-    } else if (key === 'grid') {
+    } else if (key === 'grid' || key === 'equilibria') {
       const b = bool(value);
-      if (typeof b === 'boolean') spec.features = { ...spec.features, grid: b };
-      else warnings.push(`grid=${value}: expected on or off`);
+      if (typeof b === 'boolean') spec.features = { ...spec.features, [key]: b };
+      else warnings.push(`${key}=${value}: expected on or off`);
     } else if ((EXPR_PARAMS as readonly string[]).includes(key)) {
       const last = expressions[expressions.length - 1];
       if (!last) {
@@ -313,8 +321,10 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
       }
       const k = PARAM_TO_KEY[key as (typeof EXPR_PARAMS)[number]];
       const rec = last as unknown as Record<string, unknown>;
-      if (k === 'hidden' || k === 'fill' || k === 'autoplay' || k === 'dots') rec[k] = bool(value);
-      else if (k === 'ic') rec[k] = value.split(',').map(numish);
+      if (k === 'hidden' || k === 'fill' || k === 'autoplay' || k === 'dots' || k === 'field' || k === 'phase' || k === 'family') {
+        rec[k] = bool(value);
+      } else if (k === 'ic') rec[k] = value.split(',').map(numish);
+      else if (k === 'phaseAxes') rec[k] = value.split(',').map((x) => x.trim());
       else if (['t0', 'min', 'max', 'step', 'speed', 'thetaMin', 'thetaMax', 'pointSize', 'lineWidth', 'fillOpacity', 'samples', 'glow', 'blur'].includes(k)) {
         rec[k] = numish(value);
       } else if (k === 'color' || k === 'colorExpr' || k === 'fillColor') {
@@ -338,12 +348,16 @@ export function specToParams(spec: FluxionSpec): string | null {
   const push = (k: string, v: string | number | boolean) => parts.push(`${k}=${encodeValue(String(v))}`);
   for (const item of spec.expressions) {
     const e: ExpressionSpec = typeof item === 'string' ? { expr: item } : item;
+    // Extra solutions (lists of states) only travel in the JSON forms.
+    if (e.extraICs?.length) return null;
     push('expr', e.expr);
     for (const p of EXPR_PARAMS) {
       const v = (e as unknown as Record<string, unknown>)[PARAM_TO_KEY[p]];
       if (v === undefined) continue;
-      if (p === 'ic') push(p, (Array.isArray(v) ? v : [v]).join(','));
-      else if (p === 'hidden' || p === 'fill' || p === 'autoplay' || p === 'dots') push(p, v ? 1 : 0);
+      if (p === 'ic' || p === 'axes') push(p, (Array.isArray(v) ? v : [v]).join(','));
+      else if (p === 'hidden' || p === 'fill' || p === 'autoplay' || p === 'dots' || p === 'field' || p === 'phase' || p === 'family') {
+        push(p, v ? 1 : 0);
+      }
       else if (p === 'color' || p === 'colorexpr' || p === 'fillcolor') {
         const c = String(v);
         push(p, /^#/.test(c) && HEX.test(c.slice(1)) ? c.slice(1) : c);
@@ -363,7 +377,7 @@ export function specToParams(spec: FluxionSpec): string | null {
     push('panels', r && b ? 'both' : r ? 'right' : b ? 'bottom' : 'none');
   }
   if (spec.features) {
-    const { grid, ...markers } = spec.features;
+    const { grid, equilibria, ...markers } = spec.features;
     const set = Object.keys(markers);
     if (set.length) {
       const allOff = set.length === MARKER_KEYS.length && Object.values(markers).every((v) => v === false);
@@ -371,6 +385,7 @@ export function specToParams(spec: FluxionSpec): string | null {
       push('markers', 'off');
     }
     if (grid !== undefined) push('grid', grid ? 'on' : 'off');
+    if (equilibria !== undefined) push('equilibria', equilibria ? 'on' : 'off');
   }
   return parts.join('&');
 }

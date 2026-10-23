@@ -81,6 +81,12 @@ function summarize(p: Parsed): string {
 function anyVisible(r: CurveResult, vp: Viewport, filled = false): boolean {
   const inside = (t: number, y: number) => t >= vp.tMin && t <= vp.tMax && y >= vp.yMin && y <= vp.yMax;
   if (r.points?.some(([t, y]) => inside(t, y))) return true;
+  // A phase-plane ODE draws its state-space curve (only on the group's first row).
+  if (r.ode?.phase) {
+    if (!r.ode.isLeader) return true;
+    for (const seg of r.ode.phase.curve?.segments ?? []) for (const [x, y] of seg) if (inside(x, y)) return true;
+    return false;
+  }
   for (const seg of r.curve.segments) for (const [t, y] of seg) if (inside(t, y)) return true;
   // A filled shape bigger than the view (a sky, a backdrop) covers its centre.
   if (filled) {
@@ -217,6 +223,43 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
         path: `${path}.ic`,
         message: `"${entry.raw}" is ${ord(parsed.order)} order, so ic takes ${parsed.order} value${parsed.order > 1 ? 's' : ''} [${['y(t0)', "y'(t0)", "y''(t0)"].slice(0, parsed.order).join(', ')}…]; extra values ignored`,
       });
+    }
+    // ODE view options (lib/ode): apply only where the equation allows them.
+    const odeRes = res?.ode;
+    if (parsed.kind !== 'ode') {
+      for (const k of ['field', 'phase', 'phaseAxes', 'extraICs'] as const) {
+        if (entry[k] !== undefined) warnings.push({ path: `${path}.${k}`, message: `${k} only applies to ODEs; ignored for this ${parsed.kind} expression` });
+      }
+    } else if (odeRes) {
+      if (entry.phase && odeRes.dim < 2) {
+        warnings.push({
+          path: `${path}.phase`,
+          message: `"${entry.raw}" has a 1-D state, so there is no phase plane (use a 2nd-order equation or a system like x' = …, y' = …); drawn against t`,
+        });
+      }
+      if (entry.phaseAxes) {
+        const names = odeRes.stateLabels.map((s) => s.replace(/′/g, "'"));
+        const bad = entry.phaseAxes.filter((n) => !names.includes(n));
+        if (bad.length) {
+          warnings.push({ path: `${path}.phaseAxes`, message: `no state variable ${bad.join(', ')} (this system has ${names.join(', ')}); using ${names.slice(0, 2).join(', ')}` });
+        }
+      }
+      if (entry.field === true && !odeRes.fieldKind) {
+        warnings.push({
+          path: `${path}.field`,
+          message: 'a field needs a first-order equation (slope field) or a 2-D system in the phase plane; ignored',
+        });
+      }
+      const bad = (entry.extraICs ?? []).findIndex((v) => v.length !== odeRes.dim + 1);
+      if (bad >= 0) {
+        warnings.push({
+          path: `${path}.extraICs[${bad}]`,
+          message: `each extra solution is [t0, …state] with ${odeRes.dim + 1} numbers for this ${odeRes.dim}-D system; ignored`,
+        });
+      }
+    }
+    if (entry.family !== undefined && parsed.kind !== 'variable') {
+      warnings.push({ path: `${path}.family`, message: `family only applies to sliders (k = 2); ignored for this ${parsed.kind} expression` });
     }
     if (parsed.kind === 'variable') {
       const v = entry.varValue ?? parsed.value;

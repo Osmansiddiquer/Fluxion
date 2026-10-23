@@ -14,6 +14,7 @@ import {
   LIMITS,
   LINE_STYLES,
   POINT_DIRS,
+  STATE_NAME,
   isSafeExpression,
   resolveColor,
   specToGraph,
@@ -115,6 +116,26 @@ export function sanitizeGraph(g: GraphData): GraphData {
       if (finite(e.pointSize)) out.pointSize = Math.min(14, Math.max(2, e.pointSize));
       const drag = oneOf(e.pointDrag, DRAG_MODES);
       if (drag) out.pointDrag = drag;
+      // ODE view (lib/ode): booleans, state names, bounded extra-solution states.
+      if (typeof e.field === 'boolean') out.field = e.field;
+      if (e.phase === true) out.phase = true;
+      if (
+        Array.isArray(e.phaseAxes) &&
+        e.phaseAxes.length === 2 &&
+        e.phaseAxes.every((n) => typeof n === 'string' && n.length <= LIMITS.maxStateName && STATE_NAME.test(n))
+      ) {
+        out.phaseAxes = [e.phaseAxes[0], e.phaseAxes[1]];
+      }
+      if (Array.isArray(e.extraICs)) {
+        const ok = e.extraICs
+          .filter(
+            (v) => Array.isArray(v) && v.length >= 2 && v.length <= LIMITS.maxIcLength + 1 && v.every((x) => inAbs(x)),
+          )
+          .slice(0, LIMITS.maxExtraICs)
+          .map((v) => v.slice());
+        if (ok.length) out.extraICs = ok;
+      }
+      if (e.family === true) out.family = true;
       return out;
     });
   // Ids must be unique (they key caches and React rows).
