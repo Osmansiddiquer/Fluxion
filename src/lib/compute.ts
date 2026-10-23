@@ -45,12 +45,23 @@ export interface CurveResult {
   copies?: number;
   /** How many shapes (copies) were skipped because they lie entirely off-screen. */
   culled?: number;
+  /** Per copy of a repeat: its slice of `curve.segments` / `points` and its
+   * loop values — so colour expressions using `k` resolve per copy. */
+  copyRanges?: CopyRange[];
   /** Smooth point paths: the exact path as ops (lib/geom/path, Script mode's
    * format) in data coordinates; `curve` holds its flattened polyline. */
   path?: number[];
 }
 
 type OdeParsed = Extract<Parsed, { kind: 'ode' }>;
+
+export interface CopyRange {
+  /** [start, end) into curve.segments. */
+  seg: [number, number];
+  /** [start, end) into points. */
+  pts: [number, number];
+  vars: Record<string, number>;
+}
 
 // Per-entry result cache: a curve is re-sampled only when one of its real inputs
 // (expression, viewport, samples, the variable values it depends on, …) changes.
@@ -117,6 +128,8 @@ export function nodesOf(parsed: Parsed): MathNode[] {
       return [parsed.xNode, parsed.yNode];
     case 'frames':
       return [parsed.indexNode];
+    case 'layer':
+      return parsed.args;
     case 'repeat':
       return [
         ...nodesOf(parsed.body),
@@ -554,17 +567,21 @@ function sampleRepeat(
   const tests: ((t: number, y: number) => boolean)[] = [];
   const boundaries: { segments: Point[][]; strict: boolean }[] = [];
   let culled = 0;
+  const copyRanges: CopyRange[] = [];
   for (const combo of combos) {
     const r = sampleDrawable(body, { ...scope, ...combo }, ctx);
     if (r.culled) culled += r.culled;
+    const s0 = segments.length;
+    const p0 = points.length;
     for (const s of r.curve.segments) segments.push(s);
     if (r.points) for (const p of r.points) points.push(p);
+    copyRanges.push({ seg: [s0, segments.length], pts: [p0, points.length], vars: combo });
     if (r.inequality) {
       tests.push(r.inequality.test);
       boundaries.push(...r.inequality.boundaries);
     }
   }
-  const out: CurveResult = { parsed, curve: { segments }, copies: combos.length };
+  const out: CurveResult = { parsed, curve: { segments }, copies: combos.length, copyRanges };
   if (culled) out.culled = culled;
   if (body.kind === 'points') out.points = points;
   // A repeated inequality is the UNION of its copies.
@@ -790,7 +807,8 @@ export function computeAll(
         return { parsed, curve };
       }
 
-      if (!entry.visible) {
+      if (!entry.visible || parsed.kind === 'layer') {
+        // Layers draw nothing themselves; PlotCanvas evaluates their transform.
         return { parsed, curve: EMPTY_CURVE };
       }
 

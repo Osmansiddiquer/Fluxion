@@ -125,6 +125,15 @@ export type Parsed =
       raw: string;
     }
   | {
+      /** `name = layer(dx, dy[, scale[, angle[, cx, cy]]])` — a shared transform
+       * (and z-position) for entries whose `layer` option names it. */
+      kind: 'layer';
+      name: string;
+      args: MathNode[];
+      deps: string[];
+      raw: string;
+    }
+  | {
       /** `frames(i)` — frame i of the entry's imported frame sequence (filled contours). */
       kind: 'frames';
       indexNode: MathNode;
@@ -388,6 +397,28 @@ export function loopValues(from: number, to: number, step = 1, cap = 4096): numb
   return out;
 }
 
+/** Layer arguments: dx, dy, then optional scale, angle (radians) and pivot cx, cy. */
+function parseLayer(name: string, argText: string, raw: string): Parsed {
+  if (RESERVED.has(name) || name === 'x' || name === 'y' || name === 'r') {
+    return { kind: 'error', message: `A layer can't be called ${name}` };
+  }
+  const parts = splitTopChar(argText, ',').map((a) => a.trim());
+  if (parts.length < 2 || parts.length > 6 || parts.some((p) => !p)) {
+    return { kind: 'error', message: 'Write layer(dx, dy) or layer(dx, dy, scale, angle, cx, cy)' };
+  }
+  try {
+    const args = parts.map((p) => mjParse(p));
+    if (args.some((a) => hasSymbol(a, 't') || hasSymbol(a, 'x') || hasSymbol(a, 'y'))) {
+      return { kind: 'error', message: 'A layer moves with sliders, not with t, x or y' };
+    }
+    const deps = new Set<string>();
+    for (const a of args) for (const s of freeSymbols(a)) deps.add(s);
+    return { kind: 'layer', name, args, deps: [...deps], raw };
+  } catch (err) {
+    return { kind: 'error', message: friendlyError(err) };
+  }
+}
+
 function parseRepeat(trimmed: string, at: number, raw: string): Parsed {
   const bodyRaw = trimmed.slice(0, at).trim();
   const loopText = trimmed.slice(at + 3).trim();
@@ -554,6 +585,10 @@ function parseEntryUncached(raw: string): Parsed {
     const inner = parseEntry(local.text);
     return 'raw' in inner ? { ...inner, raw } : inner;
   }
+
+  // Layer: `fg = layer(dx, dy, scale, angle, cx, cy)` (a draw-time transform).
+  const lm = /^([A-Za-z]\w*)\s*=\s*layer\s*\((.*)\)$/.exec(normalizeInput(trimmed));
+  if (lm) return parseLayer(lm[1], lm[2], raw);
 
   // Repeat: `body for k = 0..5` — split before anything else so the body can be
   // any repeatable kind (inequalities included).

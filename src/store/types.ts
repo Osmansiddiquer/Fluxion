@@ -104,7 +104,16 @@ export interface FeatureToggles {
   intersections: boolean;
   /** Grid lines + axes (default shown). Off gives a clean canvas for drawings. */
   grid?: boolean;
+  /** Display options for animations (not toggles; ride along in GraphData.features). */
+  /** Fixed aspect ratio (width / height, e.g. 2.39): letterbox the plot to that frame. */
+  aspect?: number;
+  /** Fixed playback rate: sliders advance in whole frames of 1/fps s, and slider
+   * values become a pure function of the frame number (deterministic playback). */
+  fps?: number;
 }
+
+/** The boolean marker / grid toggles of FeatureToggles (not the display numbers). */
+export type ToggleKey = Exclude<keyof FeatureToggles, 'aspect' | 'fps'>;
 
 export type ThemeMode = 'light' | 'dark' | 'system';
 

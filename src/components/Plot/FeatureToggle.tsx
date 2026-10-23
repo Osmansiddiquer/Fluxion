@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import type { FeatureToggles } from '../../store/types';
+import type { ToggleKey } from '../../store/types';
 
-const ITEMS: { key: keyof FeatureToggles; label: string }[] = [
+const ITEMS: { key: ToggleKey; label: string }[] = [
   { key: 'extrema', label: 'Maxima & minima' },
   { key: 'xIntercepts', label: 'x-intercepts' },
   { key: 'yIntercept', label: 'y-intercept' },

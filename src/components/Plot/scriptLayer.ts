@@ -1,4 +1,5 @@
-import { OP, type DisplayItem, type ItemStyle, type Mat, type Paint, type ScriptFrame } from '../../lib/script/protocol';
+import type { DisplayItem, ItemStyle, Mat, ScriptFrame } from '../../lib/script/protocol';
+import { mulMat, paintToCanvas, screenMatrix, tracePathOps } from '../../lib/render/canvas';
 import type { Transform } from '../../lib/geom/transform';
 import type { FrameSequence } from '../../lib/frames/codec';
 
@@ -16,87 +17,11 @@ const FONTS = {
   mono: "'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace",
 } as const;
 
-/** Data → screen (CSS px) as an affine matrix. */
-export function screenMatrix(tf: Transform): Mat {
-  const { vp, width, height } = tf;
-  const kx = width / (vp.tMax - vp.tMin || 1);
-  const ky = height / (vp.yMax - vp.yMin || 1);
-  return [kx, 0, 0, -ky, -vp.tMin * kx, height + vp.yMin * ky];
-}
-
-function mul(m: Mat, n: Mat): Mat {
-  return [
-    m[0] * n[0] + m[2] * n[1],
-    m[1] * n[0] + m[3] * n[1],
-    m[0] * n[2] + m[2] * n[3],
-    m[1] * n[2] + m[3] * n[3],
-    m[0] * n[4] + m[2] * n[5] + m[4],
-    m[1] * n[4] + m[3] * n[5] + m[5],
-  ];
-}
-
-function tracePath(ctx: CanvasRenderingContext2D, ops: number[]): void {
-  ctx.beginPath();
-  for (let i = 0; i < ops.length; ) {
-    const op = ops[i];
-    switch (op) {
-      case OP.move:
-        ctx.moveTo(ops[i + 1], ops[i + 2]);
-        i += 3;
-        break;
-      case OP.line:
-        ctx.lineTo(ops[i + 1], ops[i + 2]);
-        i += 3;
-        break;
-      case OP.quad:
-        ctx.quadraticCurveTo(ops[i + 1], ops[i + 2], ops[i + 3], ops[i + 4]);
-        i += 5;
-        break;
-      case OP.cubic:
-        ctx.bezierCurveTo(ops[i + 1], ops[i + 2], ops[i + 3], ops[i + 4], ops[i + 5], ops[i + 6]);
-        i += 7;
-        break;
-      case OP.close:
-        ctx.closePath();
-        i += 1;
-        break;
-      case OP.ellipse:
-        ctx.ellipse(ops[i + 1], ops[i + 2], ops[i + 3], ops[i + 4], ops[i + 5], ops[i + 6], ops[i + 7], ops[i + 8] === 1);
-        i += 9;
-        break;
-      default:
-        return;
-    }
-  }
-}
-
-function paintStyle(ctx: CanvasRenderingContext2D, p: Paint, S: Mat): string | CanvasGradient {
-  if (typeof p === 'string') return p;
-  const pt = (x: number, y: number) => [S[0] * x + S[2] * y + S[4], S[1] * x + S[3] * y + S[5]] as const;
-  try {
-    let g: CanvasGradient;
-    if (p.type === 'linear') {
-      const [x0, y0] = pt(p.x0, p.y0);
-      const [x1, y1] = pt(p.x1, p.y1);
-      g = ctx.createLinearGradient(x0, y0, x1, y1);
-    } else {
-      const k = Math.abs(S[0]);
-      const [x0, y0] = pt(p.x0, p.y0);
-      const [x1, y1] = pt(p.x1, p.y1);
-      g = ctx.createRadialGradient(x0, y0, p.r0 * k, x1, y1, p.r1 * k);
-    }
-    for (const s of p.stops) {
-      try {
-        g.addColorStop(s.offset, s.color);
-      } catch {
-        /* unparseable colour: skip the stop */
-      }
-    }
-    return g;
-  } catch {
-    return 'transparent';
-  }
-}
+// Matrices, paths and paints are shared with the Graph-mode renderer.
+export { screenMatrix };
+const mul = mulMat;
+const tracePath = tracePathOps;
+const paintStyle = paintToCanvas;
 
 function fillStroke(ctx: CanvasRenderingContext2D, st: ItemStyle, S: Mat, dpr: number, evenodd = false): void {
   // Paint in screen space (px line widths, gradients mapped by S).

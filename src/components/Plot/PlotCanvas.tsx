@@ -6,13 +6,16 @@ import { makeTransform, correctAspect, type Transform } from '../../lib/geom/tra
 import { evalCurveAt } from '../../lib/analysis/eval';
 import { formatPointsRaw } from '../../lib/math/points';
 import { fmtSig } from '../../lib/format';
-import type { Viewport, FeatureToggles } from '../../store/types';
+import type { Viewport, ToggleKey } from '../../store/types';
 import type { Feature, FeatureKind } from '../../lib/analysis/types';
 import { FEATURE_LABEL } from '../../lib/analysis/types';
 import { drawGrid, readGridColors } from './grid';
 import { drawMarkers, colorForMarker, type PlacedMarker } from './markers';
 import FeatureToggle from './FeatureToggle';
-import { resolveStyle, showsVertexDots, type ResolvedStyle } from '../../lib/style';
+import { resolveCopyStyles, resolveStyle, showsVertexDots, type ResolvedStyle } from '../../lib/style';
+import { applyEffects, applyMat, invertMat, letterboxRect, mulMat, paintToCanvas, resetEffects, screenMatrix } from '../../lib/render/canvas';
+import { drawOrder, evalLayers } from '../../lib/render/layers';
+import { notifyDrawn } from '../../state/frameApi';
 import { rasterizeRegion, type Rect } from '../../lib/raster';
 import type { CurveResult } from '../../lib/compute';
 import { segmentOutside } from '../../lib/geom/cull';
@@ -27,7 +30,7 @@ interface Size {
   h: number;
 }
 
-const KIND_TOGGLE: Record<FeatureKind, keyof FeatureToggles> = {
+const KIND_TOGGLE: Record<FeatureKind, ToggleKey> = {
   max: 'extrema',
   min: 'extrema',
   root: 'xIntercepts',
@@ -113,7 +116,7 @@ interface Pin {
 export default function PlotCanvas() {
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [size, setSize] = useState<Size>({ w: 0, h: 0 });
+  const [box, setBox] = useState<Size>({ w: 0, h: 0 });
   const [tip, setTip] = useState<Tip | null>(null);
   const [pin, setPin] = useState<Pin | null>(null);
 
@@ -127,6 +130,12 @@ export default function PlotCanvas() {
   const theme = useStore((s) => s.theme);
   const sigFigs = useStore((s) => s.sigFigs);
   const analysis = useAnalysis();
+  // Fixed-aspect (letterbox) mode: the plot is the largest `aspect` frame centred
+  // in the panel, with black bars around it, so a composition looks the same on
+  // every window. `size` is the frame; without an aspect it's the whole panel.
+  const aspect = toggles.aspect;
+  const frame = useMemo(() => letterboxRect(box.w, box.h, aspect), [box.w, box.h, aspect]);
+  const size = useMemo<Size>(() => ({ w: frame.w, h: frame.h }), [frame.w, frame.h]);
   // Script mode's drawing (validated display list from the sandbox).
   const scriptFrame = useScriptRuntime((s) => s.frame);
   const scriptOn = useStore((s) => !!s.script?.code.trim() && s.script.visible !== false);
@@ -137,7 +146,7 @@ export default function PlotCanvas() {
     if (!el) return;
     const ro = new ResizeObserver((obs) => {
       const r = obs[0].contentRect;
-      setSize({ w: Math.max(1, r.width), h: Math.max(1, r.height) });
+      setBox({ w: Math.max(1, r.width), h: Math.max(1, r.height) });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -155,12 +164,16 @@ export default function PlotCanvas() {
   }, [viewport, size, setViewport]);
 
   // Per-entry drawing style for this frame (colour expressions read the scope).
-  const styles = useMemo(() => {
+  const { styles, copyStyles } = useMemo(() => {
     const m = new Map<string, ResolvedStyle>();
+    const c = new Map<string, ResolvedStyle[]>();
     for (const entry of entries) {
-      m.set(entry.id, resolveStyle(entry, analysis.results.get(entry.id), analysis.scope));
+      const res = analysis.results.get(entry.id);
+      m.set(entry.id, resolveStyle(entry, res, analysis.scope));
+      const per = resolveCopyStyles(entry, res, analysis.scope);
+      if (per) c.set(entry.id, per);
     }
-    return m;
+    return { styles: m, copyStyles: c };
   }, [entries, analysis]);
   // Rasterised inequality regions, reused while the result + viewport are unchanged.
   const regionCache = useRef(new WeakMap<CurveResult, { key: string; rects: Rect[] }>());
@@ -169,7 +182,8 @@ export default function PlotCanvas() {
   const traceable = useMemo(
     () =>
       entries
-        .filter((e) => e.visible)
+        // Layered entries are moved at draw time: not traceable at their data position.
+        .filter((e) => e.visible && !e.layer)
         .map((e) => ({ entry: e, res: analysis.results.get(e.id) }))
         .filter(
           (x) =>
@@ -184,7 +198,8 @@ export default function PlotCanvas() {
   const traceableImplicit = useMemo(
     () =>
       entries
-        .filter((e) => e.visible)
+        // Layered entries are moved at draw time: not traceable at their data position.
+        .filter((e) => e.visible && !e.layer)
         .map((e) => ({ entry: e, res: analysis.results.get(e.id) }))
         .filter(
           (x) =>
@@ -244,7 +259,7 @@ export default function PlotCanvas() {
       // Repeated points (`(k, k²) for k = …`) are markers too, but never draggable.
       // Polylines show vertex dots by default only when plain (not repeated,
       // filled or smooth); the entry's `dots` option overrides (lib/style.ts).
-      if (!showsVertexDots(entry, res, styles.get(entry.id)?.fillMode ?? null)) continue;
+      if (!showsVertexDots(entry, res, styles.get(entry.id)?.fillMode ?? null) || entry.layer) continue;
       const repeated = res.parsed.kind === 'repeat';
       const smooth = res.parsed.kind === 'points' && !!res.parsed.smooth;
       const setting = repeated || smooth ? 'off' : (entry.pointDrag ?? 'auto');
@@ -280,12 +295,14 @@ export default function PlotCanvas() {
         const xDrag = !!xVar || xRaw;
         const yDrag = !!yVar || yRaw;
         const mode: DragMode = xDrag && yDrag ? 'free' : xDrag ? 'x' : yDrag ? 'y' : 'none';
-        const color = styles.get(entry.id)?.solid ?? entry.color;
+        const per = copyStyles.get(entry.id);
+        const copy = per ? res.copyRanges!.findIndex((c) => index >= c.pts[0] && index < c.pts[1]) : -1;
+        const color = (copy >= 0 ? per![copy].solid : styles.get(entry.id)?.solid) ?? entry.color;
         list.push({ entryId: entry.id, index, coord, color, size, mode, xVar, yVar, xRaw, yRaw });
       });
     }
     return list;
-  }, [entries, analysis, varEntry, styles]);
+  }, [entries, analysis, varEntry, styles, copyStyles]);
 
   // Draw.
   useEffect(() => {
@@ -310,83 +327,117 @@ export default function PlotCanvas() {
 
     // Entries draw in list order (later rows on top): each one's fill, then its
     // stroke. Inequality regions are rasterised adaptively (cached per result +
-    // viewport); closed shapes fill as paths.
-    const tracePath = (seg: [number, number][]) => {
-      for (let i = 0; i < seg.length; i++) {
-        const px = tf.tx(seg[i][0]);
-        const py = tf.ty(seg[i][1]);
-        if (i === 0) ctx.moveTo(px, py);
-        else ctx.lineTo(px, py);
-      }
-    };
+    // viewport); closed shapes fill as paths. Entries on a layer draw at the
+    // layer row's position, moved by its transform (lib/render/layers).
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
     const rasterKey = `${viewport.tMin},${viewport.tMax},${viewport.yMin},${viewport.yMax},${size.w},${size.h}`;
     const unitsPerPx = (viewport.tMax - viewport.tMin) / size.w;
-    for (const entry of entries) {
+    const S = screenMatrix(tf);
+    const layers = evalLayers(entries, analysis.results, analysis.scope);
+    for (const { entry, mat } of drawOrder(entries, layers)) {
       const res = analysis.results.get(entry.id);
       if (!res || !entry.visible) continue;
-      const st = styles.get(entry.id);
-      if (!st) continue;
-      // Skip segments entirely off-screen (stroke half-width + slack as margin).
-      const margin = (st.lineWidth / 2 + 4) * unitsPerPx;
-      const off = (seg: [number, number][]) => segmentOutside(seg, viewport, margin);
-
-      if (st.fill && st.fillMode === 'region' && res.inequality) {
-        let hit = regionCache.current.get(res);
-        if (!hit || hit.key !== rasterKey) {
-          hit = { key: rasterKey, rects: rasterizeRegion(res.inequality.test, size.w, size.h, tf.ix, tf.iy) };
-          regionCache.current.set(res, hit);
-        }
-        ctx.fillStyle = st.fill;
-        for (const r of hit.rects) ctx.fillRect(r.x, r.y, r.w, r.h);
-      } else if (st.fill && st.fillMode === 'shape') {
-        ctx.fillStyle = st.fill;
-        if (st.fillRule === 'evenodd') {
-          // One shape: nested contours become holes.
-          ctx.beginPath();
-          for (const seg of res.curve.segments) {
-            tracePath(seg);
-            ctx.closePath();
+      const st0 = styles.get(entry.id);
+      if (!st0) continue;
+      // Data → screen for this entry (layer transform composed in JS, in
+      // doubles, so deep zooms keep their precision).
+      const SM = mat ? mulMat(S, mat) : S;
+      const tracePath = mat
+        ? (seg: [number, number][]) => {
+            for (let i = 0; i < seg.length; i++) {
+              const px = SM[0] * seg[i][0] + SM[2] * seg[i][1] + SM[4];
+              const py = SM[1] * seg[i][0] + SM[3] * seg[i][1] + SM[5];
+              if (i === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
           }
-          ctx.fill('evenodd');
-        } else {
-          for (const seg of res.curve.segments) {
-            if (seg.length < 3 || off(seg)) continue;
+        : (seg: [number, number][]) => {
+            for (let i = 0; i < seg.length; i++) {
+              const px = tf.tx(seg[i][0]);
+              const py = tf.ty(seg[i][1]);
+              if (i === 0) ctx.moveTo(px, py);
+              else ctx.lineTo(px, py);
+            }
+          };
+      // Per-copy styles when colours use the loop variable; else one style.
+      const perCopy = copyStyles.get(entry.id);
+      const parts: { st: ResolvedStyle; segs: [number, number][][] }[] = perCopy
+        ? perCopy.map((st, i) => {
+            const [a, b] = res.copyRanges![i].seg;
+            return { st, segs: res.curve.segments.slice(a, b) };
+          })
+        : [{ st: st0, segs: res.curve.segments }];
+
+      for (const { st, segs } of parts) {
+        // Skip segments entirely off-screen (stroke half-width + glow + slack).
+        const margin = (st.lineWidth / 2 + st.glow * 2 + st.blur * 2 + 4) * unitsPerPx;
+        const off = (seg: [number, number][]) => !mat && segmentOutside(seg, viewport, margin);
+        const fx = applyEffects(ctx, st, dpr);
+
+        if (st.fill && st.fillMode === 'region' && res.inequality) {
+          const inv = mat ? invertMat(mat) : null;
+          const key = mat ? `${rasterKey}|${mat.join(',')}` : rasterKey;
+          let hit = regionCache.current.get(res);
+          if (!hit || hit.key !== key) {
+            const test = res.inequality.test;
+            const t = inv ? (x: number, y: number) => test(...applyMat(inv, x, y)) : test;
+            hit = { key, rects: rasterizeRegion(t, size.w, size.h, tf.ix, tf.iy) };
+            regionCache.current.set(res, hit);
+          }
+          ctx.fillStyle = paintToCanvas(ctx, st.fill, SM);
+          for (const r of hit.rects) ctx.fillRect(r.x, r.y, r.w, r.h);
+        } else if (st.fill && st.fillMode === 'shape') {
+          ctx.fillStyle = paintToCanvas(ctx, st.fill, SM);
+          if (st.fillRule === 'evenodd') {
+            // One shape: nested contours become holes.
             ctx.beginPath();
-            tracePath(seg);
-            ctx.closePath();
-            ctx.fill();
+            for (const seg of segs) {
+              tracePath(seg);
+              ctx.closePath();
+            }
+            ctx.fill('evenodd');
+          } else {
+            for (const seg of segs) {
+              if (seg.length < 3 || off(seg)) continue;
+              ctx.beginPath();
+              tracePath(seg);
+              ctx.closePath();
+              ctx.fill();
+            }
           }
         }
-      }
 
-      if (!st.stroke) continue;
-      ctx.strokeStyle = st.stroke;
-      ctx.lineWidth = st.lineWidth;
-      // Inequality boundaries: dotted when strict (< >, excluded), solid when
-      // inclusive (≤ ≥). Draw each boundary as ONE path so the dash phase carries
-      // across the many short marching-squares segments (otherwise it looks solid).
-      if (res.inequality) {
-        for (const b of res.inequality.boundaries) {
-          ctx.setLineDash(b.strict ? [2, 4] : st.dash);
-          ctx.beginPath();
-          for (const seg of b.segments) tracePath(seg);
-          ctx.stroke();
+        if (st.stroke) {
+          ctx.strokeStyle = paintToCanvas(ctx, st.stroke, SM);
+          ctx.lineWidth = st.lineWidth;
+          // Inequality boundaries: dotted when strict (< >, excluded), solid when
+          // inclusive (≤ ≥). Draw each boundary as ONE path so the dash phase carries
+          // across the many short marching-squares segments (otherwise it looks solid).
+          if (res.inequality) {
+            for (const b of res.inequality.boundaries) {
+              ctx.setLineDash(b.strict ? [2, 4] : st.dash);
+              ctx.beginPath();
+              for (const seg of b.segments) tracePath(seg);
+              ctx.stroke();
+            }
+          } else {
+            ctx.setLineDash(st.dash);
+            const closeShapes = st.fillMode === 'shape';
+            for (const seg of segs) {
+              if (off(seg)) continue;
+              ctx.beginPath();
+              tracePath(seg);
+              if (closeShapes) ctx.closePath();
+              ctx.stroke();
+            }
+          }
+          ctx.setLineDash([]);
         }
-        ctx.setLineDash([]);
-        continue;
+        if (fx) resetEffects(ctx);
+        // A repeated region is one union raster: draw it once.
+        if (res.inequality) break;
       }
-      ctx.setLineDash(st.dash);
-      const closeShapes = st.fillMode === 'shape';
-      for (const seg of res.curve.segments) {
-        if (off(seg)) continue;
-        ctx.beginPath();
-        tracePath(seg);
-        if (closeShapes) ctx.closePath();
-        ctx.stroke();
-      }
-      ctx.setLineDash([]);
     }
 
     // Script layer: above the Graph-mode curves, below markers, points and cursors.
@@ -520,7 +571,8 @@ export default function PlotCanvas() {
       if (rightOpen) grip(tf.tx(sliceT), 10, false);
       if (bottomOpen) grip(size.w - 11, tf.ty(sliceY), true);
     }
-  }, [analysis, viewport, size, entries, styles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid, shownScript]);
+    notifyDrawn();
+  }, [analysis, viewport, size, entries, styles, copyStyles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid, shownScript]);
 
   // --- Interaction ---------------------------------------------------------
   const interaction = useRef<
@@ -884,11 +936,11 @@ export default function PlotCanvas() {
   }
 
   return (
-    <div className="plot" ref={containerRef}>
+    <div className={`plot${aspect ? ' plot-letterbox' : ''}`} ref={containerRef}>
       <canvas
         ref={canvasRef}
         className="plot-canvas"
-        style={{ width: size.w, height: size.h }}
+        style={aspect ? { width: size.w, height: size.h, left: frame.x, top: frame.y } : { width: size.w, height: size.h }}
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={endInteraction}
@@ -899,7 +951,7 @@ export default function PlotCanvas() {
       <FeatureToggle />
       <ScriptChip />
       {tip && (
-        <div className="plot-tooltip" style={{ left: tip.px, top: tip.py }} role="status">
+        <div className="plot-tooltip" style={{ left: tip.px + frame.x, top: tip.py + frame.y }} role="status">
           <span className="tt-dot" style={{ background: tip.color }} />
           {tip.title && <span className="tt-kind">{tip.title}</span>}
           <span className="tt-coords">
@@ -911,7 +963,7 @@ export default function PlotCanvas() {
         <div
           key={l.key}
           className="point-label"
-          style={{ ...dirStyle(l.dir, l.x, l.y), color: l.color }}
+          style={{ ...dirStyle(l.dir, l.x + frame.x, l.y + frame.y), color: l.color }}
           dangerouslySetInnerHTML={{ __html: l.html }}
         />
       ))}
