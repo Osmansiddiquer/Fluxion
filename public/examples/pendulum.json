@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "expressions": [
+    {
+      "expr": "theta'' = -g/L*sin(theta) - c*theta'",
+      "t0": 0,
+      "ic": [
+        2.2,
+        0
+      ]
+    },
+    {
+      "expr": "g = 9.81",
+      "min": 1,
+      "max": 20
+    },
+    {
+      "expr": "L = 3",
+      "min": 0.5,
+      "max": 6
+    },
+    {
+      "expr": "c = 0.15",
+      "min": 0,
+      "max": 1
+    }
+  ],
+  "viewport": {
+    "xmin": -1,
+    "xmax": 21,
+    "ymin": -4,
+    "ymax": 9
+  },
+  "features": {
+    "extrema": false,
+    "xIntercepts": false,
+    "yIntercept": false,
+    "discontinuities": false,
+    "intersections": false
+  },
+  "panels": {
+    "right": false,
+    "bottom": false
+  },
+  "script": "// A pendulum driven by the ODE in Graph mode:  θ'' = −(g/L)·sin θ − c·θ'\n// graph.ode(\"theta\") solves it (from its initial conditions) at any time.\nconst theta = graph.ode(\"theta\")\nconst omega = graph.ode(\"theta\", 1)          // θ'\nloop(20)\nconst t = time\nconst a = theta(t)\n\n// The pendulum hangs from a pivot that rides along the time axis, so the bob\n// sits right above the point (t, θ(t)) of the solution curve.\nconst L = graph.value(\"L\")\nconst pivot = [t, 5.5]\nconst bob = [pivot[0] + L * sin(a), pivot[1] - L * cos(a)]\nline(pivot[0] - 0.7, pivot[1], pivot[0] + 0.7, pivot[1], { color: ink, width: 4 })\nline(...pivot, ...bob, { color: ink, width: 2.5 })\ncircle(...bob, 0.32, { fill: \"#c74440\", color: ink, width: 2 })\narrow(...bob, bob[0] + 0.6 * omega(t) * cos(a), bob[1] + 0.6 * omega(t) * sin(a), { color: \"#2d70b3\", width: 2 })\n\n// Where we are on the solution: a cursor and a dot on the curve θ(t).\nline(t, -3.2, t, pivot[1], { color: alpha(ink, 0.25), dash: \"dashed\", width: 1.5 })\npoint(t, a, { size: 6, color: \"#c74440\" })\nlabel(`θ = ${a.toFixed(2)}`, t, a)\ntext(\"θ(t)\", 19.2, theta(19.2) + 0.6, { color: \"#c74440\", size: 14 })\n"
+}
