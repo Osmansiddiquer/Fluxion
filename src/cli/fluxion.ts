@@ -2,6 +2,9 @@ import { checkSpec, type CheckReport } from '../lib/api/check';
 import { buildLink, linkToSpec, DEFAULT_BASE_URL, type LinkFormat } from '../lib/api/url';
 import type { FluxionSpec, Issue } from '../lib/api/spec';
 import { exampleSpec, listExamples } from '../lib/api/examples';
+import { specToGraph } from '../lib/api/spec';
+import { checkScript, type ScriptCheckReport } from './scriptCheck';
+import type { GraphEntryData } from '../lib/script/protocol';
 
 /**
  * Command-line client for the Fluxion URL API, using the app's real parser so
@@ -27,6 +30,11 @@ export const HELP = `fluxion — build and check Fluxion graph links (https://os
 Usage:
   fluxion link   [SPEC] [options]   Validate a graph and print a shareable link
   fluxion check  [SPEC] [options]   Print a JSON report: how each expression parses + problems
+  fluxion script FILE.js [--time T,T…] [--spec SPEC]
+                                    Run a Script mode program headlessly (sandboxed, with a
+                                    timeout) and print a JSON report: errors with lines, and
+                                    what it drew at each time. SPEC supplies Graph-mode
+                                    expressions for graph.ode / graph.fn / graph.value.
   fluxion decode URL                Print the JSON spec carried by a Fluxion link
   fluxion examples                  List the built-in scripted demos and their links
   fluxion example ID                Print a demo's JSON spec, a template to edit
@@ -62,6 +70,8 @@ interface Parsed {
   format: LinkFormat;
   base?: string;
   force: boolean;
+  times?: number[];
+  specArg?: string;
 }
 
 const num = (v: string) => (v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : v);
@@ -84,6 +94,11 @@ function parseArgs(argv: string[]): Parsed {
       return v;
     };
     if (name === 'force') p.force = true;
+    else if (name === 'time') {
+      const ts = takeValue().split(',').map(Number);
+      if (!ts.length || ts.some((t) => !Number.isFinite(t))) throw new UsageError('--time takes numbers, e.g. --time 0,1,2.5');
+      p.times = ts;
+    } else if (name === 'spec') p.specArg = takeValue();
     else if (name === 'hidden') {
       const last = p.exprs[p.exprs.length - 1];
       if (!last) throw new UsageError('--hidden must follow an --expr');
@@ -131,6 +146,24 @@ async function loadSpec(p: Parsed, io: CliIO): Promise<unknown> {
   return spec;
 }
 
+function entriesOf(spec: unknown): GraphEntryData[] {
+  const v = checkSpec(spec);
+  if (!v.spec) return [];
+  return specToGraph(v.spec).entries.map((e) => ({ raw: e.raw, visible: e.visible, t0: e.t0, ic: e.ic, varValue: e.varValue }));
+}
+
+/** Run a spec's script (if any) and fold its problems into the report. */
+async function withScript(r: CheckReport): Promise<CheckReport & { script?: ScriptCheckReport }> {
+  const code = r.spec?.script;
+  if (!code) return r;
+  const s = await checkScript(code, { entries: entriesOf(r.spec) });
+  const errors = [
+    ...r.errors,
+    ...s.errors.map((e) => ({ path: 'script', message: `${e.line ? `line ${e.line}: ` : ''}${e.message} (at time ${e.time})` })),
+  ];
+  return { ...r, ok: r.ok && s.ok, errors, script: s };
+}
+
 const fmtIssue = (kind: string, i: Issue) => `${kind}: ${i.path ? i.path + ': ' : ''}${i.message}`;
 
 function describeReport(r: CheckReport): string {
@@ -152,14 +185,14 @@ export async function runCli(argv: string[], io: CliIO): Promise<number> {
         io.out(HELP);
         return 0;
       case 'check': {
-        const r = checkSpec(await loadSpec(p, io));
+        const r = await withScript(checkSpec(await loadSpec(p, io)));
         const { spec: _spec, ...report } = r;
         io.out(JSON.stringify(report, null, 2));
         return r.ok ? 0 : 1;
       }
       case 'link': {
         const spec = await loadSpec(p, io);
-        const r = checkSpec(spec);
+        const r = await withScript(checkSpec(spec));
         const summary = describeReport(r);
         if (summary) io.err(summary);
         if (!r.ok && !p.force) {
@@ -167,6 +200,23 @@ export async function runCli(argv: string[], io: CliIO): Promise<number> {
           return 1;
         }
         io.out(await buildLink(spec as FluxionSpec, { format: p.format, base: p.base }));
+        return r.ok ? 0 : 1;
+      }
+      case 'script': {
+        const file = p.positional[0];
+        if (!file) throw new UsageError('script needs a file (or "-" for stdin)');
+        const code = file === '-' ? await io.readStdin() : await io.readFile(file);
+        let entries: GraphEntryData[] = [];
+        if (p.specArg) {
+          const text = /^\s*[[{]/.test(p.specArg) ? p.specArg : await io.readFile(p.specArg);
+          try {
+            entries = entriesOf(JSON.parse(text));
+          } catch (e) {
+            throw new UsageError(`--spec is not valid JSON: ${e instanceof Error ? e.message : String(e)}`);
+          }
+        }
+        const r = await checkScript(code, { entries, times: p.times });
+        io.out(JSON.stringify(r, null, 2));
         return r.ok ? 0 : 1;
       }
       case 'decode': {

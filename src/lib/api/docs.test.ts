@@ -152,7 +152,8 @@ describe('fluxion-spec.schema.json stays in sync with the validator', () => {
   it('top-level keys', () => {
     expect(keys(SCHEMA.properties)).toEqual([...TOP_KEYS].sort());
     expect(SCHEMA.additionalProperties).toBe(false);
-    expect(SCHEMA.required).toEqual(['expressions']);
+    expect(SCHEMA.anyOf).toEqual([{ required: ['expressions'] }, { required: ['script'] }]);
+    expect(SCHEMA.properties.script.maxLength).toBe(LIMITS.maxScriptChars);
   });
   it('expression keys and enums', () => {
     const e = SCHEMA.$defs.expression;
