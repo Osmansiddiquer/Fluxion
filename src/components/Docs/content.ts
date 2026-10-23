@@ -605,12 +605,16 @@ const clips: DocSection = {
 
 const sharing: DocSection = {
   id: 'sharing',
-  title: 'Sharing, export & import',
-  summary: 'Share links, JSON files, importing, and how your work is saved.',
+  title: 'Saving, sharing & export',
+  summary: 'My graphs, recent work, share links, JSON files and importing.',
   blocks: [
-    P('Everything is in the **share menu** in the top bar.'),
+    P('Everything is in the **share menu** in the top bar; **My graphs** also opens from the graph’s name next to the logo.'),
     TABLE(
       ['Item', 'What it does'],
+      ['Save (Ctrl/⌘+S)', 'Save the graph under a name; saving again updates it'],
+      ['Save as copy', 'Keep the saved version and save this one under a new name'],
+      ['New graph', 'Start a blank graph; the current one stays in My graphs or Recent'],
+      ['My graphs…', 'Your saved graphs and recent unsaved work'],
       ['Copy share link', 'A link that opens exactly this graph: rows, styles, view and panels'],
       ['Copy as JSON spec', 'A readable description of the graph, ideal to paste to an AI assistant'],
       ['Export to file…', 'Download the graph as `fluxion-graph.json`'],
@@ -623,11 +627,27 @@ const sharing: DocSection = {
       'Opening a link replaces the graph in that tab, then tidies the address bar.',
       'A broken link never blanks the page: your graph stays and a message explains the problem.',
     ),
-    H('How your work is saved'),
+    H('My graphs'),
     LIST(
-      'Your graph is saved in the browser as you work, per tab: two open tabs are independent.',
-      'A new tab starts from the graph you edited last, and your work survives a browser restart.',
-      'Nothing is uploaded. To keep a graph safe or move it to another device, export it or copy a share link.',
+      'Each saved graph shows a thumbnail, its name and when it was last edited. Click one to open it.',
+      'The **⋯** button on an item renames, duplicates, copies a share link, exports to a file or deletes it. A deleted graph can be brought back with **Undo**.',
+      'Next to the name, **Saved** or **Unsaved changes** tells you whether the graph matches its saved version.',
+      'Type in the search box to filter a long list.',
+    ),
+    H('Recent work'),
+    LIST(
+      'Unsaved graphs you have edited are kept automatically under **Recent**: the last 10, from every tab, without duplicates.',
+      'Closing a tab or opening another graph never loses work: open it from Recent, or press **Keep** to save it under a name.',
+    ),
+    H('Several tabs'),
+    LIST(
+      'Each tab edits its own graph. Saving in one tab updates the list in the others.',
+      'If another tab saved a newer version of the graph you are editing, the name shows **Changed in another tab**. Saving then asks whether to save a copy, overwrite, or open the other version, so nothing is overwritten by accident.',
+    ),
+    H('Where it is stored'),
+    LIST(
+      'Graphs are stored in this browser only; nothing is uploaded. To move a graph to another device, export it or copy a share link.',
+      'In a private window the browser may not keep anything after it closes; export graphs you want to keep.',
     ),
     TIP('**Try it** in these docs opens the example in a new tab, so the graph in your other tab is untouched. The Examples menu replaces your graph, but the notice that appears has an **Undo** button for a few seconds.'),
   ],
@@ -642,6 +662,7 @@ const keyboard: DocSection = {
   blocks: [
     TABLE(
       ['Key', 'Where', 'Action'],
+      ['Ctrl/⌘+S', 'anywhere', 'Save the graph (asks for a name the first time)'],
       ['Enter', 'expression row', 'Finish editing'],
       ['↑ ↓', 'autocomplete', 'Choose a suggestion'],
       ['Tab or Enter', 'autocomplete', 'Accept the suggestion'],

@@ -8,6 +8,9 @@ import { registerAssets } from '../lib/frames/assets';
 import { DEMOS } from '../lib/demos';
 import { setOpenGraphHandler } from '../lib/openGraph';
 import { useScriptRuntime } from '../state/scriptRuntime';
+import { notifyBeforeGraphReplace, setApplyGraphHandler } from '../lib/saved/applyHook';
+import SavedMenuItems from './Graphs/SavedMenuItems';
+import { SavedDot } from './Graphs/GraphsTitle';
 
 const isPlainSpecLike = (x: unknown) => !!x && typeof x === 'object' && 'expressions' in x;
 
@@ -41,6 +44,7 @@ export default function GraphMenu() {
   // before the entries that reference them are computed.
   // A graph that carries a script opens in Script mode, with a fresh clock.
   const applyGraph = (g: GraphData): boolean => {
+    notifyBeforeGraphReplace(); // saved graphs: file the outgoing work in Recent
     registerAssets(g.assets);
     loadGraph(g);
     useScriptRuntime.setState({ frame: null, error: null, killed: false, time: 0, playing: true, replaced: null });
@@ -108,6 +112,8 @@ export default function GraphMenu() {
   const openWithUndoRef = useRef(openWithUndo);
   openWithUndoRef.current = openWithUndo;
   useEffect(() => setOpenGraphHandler((g, title) => openWithUndoRef.current(g, title)), []);
+  // Saved graphs loads through applyGraph too (see lib/saved/applyHook).
+  useEffect(() => setApplyGraphHandler((g) => applyRef.current(g)), []);
 
   const openDemo = (id: string) => {
     setOpen(false);
@@ -191,14 +197,17 @@ export default function GraphMenu() {
     <div className="graph-menu" ref={rootRef}>
       <button
         className="icon-btn"
-        title="Share / save graph"
-        aria-label="Share or save graph"
+        title="Save / share graph"
+        aria-label="Save or share graph"
         onClick={() => setOpen((o) => !o)}
       >
         {ShareIcon}
+        <SavedDot />
       </button>
       {open && (
         <div className="graph-menu-pop" role="menu">
+          <SavedMenuItems onPick={() => setOpen(false)} />
+          <div className="graph-menu-sep" role="separator" />
           <button onClick={share}>Copy share link</button>
           <button onClick={copySpec} title="A readable spec an AI assistant can edit (see llms.txt)">
             Copy as JSON spec
