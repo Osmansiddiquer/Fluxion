@@ -62,7 +62,8 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Geometry / format | `lib/geom/transform.ts` (data↔screen), `lib/format.ts` (`fmtSig`), `lib/graphFile.ts` (export/share), `lib/math/resolveSlice.ts` (parametric cuts) |
 | Scripting | `lib/scope.ts` (shared eval scope: helpers + sliders + derived values + user fns), `lib/math/helpers.ts` (`lerp`/`keys`/`skeys`/`rotx`/`projx`…), `lib/color.ts` (colour literals + `rgb/hsv/…` expressions), `lib/style.ts` (per-frame `resolveStyle`), `lib/raster.ts` (adaptive inequality shading), `lib/anim.ts` + `state/player.ts` + `state/animate.ts` + `components/AnimationLoop.tsx` (shared slider clock) |
 | Frames ("Bad Apple") | `lib/frames/codec.ts` (FXF1 clip format), `trace.ts` (marching-squares contours + Douglas–Peucker), `assets.ts` (content-addressed asset store), `netpbm.ts`, `clipGraph.ts`; `scripts/frames-import.ts` (CLI, run with `npx vite-node`) |
-| Demos | `lib/demos/*` (Sharingan, cube, Mangekyō morph, mandala, silhouette clip) → GraphMenu "Examples", `#example=<id>` links, and `public/examples/*.json` (via `lib/api/examples.ts`) |
+| Demos | `lib/demos/scripted.ts` (Script mode programs: Sharingan, cube, Mangekyō, mandala, pendulum-from-ODE, silhouette clip) = `DEMOS` → GraphMenu "Examples", Script mode → Examples, `#example=<id>` links, `public/examples/*.json` (via `lib/api/examples.ts`). The older expression-row builders (`sharingan.ts`, `cube.ts`, …) are `EXPRESSION_DEMOS`, kept only as engine regression fixtures |
+| Script mode | `lib/script/` — `api.ts` (names + signatures), `runtime.ts` (the drawing API + executor, pure), `protocol.ts` (wire format, `sanitizeFrame`, limits), `graphBridge.ts` (`graph.value/fn/ode`), `sandbox/worker.ts` (worker entry), `sandbox/host.ts` (iframe + watchdog), `testkit.ts` (headless runs); `state/scriptRuntime.ts` (live frame / clock); `components/Script/*` (lazy: `ScriptPanel`, `CodeEditor`, `ScriptEngine`, `ScriptDocs` + `docsContent.ts`, `ClipImporter`, `scriptBus`); `components/Plot/scriptLayer.ts` (renderer), `ScriptChip.tsx`; `components/ModeSwitch.tsx`; `cli/scriptCheck.ts` |
 | Store | `store/useStore.ts` (Zustand+persist), `store/types.ts` (`Entry`, `Viewport`, …), `state/signature.ts` (`computeSignature`) |
 | Sidebar | `components/Sidebar/*` — `EntryRow`, `MathField` (MathLive + autocomplete), `IVPControls`, `VariableSlider`, `PlayControls`, `PolarControls`, `ColorPopover` |
 | Plot | `components/Plot/PlotCanvas.tsx` (+ `grid.ts`, `markers.ts`), `components/Projections/*` |
@@ -138,6 +139,92 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
   every animation tick. Entries keep only the id (`Entry.frames`); `makeGraph` exports
   referenced assets in `GraphData.assets`; every graph load path must call
   `registerAssets(g.assets)` first (GraphMenu file/hash/examples do).
+
+## Script mode (JavaScript, sandboxed)
+
+- **UX**: header `ModeSwitch` sets `store.mode` (`graph` | `script`, optional, persisted).
+  Script mode swaps the Sidebar for the lazy `ScriptPanel` (toolbar, CodeMirror editor,
+  sliders, clock bar, console strip; the reference is a column beside the editor on
+  windows ≥ `DOCS_SIDE_MIN` and a Code | Reference tab below that, so it never squeezes
+  the graph). `ScriptEngine` (lazy, mounted whenever a script exists or Script mode is
+  open) owns the sandbox and writes `useScriptRuntime` (frame, error, clock). The plot
+  draws the frame **above Graph-mode curves, below markers / points / cursors**;
+  `background()` replaces the grid. In Graph mode `ScriptChip` shows / hides the layer.
+- **State**: `store.script?: ScriptDoc` (`code`, `sliders`, `clips` name → asset id,
+  `visible`) — optional, persist version unchanged. Travels in `GraphData.script`
+  (`makeGraph`; clip assets exported), `#g=` links (`sanitizeScript` caps it), the spec's
+  top-level `"script"` string (`expressions` then optional; schema uses `anyOf`), and a
+  `#script=` param. `loadGraph` replaces the script (none → cleared). A graph with a
+  script opens in Script mode (`GraphMenu.applyGraph`) with a toast.
+- **Runtime model**: a script is the body of `new Function(...API_NAMES, '"use strict"; {'
+  + code + '}')` — API as parameters, body in its own block so user `const scale = …`
+  shadows instead of colliding. Re-run per frame; `usesClock(code)` (or `loop()` /
+  `clip().play()`) marks it animated. `loop(s)` can't rebind the `time` parameter, so the
+  **host** wraps the clock by `frame.loop`. Error lines come from the stack
+  (`, <anonymous>:L:C` / `> Function:L:C`, offset measured once); syntax-error lines
+  come from the editor's lezer linter (engines don't report them).
+- **Wire format** (`protocol.ts`): display items `path` (op-coded numbers + an affine
+  matrix, built under `S·M` then stroked in screen space so widths are px), `point`,
+  `arrow`, `text`, `clip` (asset id + frame + matrix; polygons come from the app's own
+  `FrameSequence`). Everything returned is validated twice: in the worker (guarantees
+  cloneable plain data) and by `parseRuntimeMessage` in the app.
+- **Graph interop**: the app posts Graph-mode entries as data (`raw`, `ic`, `t0`,
+  `varValue`) when `computeSignature` or the clip table changes; the worker parses them
+  with the real parser (mathjs is in the worker bundle) and `graph.ode` integrates RK4
+  on demand from t0 (`ODE_STEP`, cached, `|t − t0| ≤ ODE_MAX_SPAN`).
+- **Build**: `vite.config.mjs` plugin `sandboxRuntime` bundles `sandbox/worker.ts` with
+  esbuild into a string module `virtual:fluxion-sandbox-runtime` (an opaque-origin frame
+  can't load a worker from the app's URL). The string escapes `import` so Vite's import
+  analysis ignores it. Only the lazy ScriptEngine chunk imports it.
+
+### Sandbox & threat model
+
+Scripts arrive from share links, so treat them as hostile. Goal: a script can only
+produce a drawing; it must not read or change the app's DOM, storage, cookies, other
+tabs, or reach the network, and must not hang the page.
+
+1. **Worker in an opaque-origin iframe**: `<iframe sandbox="allow-scripts" srcdoc>` (no
+   `allow-same-origin`) → origin `null`: no access to `parent.document`,
+   `localStorage`, cookies or IndexedDB of the app. User code runs in a blob: `Worker`
+   inside it (no DOM at all) so an endless loop never blocks the page.
+2. **CSP** in the srcdoc: `default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval'
+   blob:; worker-src blob:; connect-src 'none'; img-src 'none'; …` — no fetch, XHR,
+   WebSocket, EventSource, images, fonts, forms or frames; workers inherit it.
+3. **Defence in depth** in `worker.ts`: `fetch`, `XMLHttpRequest`, `WebSocket`,
+   `importScripts`, `indexedDB`, `caches`, `BroadcastChannel`, nested `Worker`,
+   `navigator.sendBeacon`, … are redefined as non-configurable `undefined` before user
+   code runs; `self.postMessage` is a no-op for user code.
+4. **Only structured messages** cross: the app accepts messages only from that iframe's
+   window (`e.source`), and `parseRuntimeMessage` / `sanitizeFrame` copy known fields,
+   finite bounded numbers, capped strings (text 300, logs 100 × 1000), ≤ 20 000 items,
+   ≤ 600 000 numbers, colours matching plain CSS syntax only, asset-id-shaped clip ids.
+   Nothing received is evaluated; text goes to `fillText`, colours to `fillStyle`.
+5. **Watchdog**: every run has a timeout (3 s for runs, 1.5 s per animation frame); on
+   timeout the iframe (and worker) is removed and a fresh one started; the hung script
+   is not re-run until it is edited or Run is pressed. Requests are coalesced (newest
+   wins), so a slow animation drops frames instead of queueing.
+6. **CLI** (`cli/scriptCheck.ts`) never runs scripts in Node's realm: the whole worker
+   bundle runs inside a fresh `node:vm` context holding only context-created objects
+   (no `process`/`require`/host functions), JSON strings in and out, with a timeout.
+
+Not defended: a script can draw something misleading or heavy within the caps, and
+`random()`/timing side channels inside its own sandbox — acceptable for a drawing tool.
+
+### Script mode gotchas
+
+- **Zustand selectors must not return fresh objects** (`s.script?.clips ?? {}` loops
+  forever): select the field, default outside with a module constant.
+- **`page.goto` to the same URL + `#hash`** doesn't reload — go via `about:blank` in
+  automation, or the app keeps its previous state (tour, graph).
+- **MediaRecorder WebM** reports `duration = Infinity` until you seek past the end
+  (`ClipImporter.videoDuration`).
+- Examples / docs / llms.txt scripts are executed by tests (`scripted.test.ts`,
+  `docsContent.test.ts`, `docs.test.ts`); change the API → update them.
+- **Browser e2e**: `node scripts/e2e-script-mode.cjs http://localhost:5173/ [--shots dir]`
+  (playwright-core; set `PLAYWRIGHT_CORE` if it isn't resolvable) — sandbox isolation,
+  runaway kill, every example light + dark, reference, sliders, clip import.
+- The Scripting reference component `ScriptDocs` is default-exported and prop-less (the
+  separate docs page mounts it); its "Full docs" link points at `./docs/#scripting`.
 
 ## Performance — the compute caches (extend carefully)
 
@@ -251,7 +338,8 @@ strips them; bad links show an error toast and keep the current graph.
 All planned features are shipped (ODEs/systems, functions, implicit, polar, inequalities
 incl. polar/compound, points/lines, animatable sliders, projection panels, trace,
 discontinuities, sharing/export, per-tab state, x/t interchange, tutorial, in-app docs, compute
-caches, and the scripting layer: parametric curves, derived values, user functions,
+caches, Script mode (sandboxed JavaScript, reference, examples, clip importer), and the
+scripting layer: parametric curves, derived values, user functions,
 for-repeats, keyframes, 3D projection, styling/fills/colour expressions, shared
 animation clock, frame sequences + importer, demo graphs). Open: full "Bad Apple!!"
 playback needs the user's own frames via `scripts/frames-import.ts` (no copyrighted
