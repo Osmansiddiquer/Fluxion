@@ -233,7 +233,10 @@ export default function PlotCanvas() {
       const res = analysis.results.get(entry.id);
       if (!res?.points) continue;
       // Repeated points (`(k, k²) for k = …`) are markers too, but never draggable.
-      const repeated = res.parsed.kind === 'repeat' && res.parsed.body.kind === 'points';
+      // Repeated polylines / segments are shapes (no vertex dots).
+      const repeated =
+        res.parsed.kind === 'repeat' && res.parsed.body.kind === 'points' && !res.parsed.body.polyline;
+      if (res.parsed.kind === 'repeat' && !repeated) continue;
       if (res.parsed.kind !== 'points' && res.parsed.kind !== 'pointvar' && !repeated) continue;
       // A filled polygon reads as a shape: no vertex dots.
       if (res.parsed.kind === 'points' && res.parsed.polyline && styles.get(entry.id)?.fillMode === 'shape') {
