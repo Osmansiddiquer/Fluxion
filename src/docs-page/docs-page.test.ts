@@ -12,6 +12,7 @@ import { DEMOS } from '../lib/demos';
 import { APP_BASE, tryLinks } from './links';
 import { HEAD_TAGS, injectDocs, renderDocs, scriptJson } from './prerender';
 import { headingId, kindLabel } from './DocsPage';
+import { activeSection } from './scrollspy';
 
 const root = (p: string) => fileURLToPath(new URL(`../../${p}`, import.meta.url));
 const src = (p: string) => readFileSync(root(p), 'utf8');
@@ -185,4 +186,32 @@ describe('the build includes the docs page', () => {
     expect(html).not.toMatch(/<!--docs-(head|body|data)-->/);
     expect(existsSync(root('dist/docs/src'))).toBe(false);
   });
+});
+
+describe('scroll-spy: activeSection', () => {
+  const at = (...tops: number[]) => tops.map((top, i) => ({ id: `s${i}`, top }));
+  const HEADER = 60;
+
+  it('picks the section whose heading sits at or just below the header', () => {
+    // After jumping to #s2: s2's top lands at header + scroll-margin (72).
+    expect(activeSection(at(-2400, -900, 72, 900), HEADER, false)).toBe('s2');
+    expect(activeSection(at(-2400, -900, 60, 900), HEADER, false)).toBe('s2');
+  });
+  it('does not lag one section behind (the previous one is still on screen)', () => {
+    expect(activeSection(at(-500, -20, 100, 800), HEADER, false)).toBe('s2');
+  });
+  it('keeps the current section until the next one reaches the header', () => {
+    expect(activeSection(at(-500, -20, 400, 1200), HEADER, false)).toBe('s1');
+  });
+  it('is the first section at the top of the page', () => {
+    expect(activeSection(at(130, 900, 1800), HEADER, false)).toBe('s0');
+  });
+  it('is the last section at the very bottom, even if it cannot reach the header', () => {
+    expect(activeSection(at(-3000, -600, 300, 650), HEADER, true)).toBe('s3');
+  });
+  it('accounts for a taller header (phone menu bar)', () => {
+    expect(activeSection(at(-900, 110, 900), 105, false)).toBe('s1');
+    expect(activeSection(at(-900, 200, 900), 105, false)).toBe('s0');
+  });
+  it('handles no sections', () => expect(activeSection([], HEADER, false)).toBeNull());
 });

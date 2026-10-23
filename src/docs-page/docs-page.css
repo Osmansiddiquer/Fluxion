@@ -853,6 +853,12 @@ html:not([data-js]) .dp-theme {
     list-style: none;
     cursor: pointer;
   }
+  .dp-menu-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .dp-menu summary::-webkit-details-marker {
     display: none;
   }

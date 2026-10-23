@@ -11,6 +11,7 @@ import Logo from '../components/Logo';
 import type { ThemeMode } from '../store/types';
 import { readTheme, writeTheme } from './theme';
 import { texHtml } from './tex';
+import { activeSection } from './scrollspy';
 
 // ── Script mode reference hook ──────────────────────────────────────────────
 // Script mode (branch feat/script-mode) ships its reference as a default-exported,
@@ -73,17 +74,28 @@ export default function DocsPage({ links }: DocsPageProps) {
   // After hydration: theme state, scrollspy, and the "/" + Esc shortcuts.
   useEffect(() => {
     setTheme(readTheme());
-    const io = new IntersectionObserver(
-      (items) => {
-        const vis = items.filter((i) => i.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        if (vis[0]) setActive(vis[0].target.id);
-      },
-      { rootMargin: '-72px 0px -65% 0px' },
-    );
-    for (const s of SECTIONS) {
-      const el = document.getElementById(s.id);
-      if (el) io.observe(el);
-    }
+    // Scroll-spy: on every scroll/resize/hash jump (one rAF per frame), measure
+    // the sections against the sticky header (and the phone menu bar below it).
+    const els = SECTIONS.map((s) => document.getElementById(s.id)).filter((e): e is HTMLElement => !!e);
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      let headerBottom = 0;
+      for (const sel of ['.dp-top', '.dp-menu']) {
+        const el = document.querySelector(sel);
+        if (el && getComputedStyle(el).display !== 'none') headerBottom = Math.max(headerBottom, el.getBoundingClientRect().bottom);
+      }
+      const doc = document.documentElement;
+      const atBottom = window.scrollY > 0 && window.innerHeight + window.scrollY >= doc.scrollHeight - 2;
+      setActive(activeSection(els.map((el) => ({ id: el.id, top: el.getBoundingClientRect().top })), headerBottom, atBottom));
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', schedule, { passive: true });
+    window.addEventListener('resize', schedule);
+    window.addEventListener('hashchange', schedule);
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       const typing = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
@@ -97,7 +109,10 @@ export default function DocsPage({ links }: DocsPageProps) {
     };
     window.addEventListener('keydown', onKey);
     return () => {
-      io.disconnect();
+      cancelAnimationFrame(raf);
+      window.removeEventListener('scroll', schedule);
+      window.removeEventListener('resize', schedule);
+      window.removeEventListener('hashchange', schedule);
       window.removeEventListener('keydown', onKey);
     };
   }, []);
@@ -198,7 +213,10 @@ export default function DocsPage({ links }: DocsPageProps) {
 
       <details className="dp-menu" ref={menuRef}>
         <summary>
-          <MenuIcon /> Sections
+          <MenuIcon />
+          <span className="dp-menu-label">
+            {(active && SECTIONS.find((s) => s.id === active)?.title) || 'Sections'}
+          </span>
         </summary>
         <nav aria-label="Sections">{nav}</nav>
       </details>
