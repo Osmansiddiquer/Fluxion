@@ -1,4 +1,5 @@
 import { decodeGraph, isGraph, type GraphData } from '../graphFile';
+import { DEMOS } from '../demos';
 import {
   COLOR_NAMES,
   LIMITS,
@@ -141,7 +142,7 @@ export function encodeValue(s: string): string {
 // ── simple params form ───────────────────────────────────────────────────────
 
 /** Graph-level params. */
-export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers'] as const;
+export const GLOBAL_PARAMS = ['xmin', 'xmax', 'ymin', 'ymax', 'sigfigs', 'panels', 'markers', 'grid'] as const;
 /** Per-expression params; each applies to the most recent `expr`. */
 export const EXPR_PARAMS = [
   'color',
@@ -159,6 +160,13 @@ export const EXPR_PARAMS = [
   'labeldir',
   'size',
   'drag',
+  'width',
+  'style',
+  'fill',
+  'opacity',
+  'colorexpr',
+  'fillcolor',
+  'autoplay',
 ] as const;
 const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> = {
   color: 'color',
@@ -176,10 +184,21 @@ const PARAM_TO_KEY: Record<(typeof EXPR_PARAMS)[number], keyof ExpressionSpec> =
   labeldir: 'labelDir',
   size: 'pointSize',
   drag: 'drag',
+  width: 'lineWidth',
+  style: 'lineStyle',
+  fill: 'fill',
+  opacity: 'fillOpacity',
+  colorexpr: 'colorExpr',
+  fillcolor: 'fillColor',
+  autoplay: 'autoplay',
 };
+/** The marker toggles `markers=off` turns off (everything but the grid). */
+const MARKER_KEYS = ['extrema', 'xIntercepts', 'yIntercept', 'endpoints', 'discontinuities', 'intersections'] as const;
+/** `#` can't appear raw in a fragment: accept a bare hex colour ("c74440"). */
+const HEX = /^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/;
 const ALL_PARAMS: readonly string[] = ['expr', ...GLOBAL_PARAMS, ...EXPR_PARAMS];
 /** Keys that make a query string / fragment an API payload. */
-const PAYLOAD_KEYS = ['expr', 'spec', 'z', 'g'];
+const PAYLOAD_KEYS = ['expr', 'spec', 'z', 'g', 'example'];
 
 /**
  * Split `a=1&b=2` into pairs. An `&` only separates parameters when it's followed
@@ -258,15 +277,13 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
     } else if (key === 'markers') {
       const b = bool(value);
       if (typeof b === 'boolean' && !b) {
-        spec.features = {
-          extrema: false,
-          xIntercepts: false,
-          yIntercept: false,
-          endpoints: false,
-          discontinuities: false,
-          intersections: false,
-        };
+        spec.features = { ...spec.features };
+        for (const k of MARKER_KEYS) spec.features[k] = false;
       } else if (typeof b !== 'boolean') warnings.push(`markers=${value}: expected on or off`);
+    } else if (key === 'grid') {
+      const b = bool(value);
+      if (typeof b === 'boolean') spec.features = { ...spec.features, grid: b };
+      else warnings.push(`grid=${value}: expected on or off`);
     } else if ((EXPR_PARAMS as readonly string[]).includes(key)) {
       const last = expressions[expressions.length - 1];
       if (!last) {
@@ -275,14 +292,14 @@ export function paramsToSpec(pairs: [string, string][]): { spec: FluxionSpec; wa
       }
       const k = PARAM_TO_KEY[key as (typeof EXPR_PARAMS)[number]];
       const rec = last as unknown as Record<string, unknown>;
-      if (k === 'hidden') rec[k] = bool(value);
+      if (k === 'hidden' || k === 'fill' || k === 'autoplay') rec[k] = bool(value);
       else if (k === 'ic') rec[k] = value.split(',').map(numish);
-      else if (['t0', 'min', 'max', 'step', 'speed', 'thetaMin', 'thetaMax', 'pointSize'].includes(k)) {
+      else if (['t0', 'min', 'max', 'step', 'speed', 'thetaMin', 'thetaMax', 'pointSize', 'lineWidth', 'fillOpacity'].includes(k)) {
         rec[k] = numish(value);
-      } else if (k === 'color') {
+      } else if (k === 'color' || k === 'colorExpr' || k === 'fillColor') {
         // `#` can't appear raw in a fragment; accept "c74440" and "%23c74440".
         const c = value.trim();
-        rec[k] = /^[0-9a-fA-F]{3}([0-9a-fA-F]{3})?$/.test(c) && !COLOR_NAMES[c.toLowerCase()] ? `#${c}` : c;
+        rec[k] = HEX.test(c) && !COLOR_NAMES[c.toLowerCase()] ? `#${c}` : c;
       } else rec[k] = value;
     } else {
       const s = suggestKey(rawKey, ALL_PARAMS);
@@ -305,8 +322,11 @@ export function specToParams(spec: FluxionSpec): string | null {
       const v = (e as unknown as Record<string, unknown>)[PARAM_TO_KEY[p]];
       if (v === undefined) continue;
       if (p === 'ic') push(p, (Array.isArray(v) ? v : [v]).join(','));
-      else if (p === 'hidden') push(p, v ? 1 : 0);
-      else if (p === 'color') push(p, String(v).replace(/^#/, ''));
+      else if (p === 'hidden' || p === 'fill' || p === 'autoplay') push(p, v ? 1 : 0);
+      else if (p === 'color' || p === 'colorexpr' || p === 'fillcolor') {
+        const c = String(v);
+        push(p, /^#/.test(c) && HEX.test(c.slice(1)) ? c.slice(1) : c);
+      }
       else push(p, v as string | number);
     }
   }
@@ -320,9 +340,14 @@ export function specToParams(spec: FluxionSpec): string | null {
     push('panels', r && b ? 'both' : r ? 'right' : b ? 'bottom' : 'none');
   }
   if (spec.features) {
-    const allOff = Object.keys(spec.features).length === 6 && Object.values(spec.features).every((v) => v === false);
-    if (!allOff) return null;
-    push('markers', 'off');
+    const { grid, ...markers } = spec.features;
+    const set = Object.keys(markers);
+    if (set.length) {
+      const allOff = set.length === MARKER_KEYS.length && Object.values(markers).every((v) => v === false);
+      if (!allOff) return null;
+      push('markers', 'off');
+    }
+    if (grid !== undefined) push('grid', grid ? 'on' : 'off');
   }
   return parts.join('&');
 }
@@ -375,6 +400,16 @@ export async function readUrlPayload(hash: string, search: string): Promise<UrlP
         if (text.length > LIMITS.maxSpecBytes) throw new Error('payload is too large');
         return { kind: 'spec', spec: decodeSpecValue(s), format, warnings: [] };
       }
+      const ex = firstValue(pairs, 'example');
+      if (ex !== undefined) {
+        const id = ex.trim().toLowerCase();
+        const demo = DEMOS.find((d) => d.id === id);
+        if (!demo) {
+          const ids = DEMOS.map((d) => d.id).join(', ');
+          return { kind: 'error', message: `There is no example called "${ex}". Try one of: ${ids}.` };
+        }
+        return { kind: 'legacy', graph: demo.build() };
+      }
       const g = firstValue(pairs, 'g');
       if (g !== undefined) {
         const graph = decodeGraph(safeDecode(g));
@@ -393,7 +428,7 @@ export async function readUrlPayload(hash: string, search: string): Promise<UrlP
 
 /** Cheap synchronous test: does this location carry a graph? (e.g. to skip the tour) */
 export function hasUrlPayload(hash: string, search: string): boolean {
-  const re = /(?:^[#?]|&)(?:expr|spec|z|g)=/i;
+  const re = /(?:^[#?]|&)(?:expr|spec|z|g|example)=/i;
   return re.test(hash) || re.test(search);
 }
 

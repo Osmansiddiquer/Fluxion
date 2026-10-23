@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "expressions": [
+    {
+      "expr": "T = 0",
+      "color": "#c74440",
+      "min": 0,
+      "max": 12,
+      "anim": "loop",
+      "speed": 0.3333333333333333,
+      "autoplay": true
+    },
+    {
+      "expr": "s = skeys(T, 0, 0.35, 4, 1, 8, 1, 12, 0.35)",
+      "color": "#000000"
+    },
+    {
+      "expr": "w = pi T/6",
+      "color": "#000000"
+    },
+    {
+      "expr": "Px(u, L, W) = L*(1 - cos(u))/2",
+      "color": "#000000"
+    },
+    {
+      "expr": "Py(u, L, W) = W*sin(u)*(1 - cos(u))/2",
+      "color": "#000000"
+    },
+    {
+      "expr": "(4.4 s cos(t), 4.4 s sin(t))",
+      "color": "#888888",
+      "lineWidth": 1.5,
+      "lineStyle": "dotted",
+      "colorExpr": "hsv(30 T + 200, 0.5, 0.75)"
+    },
+    {
+      "expr": "(rotx(Px(t, 3.9 s, 1.5 s), Py(t, 3.9 s, 1.5 s), w + pi k/6), roty(Px(t, 3.9 s, 1.5 s), Py(t, 3.9 s, 1.5 s), w + pi k/6)) for k = 0..11",
+      "color": "#c74440",
+      "lineWidth": 1.5,
+      "fill": true,
+      "fillOpacity": 0.32,
+      "colorExpr": "hsv(30 T, 0.75, 0.8)",
+      "fillColor": "hsv(30 T, 0.6, 1)"
+    },
+    {
+      "expr": "(rotx(Px(t, 2.7 s, 1.1 s), Py(t, 2.7 s, 1.1 s), -w + pi/12 + pi k/6), roty(Px(t, 2.7 s, 1.1 s), Py(t, 2.7 s, 1.1 s), -w + pi/12 + pi k/6)) for k = 0..11",
+      "lineWidth": 1.5,
+      "fill": true,
+      "fillOpacity": 0.45,
+      "colorExpr": "hsv(30 T + 120, 0.75, 0.75)",
+      "fillColor": "hsv(30 T + 120, 0.55, 1)"
+    },
+    {
+      "expr": "(rotx(Px(t, 1.7 s, 0.7 s), Py(t, 1.7 s, 0.7 s), 2 w + pi k/3), roty(Px(t, 1.7 s, 0.7 s), Py(t, 1.7 s, 0.7 s), 2 w + pi k/3)) for k = 0..5",
+      "lineWidth": 1.2,
+      "fill": true,
+      "fillOpacity": 0.7,
+      "colorExpr": "hsv(30 T + 240, 0.8, 0.7)",
+      "fillColor": "hsv(30 T + 240, 0.6, 1)"
+    },
+    {
+      "expr": "(4.4 s cos(-w/2 + pi k/12), 4.4 s sin(-w/2 + pi k/12)) for k = 0..23",
+      "color": "#c74440",
+      "pointSize": 3,
+      "colorExpr": "hsv(30 T + 40, 0.8, 0.9)"
+    },
+    {
+      "expr": "((0.55 + 0.08 sin(2 w))*cos(t), (0.55 + 0.08 sin(2 w))*sin(t))",
+      "color": "#e8a33d",
+      "lineWidth": 2,
+      "fill": true,
+      "fillOpacity": 1,
+      "colorExpr": "hsv(30 T + 300, 0.7, 0.8)",
+      "fillColor": "hsv(42, 0.75, 1)"
+    },
+    {
+      "expr": "(0.22 cos(t), 0.22 sin(t))",
+      "color": "#7a4a00",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 0.85,
+      "fillColor": "hsv(30, 0.9, 0.55)"
+    }
+  ],
+  "viewport": {
+    "xmin": -6,
+    "xmax": 6,
+    "ymin": -5,
+    "ymax": 5
+  },
+  "features": {
+    "extrema": false,
+    "xIntercepts": false,
+    "yIntercept": false,
+    "discontinuities": false,
+    "intersections": false,
+    "grid": false
+  },
+  "panels": {
+    "right": false,
+    "bottom": false
+  }
+}

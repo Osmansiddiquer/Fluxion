@@ -1,0 +1,151 @@
+{
+  "version": 1,
+  "expressions": [
+    {
+      "expr": "T = 0",
+      "color": "#2d70b3",
+      "min": 0,
+      "max": 12,
+      "step": 0.05,
+      "anim": "loop",
+      "speed": 0.3333333333333333,
+      "autoplay": true
+    },
+    {
+      "expr": "c = skeys(T, 1, 0, 2.5, 1, 10.6, 1, 11.8, 0)",
+      "color": "#6042a6"
+    },
+    {
+      "expr": "g = skeys(T, 2, 0, 3.2, 1, 10.4, 1, 11.4, 0)",
+      "color": "#6042a6"
+    },
+    {
+      "expr": "m = skeys(T, 6.2, 0, 7.8, 1, 9.6, 1, 10.4, 0)",
+      "color": "#6042a6"
+    },
+    {
+      "expr": "a = keys(T, 2, 0, 12, 15)",
+      "color": "#6042a6"
+    },
+    {
+      "expr": "pr = lerp(lerp(0.55, 0.42, c), 0.66, m)",
+      "color": "#6042a6"
+    },
+    {
+      "expr": "Fx(u, s) = u < 1 ? 2s cos(pi/2 - pi u) : (u < 2 ? s cos(pi*(u - 1) - pi/2) : s cos(-pi/2 - pi*(u - 2)))",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "Fy(u, s) = u < 1 ? 2s sin(pi/2 - pi u) : (u < 2 ? s sin(pi*(u - 1) - pi/2) - s : s sin(-pi/2 - pi*(u - 2)) + s)",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "p(k) = a + 2pi k/3",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "Br(u) = u < 1 ? lerp(0.6, 1.95, u) : (u < 2 ? 1.95 : lerp(1.95, 0.6, u - 2))",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "Bq(u) = u < 1 ? 1.1 u^2 : (u < 2 ? 1.1 + 0.5*(u - 1) : 0.55 + 1.05*(3 - u)^2)",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "Tx(u, k) = 1.25 cos(p(k)) + rotx(Fx(u, 0.22 g), Fy(u, 0.22 g), p(k))",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "Ty(u, k) = 1.25 sin(p(k)) + roty(Fx(u, 0.22 g), Fy(u, 0.22 g), p(k))",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "Bx(u, k) = Br(u)*cos(p(k) + Bq(u))",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "By(u, k) = Br(u)*sin(p(k) + Bq(u))",
+      "color": "#0d0909"
+    },
+    {
+      "expr": "(5 cos(t), 2.6 sin(t) abs(sin(t)))",
+      "color": "#6e4a34",
+      "lineWidth": 3.5,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "#f3ede4"
+    },
+    {
+      "expr": "(5.3 cos(t), 3.15 sin(t) abs(sin(t)))",
+      "color": "#8a6a55",
+      "thetaMin": 0.35,
+      "thetaMax": 2.791592653589793,
+      "lineWidth": 2,
+      "colorExpr": "rgba(138, 106, 85, 0.75)"
+    },
+    {
+      "expr": "(2 cos(t), 2 sin(t))",
+      "color": "#1d0d08",
+      "lineWidth": 2.5,
+      "fill": true,
+      "fillOpacity": 1,
+      "fillColor": "rgb(lerp(92, 181, c), lerp(58, 18, c), lerp(36, 27, c))"
+    },
+    {
+      "expr": "(1.55 cos(t), 1.55 sin(t))",
+      "color": "#8c5c3c",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 0.55,
+      "colorExpr": "rgb(lerp(140, 224, c), lerp(92, 44, c), lerp(60, 44, c))"
+    },
+    {
+      "expr": "(1.25 cos(t), 1.25 sin(t))",
+      "color": "#3c0808",
+      "lineWidth": 1.6,
+      "colorExpr": "rgba(60, 8, 8, 0.85 g)"
+    },
+    {
+      "expr": "(pr cos(t), pr sin(t))",
+      "color": "#0d0909",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1
+    },
+    {
+      "expr": "(lerp(Tx(t, k), Bx(t, k), m), lerp(Ty(t, k), By(t, k), m)) for k = 0..2",
+      "color": "#0d0909",
+      "thetaMin": 0,
+      "thetaMax": 3,
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 1,
+      "colorExpr": "rgba(13, 9, 9, clamp(1.5 g))"
+    },
+    {
+      "expr": "(0.26 cos(t) - 0.8, 0.16 sin(t) + 0.92)",
+      "color": "#ffffff",
+      "lineWidth": 0,
+      "fill": true,
+      "fillOpacity": 0.72
+    }
+  ],
+  "viewport": {
+    "xmin": -6.5,
+    "xmax": 6.5,
+    "ymin": -4,
+    "ymax": 4
+  },
+  "features": {
+    "extrema": false,
+    "xIntercepts": false,
+    "yIntercept": false,
+    "discontinuities": false,
+    "intersections": false,
+    "grid": false
+  },
+  "panels": {
+    "right": false,
+    "bottom": false
+  }
+}

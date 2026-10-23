@@ -30,6 +30,14 @@ A circle, the region inside it above the x-axis, and a point:
 
 https://osmansiddiquer.github.io/Fluxion/#expr=x^2+y^2=9&expr=x^2+y^2<9%26y>0&color=blue&expr=(1,2)&label=P
 
+An animation: a slider `a` that plays on open, driving a Lissajous curve whose colour cycles, and a filled disc that pulses (grid, markers and panels off for a clean canvas):
+
+https://osmansiddiquer.github.io/Fluxion/#expr=a=0&min=0&max=2pi&anim=loop&autoplay=1&expr=(3cos(t),2sin(3t+a))&width=3&colorexpr=hsv(57*a,0.8,0.85)&expr=((1+0.3sin(2a))*cos(t),(1+0.3sin(2a))*sin(t))&fill=1&opacity=0.35&width=0&fillcolor=hsv(57*a+180,0.6,1)&grid=off&markers=off&panels=none
+
+A built-in demo (see "Built-in examples" for the list):
+
+https://osmansiddiquer.github.io/Fluxion/#example=mandala
+
 ## Writing params links
 
 - Start with the base URL, then `#`, then `key=value` pairs joined by `&`.
@@ -50,6 +58,10 @@ https://osmansiddiquer.github.io/Fluxion/#expr=x^2+y^2=9&expr=x^2+y^2<9%26y>0&co
 | `anim`, `speed` | slider play mode (`loop`, `bounce`, `once`) and speed (1 = a full sweep in about 4 s; 0.0001 to 100) | `anim=bounce` |
 | `thetamin`, `thetamax` | θ range for polar curves and polar regions (default 0 to 2pi) | `thetamax=6pi` |
 | `label`, `labeldir`, `size`, `drag` | point label (LaTeX), its direction (`n ne e se s sw w nw`), marker radius 2 to 14, drag mode (`auto off x y both`) | `label=P&labeldir=ne` |
+| `width`, `style` | line width in px (0 hides the line) and dash style (`solid`, `dashed`, `dotted`) | `width=3&style=dashed` |
+| `fill`, `opacity` | fill a closed curve or polygon (`1`/`0`) and the fill opacity 0 to 1 | `fill=1&opacity=0.3` |
+| `colorexpr`, `fillcolor` | line / fill colour as an expression over sliders: `hsv(h,s,v)`, `hsl(h,s,l)`, `rgb(r,g,b)`, `rgba(r,g,b,a)`, or hex without `#` | `colorexpr=hsv(57*a,0.8,0.9)` |
+| `autoplay` | start a slider playing when the link opens (`1`/`0`); pair with `anim` | `anim=loop&autoplay=1` |
 
 ### Graph params
 
@@ -60,6 +72,8 @@ https://osmansiddiquer.github.io/Fluxion/#expr=x^2+y^2=9&expr=x^2+y^2<9%26y>0&co
 | `panels` | cross-section side panels: `none`, `right`, `bottom`, `both` (default both) | `panels=none` |
 | `markers` | `off` hides extrema/intercept/intersection dots | `markers=off` |
 | `sigfigs` | significant figures in labels, 1 to 12 (default 3) | `sigfigs=4` |
+| `grid` | `off` hides the grid lines and axes, for drawings | `grid=off` |
+| `example` | open a built-in scripted demo instead of an expression list (see "Built-in examples") | `example=cube` |
 
 Numbers may be constants: `2pi`, `pi/2`, `sqrt(2)`, `-e`.
 
@@ -316,6 +330,25 @@ async function fluxionLink(spec) {
 }
 ```
 
+## Built-in examples (templates for drawings and animation)
+
+Fluxion ships scripted demos. Open one as-is with `#example=<id>`, or start from its JSON spec: fetch it, edit it (colours, sizes, speeds, add or remove expressions), then put it in a link as shown above. They are the best reference for the scripting features: `for` repeats, user functions, keyframes (`skeys`), rotation (`rotx`/`roty`), 3D projection (`projx`/`projy`) and animated `hsv` colours. A machine-readable list is at https://osmansiddiquer.github.io/Fluxion/examples/index.json.
+
+| id | what it is | open | JSON spec |
+| --- | --- | --- | --- |
+| `sharingan` | Rotating Sharingan | https://osmansiddiquer.github.io/Fluxion/#example=sharingan | https://osmansiddiquer.github.io/Fluxion/examples/sharingan.json |
+| `cube` | Rotating cube | https://osmansiddiquer.github.io/Fluxion/#example=cube | https://osmansiddiquer.github.io/Fluxion/examples/cube.json |
+| `mangekyo` | Eye → Sharingan → Mangekyō | https://osmansiddiquer.github.io/Fluxion/#example=mangekyo | https://osmansiddiquer.github.io/Fluxion/examples/mangekyo.json |
+| `mandala` | Mandala bloom | https://osmansiddiquer.github.io/Fluxion/#example=mandala | https://osmansiddiquer.github.io/Fluxion/examples/mandala.json |
+| `silhouette` | Silhouette clip | https://osmansiddiquer.github.io/Fluxion/#example=silhouette | link only (carries a frame clip) |
+
+Tips for your own drawings, learned from these:
+
+- One clock slider (`T = 0` with `"anim": "loop"`, `"autoplay": true`) and derived values from it (`s = skeys(T, ...)`, `w = pi T/6`) keep everything in sync. For a seamless loop, make every quantity return to its start value at the end of the clock's range.
+- Define a shape once as a function (`Px(u, L, W) = ...`) and place copies with `(rotx(Px(t, ...), Py(t, ...), angle), roty(...)) for k = 0..11`.
+- A compound radius needs explicit multiplication: `((0.5 + 0.1 sin(w))*cos(t), (0.5 + 0.1 sin(w))*sin(t))`.
+- Colours: `colorExpr` for the line, `fillColor` with `"fill": true` for the inside, and `"lineWidth": 0` for a borderless fill.
+
 ## Checking a graph before you send it
 
 There is no server to call, so Fluxion can't validate a link for you remotely. Check your expressions against the syntax above. In particular, every name must be defined, ODEs use t, and you need explicit `*` before parentheses. If you can run code inside a clone of the repository (https://github.com/Osmansiddiquer/Fluxion), the CLI uses the app's real parser:
@@ -325,6 +358,8 @@ npm ci
 npm run fluxion -- check '{"expressions":["y = a*x^2"]}'     # JSON report; exit 1 on errors
 npm run fluxion -- link --expr "y'' = -y" --ic 1,0 --xmin 0 --xmax 10
 npm run fluxion -- decode 'https://osmansiddiquer.github.io/Fluxion/#z=...'
+npm run fluxion -- examples                                     # built-in demos and their links
+npm run fluxion -- example cube > cube.json                     # a demo's JSON spec, to edit
 ```
 
 `check` reports how each expression was understood (e.g. "2nd-order ODE in y(t)", "slider k = 2", "shaded region"), plus errors (unparseable, unknown function, undefined variable) and warnings (options that don't apply, nothing visible in the viewport).

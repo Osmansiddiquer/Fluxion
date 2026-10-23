@@ -46,11 +46,25 @@ function splitTopLevel(s: string, sep = ','): string[] {
   return out.map((x) => x.trim()).filter((x) => x !== '');
 }
 
+/** Is `s` one parenthesised group — its opening `(` closes at the very end?
+ * (`(a)*sin(t)` starts with `(` and ends with `)` but is not.) */
+function isWrapped(s: string): boolean {
+  if (!s.startsWith('(') || !s.endsWith(')')) return false;
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (ch === '(' || ch === '[') depth++;
+    else if (ch === ')' || ch === ']') depth--;
+    if (depth === 0 && i < s.length - 1) return false;
+  }
+  return true;
+}
+
 function parseOnePoint(str: string): PointSpec {
   let s = str.trim();
   // A bare identifier is a reference to a point-valued variable.
   if (/^[A-Za-z]\w*$/.test(s)) return { ref: s };
-  if (!(s.startsWith('(') && s.endsWith(')'))) throw new Error('Expected a point (x, y)');
+  if (!isWrapped(s)) throw new Error('Expected a point (x, y)');
   s = s.slice(1, -1);
   const parts = splitTopLevel(s);
   if (parts.length !== 2) throw new Error('A point needs two coordinates');
@@ -78,7 +92,7 @@ export function parsePoints(input: string): PointsParsed | null {
     const inner = s.slice(1, -1);
     const parts = splitTopLevel(inner);
     // Tuple of explicit points -> polyline: ((x1,y1),(x2,y2),…)
-    if (parts.length >= 1 && parts.every((p) => p.startsWith('('))) {
+    if (parts.length >= 1 && parts.every(isWrapped)) {
       return { points: parts.map(parseOnePoint), polyline: parts.length > 1, scattered: false };
     }
     // 3+ bare identifiers -> polyline through point-variables: (A, B, C)

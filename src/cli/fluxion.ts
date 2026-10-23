@@ -1,6 +1,7 @@
 import { checkSpec, type CheckReport } from '../lib/api/check';
 import { buildLink, linkToSpec, DEFAULT_BASE_URL, type LinkFormat } from '../lib/api/url';
 import type { FluxionSpec, Issue } from '../lib/api/spec';
+import { exampleSpec, listExamples } from '../lib/api/examples';
 
 /**
  * Command-line client for the Fluxion URL API, using the app's real parser so
@@ -27,6 +28,8 @@ Usage:
   fluxion link   [SPEC] [options]   Validate a graph and print a shareable link
   fluxion check  [SPEC] [options]   Print a JSON report: how each expression parses + problems
   fluxion decode URL                Print the JSON spec carried by a Fluxion link
+  fluxion examples                  List the built-in scripted demos and their links
+  fluxion example ID                Print a demo's JSON spec, a template to edit
   fluxion help
 
 SPEC is a JSON spec as a file path, "-" for stdin, or inline JSON ('{"expressions":[…]}').
@@ -176,6 +179,23 @@ export async function runCli(argv: string[], io: CliIO): Promise<number> {
           return 2;
         }
         io.out(JSON.stringify(d.spec, null, 2));
+        return 0;
+      }
+      case 'examples': {
+        for (const ex of listExamples(p.base)) io.out(`${ex.id.padEnd(10)} ${ex.title}\n           ${ex.blurb}\n           ${ex.link}`);
+        return 0;
+      }
+      case 'example': {
+        const id = p.positional[0];
+        if (!id) throw new UsageError('example needs an id (see: fluxion examples)');
+        const known = listExamples(p.base).find((e) => e.id === id);
+        if (!known) throw new UsageError(`no example "${id}" (see: fluxion examples)`);
+        const spec = exampleSpec(id);
+        if (!spec) {
+          io.err(`"${id}" carries an imported clip, so it has no JSON spec; open it with ${known.link}`);
+          return 2;
+        }
+        io.out(JSON.stringify(spec, null, 2));
         return 0;
       }
       default:

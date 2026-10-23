@@ -136,7 +136,8 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
     const body = parsed.kind === 'repeat' ? parsed.body : parsed;
     const isPolar =
       body.kind === 'polar' || body.kind === 'parametric' || (body.kind === 'inequality' && body.polar);
-    const isPoint = parsed.kind === 'points' || parsed.kind === 'pointvar';
+    // A repeated point list is still points (the cube's vertices, the mandala's seeds).
+    const isPoint = body.kind === 'points' || body.kind === 'pointvar';
     const misplaced: [boolean, string, string][] = [
       [entry.t0 !== undefined || entry.ic !== undefined, 't0/ic', 'ODEs'],
       [

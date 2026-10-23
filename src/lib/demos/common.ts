@@ -43,8 +43,11 @@ export function graph(entries: Entry[], viewport: Viewport, assets?: Record<stri
   };
 }
 
-/** A circle as a parametric entry string. */
+/** A circle as a parametric entry string. A compound radius is parenthesised
+ * (with an explicit `*`, since a leading `((` would read as nested points), so
+ * `circle('0.5 + k')` scales cos/sin instead of offsetting them. */
 export const circle = (r: number | string, cx: number | string = 0, cy: number | string = 0) => {
   const off = (c: number | string) => (c === 0 ? '' : ` + ${c}`);
-  return `(${r} cos(t)${off(cx)}, ${r} sin(t)${off(cy)})`;
+  const rr = typeof r === 'string' && /[+\-]/.test(r.trim().replace(/^-/, '')) ? `(${r})*` : `${r} `;
+  return `(${rr}cos(t)${off(cx)}, ${rr}sin(t)${off(cy)})`;
 };
