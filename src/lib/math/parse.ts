@@ -1,6 +1,7 @@
 import { parse as mjParse, derivative, simplify, type MathNode } from 'mathjs';
 import { normalizeInput } from './normalize';
 import { parsePoints, looksLikePoints, type PointSpec } from './points';
+import { KNOWN_FUNCTIONS } from './builtins';
 
 /**
  * Parsing & classification of a single sidebar entry.
@@ -485,7 +486,9 @@ function parseRelation(lhs: string, rhs: string, F: MathNode, raw: string): Pars
         const node = mjParse(rhs);
         const deps = [...freeSymbols(node)];
         const depsNoT = deps.filter((s) => s !== INDEP);
-        if (!deps.includes(INDEP) && depsNoT.length === 0) {
+        // Only evaluate calls to known functions (links are untrusted input).
+        const safe = [...calledFunctions(node)].every((f) => KNOWN_FUNCTIONS.has(f));
+        if (safe && !deps.includes(INDEP) && depsNoT.length === 0) {
           const value = (node as unknown as { evaluate: () => unknown }).evaluate();
           if (typeof value === 'number' && Number.isFinite(value)) {
             return { kind: 'variable', name: lhs, value, raw };
