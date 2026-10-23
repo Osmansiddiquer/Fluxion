@@ -449,6 +449,6 @@ npm run fluxion -- script pendulum.js --spec spec.json           # ... reading t
 ## Behaviour and limits
 
 - Opening a link replaces the graph in that browser tab. The user's previous graph is only kept elsewhere if they saved or shared it. The URL is cleaned up after loading.
-- Limits: a script of at most 100,000 characters; at most 100 expressions, 1000 characters per expression, 10 initial conditions, |numbers| ≤ 1e9, a θ-range of at most 50 turns, and 200 KB of JSON.
+- Limits: a script of at most 100,000 characters; at most 300 expressions, 3000 characters per expression, 600 characters per colour expression, 10 initial conditions, |numbers| ≤ 1e9, a θ-range of at most 50 turns, and 1 MB of JSON.
 - A bad link never shows a blank page: Fluxion keeps the current graph and shows the problem. Expressions that don't parse still load, shown with an error mark so the user can fix them.
 - In the app, the share menu has "Copy share link" and "Copy as JSON spec". Users can paste the JSON to an assistant, which edits it and returns a new link.

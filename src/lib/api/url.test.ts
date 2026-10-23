@@ -17,6 +17,7 @@ import {
   splitParams,
   stripApiParams,
   textToBase64Url,
+  MAX_PAYLOAD_CHARS,
 } from './url';
 import { validateSpec, type FluxionSpec } from './spec';
 import { encodeGraph, makeGraph } from '../graphFile';
@@ -220,7 +221,7 @@ describe('readUrlPayload', () => {
     }
   });
   it('refuses absurdly long payloads', async () => {
-    const r = await readUrlPayload('#spec=' + 'a'.repeat(400_000), '');
+    const r = await readUrlPayload('#spec=' + 'a'.repeat(MAX_PAYLOAD_CHARS + 1), '');
     expect(r).toMatchObject({ kind: 'error', message: expect.stringMatching(/too long/) });
   });
   it('keeps legacy #g= share links working', async () => {

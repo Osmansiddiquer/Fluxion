@@ -333,7 +333,7 @@ strips them; bad links show an error toast and keep the current graph.
 - **Untrusted input**: specs never reach anything but the mathjs pipeline, and calls to
   functions outside `KNOWN_FUNCTIONS` are never *evaluated* (guards in `parse.ts`
   variable branch, `compute.ts` pointvar resolution, `evalConstant`). Legacy graphs go
-  through `sanitizeGraph`. Limits live in `LIMITS` (100 exprs, θ-span ≤ 50 turns, …).
+  through `sanitizeGraph`. Limits live in `LIMITS` (300 exprs × 3000 chars, colour exprs 600, 1 MB of spec JSON, θ-span ≤ 50 turns, …).
   The scripting layer follows the same rule: user-function bodies and derived values
   may only call `KNOWN_FUNCTIONS` + the graph's own functions (`scope.ts`), and colour
   expressions only built-ins, colour constructors and user functions (`evalColor`).

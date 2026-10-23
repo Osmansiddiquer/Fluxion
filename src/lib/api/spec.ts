@@ -35,9 +35,9 @@ export const SPEC_VERSION = 1;
 
 export const LIMITS = {
   /** Max expressions in one graph. Each one is sampled on every recompute. */
-  maxExpressions: 100,
+  maxExpressions: 300,
   /** Max characters in one expression. */
-  maxExprLength: 1000,
+  maxExprLength: 3000,
   maxLabelLength: 100,
   /** Max initial-condition values (= ODE order). */
   maxIcLength: 10,
@@ -49,13 +49,13 @@ export const LIMITS = {
   /** Max length of a constant-expression string such as "2*pi". */
   maxConstLength: 100,
   /** Max serialized spec size accepted from a link / file (bytes of JSON). */
-  maxSpecBytes: 200_000,
+  maxSpecBytes: 1_000_000,
   /** Slider play speed (1 = a full sweep in ~4 s). Tiny speeds play long clips in real time. */
   minSpeed: 1e-4,
   maxSpeed: 100,
   /** Stroke width in px, and max length of a colour expression like "hsv(360*a, 1, 1)". */
   maxLineWidth: 20,
-  maxColorExprLength: 200,
+  maxColorExprLength: 600,
   /** Frame-sequence assets carried by a graph file (imported clips). */
   maxAssets: 8,
   maxAssetChars: 8_000_000,

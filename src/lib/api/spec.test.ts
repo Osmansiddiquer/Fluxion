@@ -217,7 +217,7 @@ describe('validateSpec — rejects with helpful errors', () => {
   });
   it('size limits', () => {
     expect(msgs({ expressions: new Array(LIMITS.maxExpressions + 1).fill('y=x') })).toMatch(/too many expressions/);
-    expect(msgs({ expressions: ['y=' + 'x+'.repeat(600) + 'x'] })).toMatch(/too long/);
+    expect(msgs({ expressions: ['y=' + 'x+'.repeat(LIMITS.maxExprLength / 2) + 'x'] })).toMatch(/too long/);
     expect(msgs({ expressions: [{ expr: '(1,2)', label: 'x'.repeat(101) }] })).toMatch(/too long/);
     expect(msgs({ expressions: [{ expr: 'y=x', t0: '1+'.repeat(60) + '1' }] })).toMatch(/too long/);
   });

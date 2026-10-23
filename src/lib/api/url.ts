@@ -29,7 +29,7 @@ import {
 export const DEFAULT_BASE_URL = 'https://osmansiddiquer.github.io/Fluxion/';
 
 /** Largest URL payload we'll even try to decode (characters). */
-export const MAX_PAYLOAD_CHARS = 300_000;
+export const MAX_PAYLOAD_CHARS = 1_400_000;
 
 export type LinkFormat = 'z' | 'json' | 'b64' | 'params';
 

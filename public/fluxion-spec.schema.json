@@ -11,7 +11,7 @@
     "version": { "const": 1, "description": "Spec format version." },
     "expressions": {
       "type": "array",
-      "maxItems": 100,
+      "maxItems": 300,
       "description": "One entry per row in the app, in order.",
       "items": {
         "oneOf": [{ "$ref": "#/$defs/exprString" }, { "$ref": "#/$defs/expression" }]
@@ -63,7 +63,7 @@
   "$defs": {
     "exprString": {
       "type": "string",
-      "maxLength": 1000,
+      "maxLength": 3000,
       "description": "Plain-text expression, e.g. \"y = sin(x)\", \"y'' = -y\", \"k = 2\", \"x^2 + y^2 = 9\", \"r = 1 + cos(theta)\", \"y < x\", \"(1, 2)\", \"(cos(t), sin(t))\", \"f(u) = u^2\", \"(k, k^2) for k = 0..3\"."
     },
     "number": {
@@ -118,8 +118,8 @@
         "lineStyle": { "enum": ["solid", "dashed", "dotted"], "description": "Stroke dash style." },
         "fill": { "type": "boolean", "description": "Fill closed shapes (parametric, polar, polygons; inequalities fill by default)." },
         "fillOpacity": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fill opacity (default 0.4 for shapes, 0.16 for regions)." },
-        "colorExpr": { "type": "string", "maxLength": 200, "description": "Colour expression over sliders, overriding color: rgb(r,g,b) 0-255, rgba(r,g,b,a), hsv(h,s,v) / hsl(h,s,l) with h in degrees, e.g. \"hsv(360*a, 0.8, 1)\"." },
-        "fillColor": { "type": "string", "maxLength": 200, "description": "Fill colour (hex or colour expression); defaults to the line colour." },
+        "colorExpr": { "type": "string", "maxLength": 600, "description": "Colour expression over sliders, overriding color: rgb(r,g,b) 0-255, rgba(r,g,b,a), hsv(h,s,v) / hsl(h,s,l) with h in degrees, e.g. \"hsv(360*a, 0.8, 1)\"." },
+        "fillColor": { "type": "string", "maxLength": 600, "description": "Fill colour (hex or colour expression); defaults to the line colour." },
         "autoplay": { "type": "boolean", "description": "Slider: start playing when the graph opens." }
       }
     }
