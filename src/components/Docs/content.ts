@@ -229,7 +229,7 @@ const curves: DocSection = {
 const odes: DocSection = {
   id: 'odes',
   title: 'Differential equations',
-  summary: 'First and higher order ODEs, systems, typed initial and boundary conditions, step and impulse forcing, solvers and steps.',
+  summary: 'First and higher order ODEs, systems, typed initial and boundary conditions, slope fields, the phase plane, equilibria, families, step and impulse forcing, solvers and steps.',
   blocks: [
     P(
       'Type an ODE and Fluxion solves it numerically (fourth-order Runge–Kutta), forwards and backwards from $t_0$ across the whole visible range. The solution is redrawn as you pan, zoom or change a slider.',
@@ -309,6 +309,86 @@ const odes: DocSection = {
         L("F' = F*(R/3 - 1)", 'ode', { ic: [1], expanded: true }),
       ],
       viewport: { tMin: -1, tMax: 20, yMin: -1, yMax: 7 },
+    }),
+    H('Slope fields'),
+    P(
+      'A first-order equation $y\' = f(t, y)$ draws its **slope field** behind the solution: a short faint segment with slope $f$ at each grid point, in the equation’s colour. Every solution runs along the segments, so the field shows the whole family at once. The grid follows the zoom. The graph’s first first-order equation gets a field automatically; expand its row (▸) to switch it off with **Slope field**, or on for another row.',
+    ),
+    LIST(
+      '**Drag the ring** at $(t_0, y_0)$ on the graph to move the initial condition; the sliders follow.',
+      '**Shift-click** anywhere on the plot to add another solution through that point, drawn thinner in the same colour, without a new row. **Clear extra solutions** in the row removes them.',
+      'In a JSON spec or link, `"field": false` hides a field and `"extraICs": [[t0, y0], …]` adds solutions (see [For AI agents](#agents)).',
+    ),
+    EX({
+      id: 'slope-field',
+      title: 'Logistic slope field',
+      blurb: 'The field of y′ = y(1 − y) with three solutions: every one heads to y = 1 or away from y = 0.',
+      tex: "y' = y(1 - y)",
+      lines: [L("y' = y*(1 - y)", 'ode', { ic: [0.1], expanded: true, extraICs: [[0, 1.6], [0, -0.05]] })],
+      viewport: { tMin: -4, tMax: 6, yMin: -1.5, yMax: 2.5 },
+    }),
+    H('Phase plane'),
+    P(
+      'A system of two equations, or a second-order equation read as $(y, y\')$, can be drawn in **state space** instead of against t. Expand its first row and set **Plot** to **phase**:',
+    ),
+    LIST(
+      'The trajectory is drawn as a curve in the plane of the two state variables, and the axes are labelled with them.',
+      'A faint, normalised **vector field** and the dashed **nullclines** (long dashes where the horizontal rate is 0, dots where the vertical one is) are drawn when the system doesn’t use t. **Field & nullclines** switches them.',
+      'The solution is integrated over $t_0 - 30 \ldots t_0 + 30$, whatever part of the plane you look at. The side panels still show each component against t, and the right panel’s cut appears as a dot on the trajectory.',
+      'Only that system changes coordinates: other rows keep their meaning (x across, y up), so `y = x` is still a line, now in the phase plane.',
+      'For a 3-D system such as Lorenz, **Axes** picks which two variables to plot.',
+    ),
+    EX({
+      id: 'phase-lotka-volterra',
+      title: 'Predator–prey phase portrait',
+      blurb: 'Lotka–Volterra in the phase plane: closed orbits around a centre, with the nullclines and a saddle at the origin.',
+      lines: [
+        L("x' = x*(1 - y)", 'ode', { ic: [2], phase: true, expanded: true, extraICs: [[0, 1.5, 1], [0, 3, 1]] }),
+        L("y' = y*(x - 1)", 'ode', { ic: [1] }),
+      ],
+      viewport: { tMin: -1, tMax: 5, yMin: -1, yMax: 3.5 },
+    }),
+    EX({
+      id: 'phase-pendulum',
+      title: 'Pendulum phase plane',
+      blurb: 'y″ = −sin y as (y, y′): centres at 2kπ, saddles at odd multiples of π and the separatrix between swinging and spinning.',
+      lines: [
+        L("y'' = -sin(y)", 'ode', { ic: [2, 0], phase: true, expanded: true, extraICs: [[0, 0, 2], [0, -6.2, 2.2], [0, 0, 2.6]] }),
+      ],
+      viewport: { tMin: -7, tMax: 7, yMin: -3.5, yMax: 3.5 },
+    }),
+    H('Equilibria and stability'),
+    P(
+      'Equations that don’t use t (autonomous) have their **equilibria** marked and classified. For one equation against t they are the constant solutions $y = c$, drawn as faint dashed lines; in the phase plane they are points, classified by the eigenvalues of the Jacobian (computed symbolically, numerically when that fails). Hover a marker to read its type, eigenvalues and Jacobian. Turn them off with **Equilibria** in the Points menu.',
+    ),
+    TABLE(
+      ['Marker', 'Meaning'],
+      ['Filled dot', 'Stable: nearby solutions approach it (a stable node or spiral; for $y\' = f(y)$, $f$ changes sign from + to −)'],
+      ['Hollow dot', 'Unstable: nearby solutions move away (an unstable node or spiral)'],
+      ['Half-filled dot', 'A saddle (in the plane), or semi-stable (one side approaches, the other leaves)'],
+      ['Ring with a centre dot', 'A centre: closed orbits around it (the linearisation’s eigenvalues are purely imaginary)'],
+      ['Dashed ring', 'Degenerate: a zero eigenvalue, so the linearisation can’t decide'],
+    ),
+    EX({
+      id: 'equilibria-1d',
+      title: 'Stable, unstable and semi-stable',
+      blurb: 'y′ = y²(1 − y): y = 1 is stable, and y = 0 is semi-stable (solutions approach it from below and leave above).',
+      lines: [L("y' = y^2*(1 - y)", 'ode', { ic: [0.4], expanded: true, extraICs: [[0, -0.6], [0, 1.8]] })],
+      viewport: { tMin: -4, tMax: 8, yMin: -1.5, yMax: 2.5 },
+    }),
+    H('Families of solutions'),
+    P(
+      'A slider that a function or ODE uses has a **family** button (the fan icon under it). It draws 7 ghost curves for values spread across the slider’s range, from a pale tint to the full colour, so you see how the solution changes with the parameter: under-, critically- and over-damped at once.',
+    ),
+    EX({
+      id: 'damping-family',
+      title: 'A damping family',
+      blurb: 'y″ = −c·y′ − y for c from 0 to 3; drag c to pick one out.',
+      lines: [
+        L('c = 0.5', 'variable', { varMin: 0, varMax: 3, family: true, expanded: true }),
+        L("y'' = -c*y' - y", 'ode', { ic: [1, 0] }),
+      ],
+      viewport: { tMin: -1, tMax: 12, yMin: -1.5, yMax: 1.5 },
     }),
     H('Step and impulse forcing'),
     P(
@@ -476,6 +556,7 @@ const inspect: DocSection = {
       ['Intersections', 'Where two curves meet'],
       ['Discontinuities', 'Removable holes, drawn as hollow dots (asymptotes are just gaps)'],
       ['Endpoints', 'Where a curve stops, e.g. sqrt(x) at 0 (off by default)'],
+      ['Equilibria', 'Fixed points of ODEs that don’t use t, with their stability (only listed when the graph has an ODE; see [Differential equations](#odes))'],
     ),
     EX({
       id: 'markers',
@@ -502,6 +583,17 @@ const inspect: DocSection = {
     P(
       'The cut position can be an expression of your sliders: type `k` into the header and the cut follows the `k` slider (handy while it plays).',
     ),
+    P(
+      '**Numerical vs exact.** When an ODE row and a function row agree at the right panel’s cut (within 5%), the panel shows their difference in a small footer: type the exact solution as its own row to read the solver’s error.',
+    ),
+    EX({
+      id: 'analytic-error',
+      title: 'Compare with the exact solution',
+      blurb: 'y′ = −y from y(0) = 1 and its exact solution e^(−x): the right panel reads their difference at x = 2 (tiny: RK4 is very accurate on this equation).',
+      lines: [L("y' = -y", 'ode', { ic: [1] }), L('y = e^(-x)', 'function', { lineStyle: 'dashed' })],
+      viewport: { tMin: -1, tMax: 5, yMin: -0.5, yMax: 2.5 },
+      projections: { rightOpen: true, bottomOpen: false, sliceT: 2, sliceY: 1 },
+    }),
     EX({
       id: 'cross-sections',
       title: 'Reading a family of curves',

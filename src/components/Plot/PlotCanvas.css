@@ -201,3 +201,20 @@
   right: auto;
   bottom: auto;
 }
+
+/* Equilibrium tooltips carry eigenvalues / Jacobian on extra lines. */
+.plot-tooltip.tt-rich {
+  flex-wrap: wrap;
+  max-width: 280px;
+  row-gap: 3px;
+}
+.tt-lines {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  color: var(--text-muted);
+  font-family: var(--mono);
+  font-size: 11px;
+  white-space: nowrap;
+}

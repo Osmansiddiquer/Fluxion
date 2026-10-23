@@ -865,6 +865,74 @@ math-field.math-field::part(virtual-keyboard-toggle) {
   line-height: 1;
 }
 
+/* ODE view switches (OdeViewControls): under the IVP sliders ------------- */
+.ode-view {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin-top: -5px;
+  padding: 0 14px 12px 42px;
+}
+.ode-view-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+}
+.ode-view-label {
+  flex: 0 0 auto;
+  min-width: 52px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+.ode-view-row .seg {
+  flex: 0 1 150px;
+}
+.ode-axes {
+  display: flex;
+  gap: 6px;
+}
+.ode-axes .adv-select {
+  width: 64px;
+}
+.ode-clear {
+  font-size: 12px;
+  color: var(--accent);
+  padding: 2px 0;
+}
+.ode-clear:hover {
+  text-decoration: underline;
+}
+.ode-hint,
+.ode-note {
+  font-size: 11px;
+  color: var(--text-faint);
+  line-height: 1.35;
+}
+@media (hover: none) {
+  .ode-hint {
+    display: none;
+  }
+}
+
+/* Family toggle on a variable slider (draws ghost solutions across the range). */
+.family-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+}
+.family-btn:hover {
+  background: var(--surface-2);
+  color: var(--text);
+}
+.family-btn.on {
+  background: var(--accent-soft, var(--surface-2));
+  color: var(--accent);
+}
 /* ODE numerics (IVPControls): Conditions switch, typed conditions, the
    collapsed Numerics disclosure (solver, Show steps). ------------------------ */
 .num-label {

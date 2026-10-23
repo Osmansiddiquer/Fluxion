@@ -11,7 +11,7 @@ import { buildSystem } from './math/reduce';
 import { compileNode } from './math/compileCache';
 import { KNOWN_FUNCTIONS } from './math/builtins';
 import type { Trajectory } from './solver/integrate';
-import { applyOdeNotation, resolveGroupSetup, runGroup, type OdeNumerics } from './solver/odeGroup';
+import { applyOdeNotation, forcing, resolveGroupSetup, runGroup, type OdeNumerics } from './solver/odeGroup';
 import { sampleFunction } from './solver/sample';
 import { sampleImplicit } from './solver/implicit';
 import { EMPTY_CURVE, type Point, type SampledCurve } from './solver/curve';
@@ -20,6 +20,8 @@ import { boxOutside, parametricBox, polarBox } from './math/bounds';
 import { specNodes, type PointSpec } from './math/points';
 import { PathBuilder, flattenOps, type Pt } from './geom/path';
 import { getFrameSequence } from './frames/assets';
+import { buildOdeInfo, familyGhosts, pruneOdeCaches, type Ghost, type OdeInfo, type SolvedGroup } from './ode/overlays';
+import { groupLeader, groupView, phaseRange, PHASE_SAMPLES } from './ode/view';
 import type { Entry, Viewport } from '../store/types';
 
 export interface CurveResult {
@@ -52,6 +54,10 @@ export interface CurveResult {
   /** Smooth point paths: the exact path as ops (lib/geom/path, Script mode's
    * format) in data coordinates; `curve` holds its flattened polyline. */
   path?: number[];
+  /** ODE qualitative view: phase plane, field, equilibria, extra solutions (lib/ode). */
+  ode?: OdeInfo;
+  /** Parameter-family ghost curves (a slider's `family` switch). */
+  ghosts?: Ghost[];
   /** ODE: conditions used, solver, shown steps (lib/solver/odeGroup). */
   numerics?: OdeNumerics;
 }
@@ -79,6 +85,7 @@ const ODE_GROUP_CACHE = new Map<
     curves: Map<string, SampledCurve>;
     errors: Map<string, string>;
     numerics: Map<string, OdeNumerics>;
+    solved?: SolvedGroup;
   }
 >();
 
@@ -93,6 +100,11 @@ export function entrySamples(entry: Entry): number | undefined {
   const n = entry.samples;
   if (typeof n !== 'number' || !Number.isFinite(n)) return undefined;
   return Math.round(Math.min(MAX_SAMPLES, Math.max(MIN_SAMPLES, n)));
+}
+
+/** The initial point comes from typed conditions or a boundary-value solve. */
+function icLocked(n: OdeNumerics | undefined): boolean {
+  return !!n && (n.typedT0 || n.typedIc.some(Boolean) || !!n.bvp);
 }
 
 function extractComponent(traj: Trajectory, idx: number): SampledCurve {
@@ -687,6 +699,7 @@ export function computeAll(
 
   const odeCurve = new Map<string, SampledCurve>();
   const odeError = new Map<string, string>();
+  const solvedGroups: SolvedGroup[] = [];
   const odeNumerics = new Map<string, OdeNumerics>();
   for (const idxs of groups.values()) {
     const members = idxs.map((i) => odes[i]);
@@ -704,24 +717,62 @@ export function computeAll(
     const fnSig = members.some((m) => callsUser(m.parsed)) ? ectx.fnKey : '';
     // Typed conditions, boundary mode, solver and shown steps (resolved numbers).
     const setup = resolveGroupSetup(members, condRows, scope, entries, fnNames);
-    const gkey = `${memberSig}|${depSig}|${tMin}|${tMax}|${samples}|${fnSig}|${setup.key}`;
+    // Phase plane: integrate a fixed window around t0 (the axes are state
+    // variables, so the viewport's x-range isn't a time range).
+    const view = groupView(
+      members.map((m) => m.entry),
+      members.flatMap((m) => m.parsed.stateSymbols),
+    );
+    const range = view.phase ? phaseRange(setup.bvp ? setup.bvp.a : setup.t0) : { tMin, tMax };
+    const steps = view.phase ? PHASE_SAMPLES : samples;
+    const gkey = `${memberSig}|${depSig}|${range.tMin}|${range.tMax}|${steps}|${fnSig}|${setup.key}|${view.key}`;
     const cached = ODE_GROUP_CACHE.get(cacheId);
     if (cached && cached.key === gkey) {
       for (const [id, c] of cached.curves) odeCurve.set(id, c);
       for (const [id, e] of cached.errors) odeError.set(id, e);
       for (const [id, n] of cached.numerics) odeNumerics.set(id, n);
+      // Non-key fields (extra solutions, field switch) are read from the live entries.
+      if (cached.solved) {
+        solvedGroups.push({
+          ...cached.solved,
+          entries: members.map((m) => m.entry),
+          leaderId: groupLeader(members.map((m) => m.entry), entries).id,
+        });
+      }
       continue;
     }
+    let solved: SolvedGroup | undefined;
     const curves = new Map<string, SampledCurve>();
     const errors = new Map<string, string>();
     const numerics = new Map<string, OdeNumerics>();
     try {
       const system = buildSystem(members.map((m) => m.parsed), scope);
-      const run = runGroup(system, members, setup, scope, { tMin, tMax, samples });
+      const run = runGroup(system, members, setup, scope, { tMin: range.tMin, tMax: range.tMax, samples: steps });
       system.blocks.forEach((block, b) => {
         curves.set(members[b].entry.id, extractComponent(run.traj, block.offset));
         numerics.set(members[b].entry.id, run.numerics[b]);
       });
+      // The initial point actually used (typed conditions / shooting applied).
+      const y0 = run.numerics.flatMap((n) => n.ic);
+      solved = {
+        entries: members.map((m) => m.entry),
+        parsed: members.map((m) => m.parsed),
+        system,
+        traj: run.traj,
+        t0: run.numerics[0]?.t0 ?? setup.t0,
+        y0,
+        method: setup.method,
+        forcing: forcing(system, members, scope),
+        leaderId: groupLeader(members.map((m) => m.entry), entries).id,
+        view,
+        range,
+        steps,
+        rawSig: members.map((m) => `${m.entry.id}:${m.entry.raw}`).join(';'),
+        depSig: `${depSig}|${fnSig}`,
+        deps: [...groupDeps],
+        callsUser: !!fnSig,
+        scope,
+      };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       for (const i of idxs) errors.set(odes[i].entry.id, msg);
@@ -729,8 +780,11 @@ export function computeAll(
     for (const [id, c] of curves) odeCurve.set(id, c);
     for (const [id, e] of errors) odeError.set(id, e);
     for (const [id, n] of numerics) odeNumerics.set(id, n);
-    ODE_GROUP_CACHE.set(cacheId, { key: gkey, curves, errors, numerics });
+    ODE_GROUP_CACHE.set(cacheId, { key: gkey, curves, errors, numerics, solved });
+    if (solved) solvedGroups.push(solved);
   }
+  // Phase plane, field, equilibria, extra solutions (cached in lib/ode/overlays).
+  const odeInfo = buildOdeInfo(solvedGroups, { entries, viewport, samples });
 
   // The set of names defined anywhere folds into each entry's cache key, so a
   // definition appearing/disappearing elsewhere invalidates the cached curve.
@@ -846,7 +900,16 @@ export function computeAll(
           const err = odeError.get(entry.id);
           if (err) return { parsed, curve: EMPTY_CURVE, error: err };
           const numerics = odeNumerics.get(entry.id);
-          return { parsed, curve: odeCurve.get(entry.id) ?? EMPTY_CURVE, ...(numerics ? { numerics } : {}) };
+          let ode = odeInfo.get(entry.id);
+          // Typed conditions / boundary values fix the start: no draggable IC ring
+          // (a drag would write ic that the typed conditions override).
+          if (ode?.ic && ode.groupIds.some((id) => icLocked(odeNumerics.get(id)))) ode = { ...ode, ic: undefined };
+          return {
+            parsed,
+            curve: odeCurve.get(entry.id) ?? EMPTY_CURVE,
+            ...(numerics ? { numerics } : {}),
+            ...(ode ? { ode } : {}),
+          };
         }
         const sctx: SampleCtx = {
           entry,
@@ -894,8 +957,30 @@ export function computeAll(
     }
   }
 
+  // Parameter families: ghost curves for sliders with `family` on.
+  if (parsedList.some((p) => p.entry.family && p.parsed.kind === 'variable')) {
+    const ghosts = familyGhosts({
+      parsedList,
+      ectx,
+      groups: solvedGroups,
+      viewport,
+      samples,
+      definedKey,
+      ownSamples: entrySamples,
+      drawable: (id) => {
+        const r = results.get(id);
+        return !!r && !r.error && !r.undefinedVars?.length && !r.unknownFns?.length;
+      },
+    });
+    for (const [id, list] of ghosts) {
+      const r = results.get(id);
+      if (r) results.set(id, { ...r, ghosts: list });
+    }
+  }
+
   // Drop cache slots for entries that no longer exist, keeping the maps bounded.
   const liveIds = new Set(entries.map((e) => e.id));
+  pruneOdeCaches(liveIds);
   for (const id of [...RESULT_CACHE.keys()]) if (!liveIds.has(id)) RESULT_CACHE.delete(id);
   for (const gid of [...ODE_GROUP_CACHE.keys()]) {
     if (gid.split('+').some((id) => !liveIds.has(id))) ODE_GROUP_CACHE.delete(gid);

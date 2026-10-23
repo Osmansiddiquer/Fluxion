@@ -8,6 +8,7 @@ import { isColorExpr } from '../color';
 import { SCRIPT_LIMITS } from '../script/protocol';
 import { BLEND_MODES } from '../style';
 import { entriesAtTime } from '../anim';
+import { MAX_EXTRA_ICS } from '../ode/view';
 import { SOLVER_METHODS, type SolverMethod } from '../solver/integrate';
 import { STEP_METHODS, MIN_STEP_SIZE, MAX_STEP_SIZE, type StepMethod } from '../solver/methods';
 import type {
@@ -78,6 +79,9 @@ export const LIMITS = {
   maxTime: 1e6,
   /** Script mode program (JavaScript, run sandboxed). */
   maxScriptChars: SCRIPT_LIMITS.maxCodeChars,
+  /** ODE extra solutions per row (shift-click), and length of a state name. */
+  maxExtraICs: MAX_EXTRA_ICS,
+  maxStateName: 24,
 } as const;
 
 export type DragMode = NonNullable<Entry['pointDrag']>;
@@ -130,6 +134,17 @@ export interface ExpressionSpec {
   blur?: number;
   /** Name of a `name = layer(…)` row this expression is drawn on. */
   layer?: string;
+  /** ODE view (all optional; the equation decides what applies). */
+  /** Slope / direction field (+ nullclines in the phase plane); unset = automatic. */
+  field?: boolean;
+  /** Draw the ODE's coupled system in the phase plane (state space) instead of against t. */
+  phase?: boolean;
+  /** Phase-plane axes for a 3+-D state, as state names: ["x", "z"], ["y", "y'"]. */
+  phaseAxes?: [string, string];
+  /** Extra solutions: each [t0, y0, y0', …] — the group's whole state at t0. */
+  extraICs?: NumLike[][];
+  /** Slider: draw a family of ghost solutions for values across its range. */
+  family?: boolean;
   /** ODE numerics: the integrator (default "rk4"). */
   solver?: SolverMethod;
   /** ODE: draw the steps of Euler / Heun / RK4 with step size `h` over the solution. */
@@ -208,6 +223,11 @@ export interface NormalizedExpression {
   glow?: number;
   blur?: number;
   layer?: string;
+  field?: boolean;
+  phase?: boolean;
+  phaseAxes?: [string, string];
+  extraICs?: number[][];
+  family?: boolean;
   solver?: SolverMethod;
   steps?: StepMethod;
   h?: number;
@@ -320,6 +340,11 @@ export const EXPRESSION_KEYS = [
   'glow',
   'blur',
   'layer',
+  'field',
+  'phase',
+  'phaseAxes',
+  'extraICs',
+  'family',
   'solver',
   'steps',
   'h',
@@ -327,8 +352,13 @@ export const EXPRESSION_KEYS = [
   'bc',
 ] as const;
 export const VIEWPORT_KEYS = ['xmin', 'xmax', 'ymin', 'ymax'] as const;
-/** Feature toggles a spec may set; `grid` (grid lines + axes) defaults to shown. */
-export const FEATURE_KEYS = [...Object.keys(DEFAULT_FEATURES), 'grid'] as ToggleKey[];
+/** Feature toggles a spec may set; `grid` (grid lines + axes) and `equilibria`
+ * (ODE fixed points) are optional and default to shown. */
+export const FEATURE_KEYS = [...Object.keys(DEFAULT_FEATURES), 'grid', 'equilibria'] as ToggleKey[];
+/** Optional toggles whose absence means "shown". */
+export const DEFAULT_ON_FEATURES: readonly ToggleKey[] = ['grid', 'equilibria'];
+/** A state name in phaseAxes: an identifier with optional primes ("x", "y'"). */
+export const STATE_NAME = /^[A-Za-z]\w*'*$/;
 export const PANEL_KEYS = ['right', 'bottom', 'sliceX', 'sliceY'] as const;
 
 /** Common mistakes → the key that was probably meant. */
@@ -362,6 +392,15 @@ const KEY_ALIASES: Record<string, string> = {
   colorexpression: 'colorExpr',
   fillcolour: 'fillColor',
   play: 'autoplay',
+  slopefield: 'field',
+  directionfield: 'field',
+  vectorfield: 'field',
+  phaseplane: 'phase',
+  axes: 'phaseAxes',
+  solutions: 'extraICs',
+  extra: 'extraICs',
+  extras: 'extraICs',
+  sweep: 'family',
   tmin: 'xmin',
   tmax: 'xmax',
   left: 'xmin',
@@ -673,6 +712,38 @@ function validateExpression(
     } else out.layer = obj.layer;
   }
 
+  for (const k of ['field', 'phase', 'family'] as const) {
+    if (obj[k] !== undefined) out[k] = c.bool(obj[k], `${path}.${k}`);
+  }
+  if (obj.phaseAxes !== undefined) {
+    const a = obj.phaseAxes;
+    if (
+      !Array.isArray(a) ||
+      a.length !== 2 ||
+      !a.every((x) => typeof x === 'string' && x.length <= LIMITS.maxStateName && STATE_NAME.test(x.trim().replace(/′/g, "'")))
+    ) {
+      c.error(`${path}.phaseAxes`, `must be two state names like ["x", "z"] or ["y", "y'"], got ${describe(a)}`);
+    } else if (a[0].trim() === a[1].trim()) c.error(`${path}.phaseAxes`, 'must name two different state variables');
+    else out.phaseAxes = [a[0].trim().replace(/′/g, "'"), a[1].trim().replace(/′/g, "'")];
+  }
+  if (obj.extraICs !== undefined) {
+    const list = obj.extraICs;
+    if (!Array.isArray(list) || !list.every(Array.isArray)) {
+      c.error(`${path}.extraICs`, `must be a list of [t0, y0, …] arrays like [[0, 2], [0, -1]], got ${describe(list)}`);
+    } else if (list.length > LIMITS.maxExtraICs) {
+      c.error(`${path}.extraICs`, `at most ${LIMITS.maxExtraICs} extra solutions`);
+    } else {
+      const vals = (list as unknown[][]).map((ic, i) => {
+        if (ic.length < 2 || ic.length > LIMITS.maxIcLength + 1) {
+          c.error(`${path}.extraICs[${i}]`, `must be [t0, y0, …] with 2 to ${LIMITS.maxIcLength + 1} numbers`);
+          return undefined;
+        }
+        const nums = ic.map((v, j) => c.num(v, `${path}.extraICs[${i}][${j}]`));
+        return nums.every((v): v is number => v !== undefined) ? nums : undefined;
+      });
+      if (vals.every((v): v is number[] => v !== undefined)) out.extraICs = vals;
+    }
+  }
   // ODE numerics.
   if (obj.solver !== undefined) out.solver = c.oneOf(obj.solver, SOLVER_METHODS, `${path}.solver`);
   if (obj.steps !== undefined) out.steps = c.oneOf(obj.steps, STEP_METHODS, `${path}.steps`);
@@ -914,6 +985,11 @@ export function specToGraph(spec: NormalizedSpec): GraphData {
     if (e.glow !== undefined) entry.glow = e.glow;
     if (e.blur !== undefined) entry.blur = e.blur;
     if (e.layer !== undefined) entry.layer = e.layer;
+    if (e.field !== undefined) entry.field = e.field;
+    if (e.phase) entry.phase = true;
+    if (e.phaseAxes) entry.phaseAxes = [e.phaseAxes[0], e.phaseAxes[1]];
+    if (e.extraICs?.length) entry.extraICs = e.extraICs.map((v) => v.slice());
+    if (e.family) entry.family = true;
     if (e.solver !== undefined) entry.solver = e.solver;
     if (e.steps !== undefined) entry.steps = e.steps;
     if (e.h !== undefined) entry.stepSize = e.h;
@@ -993,6 +1069,11 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
     if (e.glow) x.glow = e.glow;
     if (e.blur) x.blur = e.blur;
     if (e.layer) x.layer = e.layer;
+    if (e.field !== undefined) x.field = e.field;
+    if (e.phase) x.phase = true;
+    if (e.phaseAxes) x.phaseAxes = [e.phaseAxes[0], e.phaseAxes[1]];
+    if (e.extraICs?.length) x.extraICs = e.extraICs.map((v) => v.slice());
+    if (e.family) x.family = true;
     if (e.solver !== undefined) x.solver = e.solver;
     if (e.steps !== undefined) x.steps = e.steps;
     if (e.stepSize !== undefined) x.h = e.stepSize;
@@ -1013,7 +1094,8 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
   }
   if (g.features) {
     // grid is optional (undefined = shown), so compare effective values.
-    const eff = (fs: Partial<FeatureToggles>, k: ToggleKey) => (k === 'grid' ? fs[k] !== false : !!fs[k]);
+    const eff = (fs: Partial<FeatureToggles>, k: ToggleKey) =>
+      DEFAULT_ON_FEATURES.includes(k) ? fs[k] !== false : !!fs[k];
     const f: Partial<FeatureToggles> = {};
     for (const k of FEATURE_KEYS) if (eff(g.features, k) !== eff(DEFAULT_FEATURES, k)) f[k] = eff(g.features, k);
     if (Object.keys(f).length) spec.features = f;

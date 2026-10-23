@@ -60,7 +60,8 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Parsing | `lib/math/parse.ts` (central), `normalize.ts`, `fromlatex.ts`, `tolatex.ts`, `greek.ts`, `builtins.ts`, `points.ts`, `piFormat.ts`, `suggest.ts` (autocomplete), `compileCache.ts` |
 | Reduce / solve | `lib/math/reduce.ts` (ODE→1st-order system), `lib/solver/rk4.ts`, `integrate.ts` (`integrateSystem`: solver choice, impulses, breakpoints; `solveAt`), `dopri5.ts` + `adaptive.ts` (RK45 step loop, dense output, stiffness test), `stiff.ts` (Rosenbrock / ode23s), `methods.ts` (Euler/Heun/RK4 "Show steps"), `shooting.ts` (BVP), `odeGroup.ts` (conditions, setup + cache key, `runGroup`), `sample.ts` (function sampling + domain-edge bisection), `implicit.ts` (marching squares), `curve.ts` |
 | Compute orchestration | `lib/compute.ts`, `lib/analysis/eval.ts` |
-| Analysis | `lib/analysis/features.ts` (extrema/roots/intercepts/endpoints), `singularities.ts` (removable holes vs asymptotes), `intersections.ts`, `types.ts` |
+| Analysis | `lib/analysis/features.ts` (extrema/roots/intercepts/endpoints), `singularities.ts` (removable holes vs asymptotes), `intersections.ts`, `equilibria.ts` (ODE fixed points + stability), `compare.ts` (numerical − exact at the slice), `types.ts` |
+| ODE qualitative view | `lib/ode/view.ts` (pure: phase/axes, state names, IC-drag patches, extra ICs, family values), `lib/ode/overlays.ts` (phase curves, fields, nullclines, equilibria, extra solutions, families + their caches), `lib/solver/field.ts` (slope / vector field grid), `components/Plot/odeOverlays.ts` (drawing), `components/Sidebar/OdeViewControls.tsx` (row switches), `state/odeFocus.ts` (hovered row) |
 | Geometry / format | `lib/geom/transform.ts` (data↔screen), `lib/format.ts` (`fmtSig`), `lib/graphFile.ts` (export/share), `lib/math/resolveSlice.ts` (parametric cuts) |
 | Animation / rendering | `lib/math/fastCompile.ts` (evaluator + hoisting), `lib/math/bounds.ts` (interval culling), `lib/geom/path.ts` (spline/bezier/arc), `lib/geom/cull.ts`, `lib/render/canvas.ts` + `layers.ts` (shared with Script mode), `state/frameApi.ts` (`window.fluxion`), `lib/demos/sunset.ts`, `scripts/bench.ts` |
 | Scripting | `lib/scope.ts` (shared eval scope: helpers + sliders + derived values + user fns), `lib/math/helpers.ts` (`lerp`/`keys`/`skeys`/`rotx`/`projx`…), `lib/color.ts` (colour literals + `rgb/hsv/…` expressions), `lib/style.ts` (per-frame `resolveStyle`), `lib/raster.ts` (adaptive inequality shading), `lib/anim.ts` + `state/player.ts` + `state/animate.ts` + `components/AnimationLoop.tsx` (shared slider clock) |
@@ -313,6 +314,58 @@ All optional; defaults render pixel-identically (verified against main in light/
   `info`; PlotCanvas calls `notifyDrawn`).
 - **UI**: only the style popover's collapsed **Advanced** section (`ColorPopover`).
 
+## ODE qualitative view (issue #3: fields, phase plane, equilibria, families)
+
+- **Entry fields** (all optional, persist version unchanged): `field` (unset = automatic:
+  only the graph's *first* eligible group gets a field), `phase`, `phaseAxes` (typed state
+  names like `x`, `y'`; internal symbols are `D1_y`, see `stateName`/`stateSymbol`),
+  `extraICs` (`[t0, …full group state]`), `family` (variables). `features.equilibria`
+  is optional, default shown (like `grid`; `DEFAULT_ON_FEATURES` in spec.ts). All are in
+  `odeViewSig` (signature), the spec + schema, params (`field phase axes family`,
+  global `equilibria`; `extraICs` JSON only, so `specToParams` returns null),
+  `sanitizeGraph`, `checkSpec` and llms.txt.
+- **Groups**: group-level settings are read from any member but written to the
+  **leader** (the member earliest in the list, which also owns t0). `buildOdeInfo`
+  attaches `CurveResult.ode` (`OdeInfo`) to every member; field / nullclines /
+  equilibria / phase curve / extras / `canAddSolutions` live on the leader only.
+- **Phase mode** integrates a fixed window `t0 ± PHASE_SPAN` (30) with
+  `PHASE_SAMPLES` steps, independent of the viewport (the axes are state variables),
+  and `gkey` uses that range, so panning never re-integrates. `res.curve` stays the
+  component vs t (cross-section panels); the canvas draws `drawnCurve(res)` =
+  `ode.phase.curve` (leader) / nothing (other members). Phase entries are excluded from
+  features + intersections (`results.tsx`) and traced by nearest point (parametric).
+  Other rows keep their own coordinates (x across, y up) — the plane is shared.
+- **Caches** (`lib/ode/overlays.ts`): `OVERLAY_CACHE` per group (field, nullclines,
+  equilibria; key = system identity + viewport + view + field flag, *not* the IC, so an
+  IC drag only re-integrates the one trajectory); `TRAJ_CACHE` (LRU, 400) for extra
+  solutions and family members keyed by system + scope values + IC + range; trajectory
+  projections memoised per trajectory (`WeakMap`); `FAMILY_CACHE` per (entry, slider,
+  k) for function ghosts. `ODE_GROUP_CACHE` stores the `SolvedGroup` (system, traj)
+  — on a hit, `entries`/`leaderId` are refreshed from the live entries. The main
+  trajectory comes from `runGroup` (lib/solver/odeGroup: typed conditions, BVP, the
+  row's solver) over the phase range when in phase mode; extra solutions and family
+  members use the group's `method` + `forcing` (impulses / breaks), and the trajectory
+  key includes the method. Typed conditions / boundary mode hide the IC ring.
+- **Equilibria**: only for autonomous systems (`isAutonomous` = no `t` via `hasSymbol`)
+  with dim ≤ 2: 1-D roots by sign change + touching zeros (golden section), stability
+  from the side signs; 2-D damped Newton from a 9×9 seed grid, Jacobian from mathjs
+  `derivative` (numeric fallback), trace/determinant classification. Against t, a
+  scalar equation shows them as `y = c` lines (`mode: 'lines'`, 2nd order: points with
+  y′ = 0); in the phase plane as points.
+- **Interaction** (PlotCanvas): shift-click adds `extraICs` to the group whose field is
+  showing (else the first that can take one); IC rings are grabbed before points;
+  `icDragPatches` → one `useStore.setState` per move; values snap to the pixel grid
+  (`snapToPixel`). Touch has no shift-click (gap).
+- **Families**: `familyGhosts` rebuilds the eval scope (`buildEvalContext`) per value
+  (`FAMILY_N` = 7 across `sliderBounds`), re-samples functions / re-integrates groups
+  whose dependencies change, and attaches `CurveResult.ghosts` (copies the result).
+  The slider's family button shows only if `familyApplies` (through derived values and
+  user functions).
+- **Browser e2e**: `node scripts/e2e-ode-view.cjs http://localhost:5173/ [--shots dir]`
+  (interactions + 4× throttle timings + light/dark/390 px shots). Seed storage from a
+  same-origin non-app page (`llms.txt`): a running app persists its own state over a
+  seed written from the app page (resize → `correctAspect` → persist).
+
 ## ODE numerics & notation (issue #3)
 
 - **Notation** (`parse.ts`): conditions `y(a) = v`, `y'(a) = v` are kind `condition`
@@ -483,7 +536,8 @@ strips them; bad links show an error toast and keep the current graph.
 
 ## Project state & backlog
 
-All planned features are shipped (ODEs/systems, functions, implicit, polar, inequalities
+All planned features are shipped (ODEs/systems, slope fields, phase planes, equilibria,
+extra solutions, parameter families, functions, implicit, polar, inequalities
 incl. polar/compound, points/lines, animatable sliders, projection panels, trace,
 discontinuities, sharing/export, per-tab state, x/t interchange, tutorial, docs page, compute
 caches, Script mode (sandboxed JavaScript, reference, examples, clip importer), and the

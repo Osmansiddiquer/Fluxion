@@ -233,7 +233,8 @@ function fmt(v: number): string {
 }
 
 /** Impulses and step-function breakpoints of the group, evaluated against the scope. */
-function forcing(
+/** Impulses and right-hand-side breaks of a group (also used for extra solutions / families). */
+export function forcing(
   system: OdeSystem,
   members: GroupMember[],
   scope: Record<string, unknown>,

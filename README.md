@@ -17,7 +17,7 @@ intersections.
 | --- | --- |
 | `y' = t*y` | First-order ODE, solved from an initial condition |
 | `y'' = -y` | Higher-order ODE (reduced to a first-order system internally) |
-| `x' = x - x*y`, `y' = x*y - y` | Coupled system (equations reference each other) |
+| `x' = x - x*y`, `y' = x*y - y` | Coupled system (equations reference each other); switch it to the phase plane |
 | `dy/dx = x + y` | Leibniz notation in x: x is then the independent variable |
 | `y'' = -y, y(0) = 1, y'(0) = 0` | Initial conditions typed inline (or `y(0) = 1` on its own row) |
 | `y'' = -y, y(0) = 0, y(pi/2) = 2` | Boundary-value problem, solved by shooting |
@@ -133,6 +133,14 @@ browser storage separately from your per-tab graph state.
   **Show steps** (Euler / Heun / RK4 with a step size h, global error in the trace).
   Impulses split the step and jump the highest derivative; 2nd-order equations can
   switch to boundary conditions (shooting).
+- **The qualitative picture** — slope fields behind first-order equations; a
+  *vs t | phase* switch that draws a 2-D system (or `y''` as (y, y′)) in the phase plane
+  with its vector field and dashed nullclines (two chosen axes for 3-D systems such as
+  Lorenz); equilibria classified by stability (stable / unstable / semi-stable, and
+  node / saddle / spiral / centre from the Jacobian's eigenvalues, shown on hover); a
+  draggable initial-condition ring and **shift-click** to add more solutions; a
+  **family** button on sliders that ghosts the solution across the slider's range; and
+  a numerical-vs-exact difference in the right panel when an ODE and a function agree.
 - **Inline LaTeX editing** (MathLive) with friendly names (`arctan`, `ln`), Greek
   words (`alpha`→α), and symbol autocomplete.
 - **Inspection markers** — extrema, roots, intercepts, intersections (works across

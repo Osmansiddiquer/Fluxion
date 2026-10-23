@@ -23,7 +23,23 @@ export function computeSignature(entries: Entry[]): string {
       // culling depends on the layer and on glow / blur spread).
       `${F}${e.samples ?? ''}${F}${e.layer ?? ''}${F}${e.glow ?? ''}${F}${e.blur ?? ''}` +
       // ODE numerics: integrator, shown steps, boundary-value mode.
-      `${F}${e.solver ?? ''}${F}${e.steps ?? ''}${F}${e.stepSize ?? ''}${F}${e.conditions ?? ''}${F}${e.bc?.join(',') ?? ''}${R}`;
+      `${F}${e.solver ?? ''}${F}${e.steps ?? ''}${F}${e.stepSize ?? ''}${F}${e.conditions ?? ''}${F}${e.bc?.join(',') ?? ''}` +
+      `${F}${odeViewSig(e)}${R}`;
   }
+  return s;
+}
+
+/**
+ * The ODE-view part of an entry's signature: slope field, phase plane, extra
+ * solutions, and a parameter family (whose ghost values follow the slider's
+ * range, so its bounds count only while the family is on). '' when none is set,
+ * so graphs that don't use them keep their old signature.
+ */
+export function odeViewSig(e: Entry): string {
+  let s = '';
+  if (e.field !== undefined) s += `f${e.field ? 1 : 0}`;
+  if (e.phase) s += `p${e.phaseAxes?.join(',') ?? ''}`;
+  if (e.extraICs?.length) s += `x${e.extraICs.map((v) => v.join(',')).join(';')}`;
+  if (e.family) s += `m${e.varMin ?? ''},${e.varMax ?? ''}`;
   return s;
 }

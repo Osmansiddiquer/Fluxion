@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { useResults, useSliceStatus } from '../../state/results';
+import { useAnalysis, useResults, useSliceStatus } from '../../state/results';
 import { useElementSize } from '../../hooks/useElementSize';
 import { verticalCrossings, yExtent } from '../../lib/analysis/eval';
 import { niceTicks, formatTick } from '../../lib/geom/transform';
 import { readGridColors } from '../Plot/grid';
 import SliceInput from './SliceInput';
 import { fmtSig } from '../../lib/format';
+import { exactSliceValues, formatDiff, sliceDifferences } from '../../lib/analysis/compare';
 import './Projections.css';
 
 function fmt(n: number): string {
@@ -69,6 +70,24 @@ export default function RightPanel() {
         ),
     [entries, results],
   );
+
+  // Numerical vs analytic: an ODE row and a function row that agree at the cut
+  // show their difference (subtle footer; lib/analysis/compare).
+  // Values are exact where possible: the function evaluated at the cut, the ODE
+  // stepped to it (so the readout is the solver's error, not the polyline's).
+  const { scope } = useAnalysis();
+  const diffs = useMemo(() => {
+    return sliceDifferences(
+      proj
+        .filter(({ res }) => (res!.parsed.kind === 'ode' && !res!.ode?.phase) || res!.parsed.kind === 'function')
+        .map(({ entry, res }) => ({
+          id: entry.id,
+          kind: res!.parsed.kind === 'ode' ? ('ode' as const) : ('function' as const),
+          values: exactSliceValues(res!, sliceT, scope),
+        })),
+    );
+  }, [proj, sliceT, scope]);
+  const colorOf = (id: string) => entries.find((e) => e.id === id)?.color ?? 'currentColor';
 
   const labelW = 30;
   const x0 = labelW + 16;
@@ -215,6 +234,22 @@ export default function RightPanel() {
             setScroll((s) => Math.max(0, Math.min(maxScroll, s + (e.deltaY || e.deltaX))));
           }}
         />
+        {diffs.length > 0 && (
+          <div className="proj-diff" aria-label="Difference between the numerical and analytic solutions at the cut">
+            {diffs.map((d) => (
+              <div key={`${d.odeId}-${d.fnId}`} className="proj-diff-row" title="Numerical (ODE) minus analytic (function) at the cut">
+                <span className="proj-diff-dot" style={{ background: colorOf(d.odeId) }} />
+                <span className="proj-diff-op">−</span>
+                <span className="proj-diff-dot" style={{ background: colorOf(d.fnId) }} />
+                <span className="proj-diff-val">
+                  {/* "< 10⁻¹²" already carries its relation. */}
+                  {formatDiff(d.diff, sigFigs).startsWith('<') ? '' : '= '}
+                  {formatDiff(d.diff, sigFigs)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

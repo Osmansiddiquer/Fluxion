@@ -5,6 +5,8 @@ import { greekWordToGlyph } from '../../lib/math/greek';
 import type { Entry } from '../../store/types';
 import VariableSlider from './VariableSlider';
 import IVPControls from './IVPControls';
+import OdeViewControls from './OdeViewControls';
+import { useOdeFocus } from '../../state/odeFocus';
 import PolarControls from './PolarControls';
 import EquationField from './EquationField';
 import ColorPopover from './ColorPopover';
@@ -39,6 +41,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
   const parsed = res?.parsed;
   const kind = parsed?.kind;
   const [picker, setPicker] = useState(false);
+  const setFocus = useOdeFocus((s) => s.set);
 
   const undefinedVars = res?.undefinedVars ?? [];
   const error =
@@ -92,6 +95,9 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
         setDropping(true);
       }}
       onDragLeave={() => setDropping(false)}
+      // Emphasise this row's ODE overlays on the plot while the pointer is here.
+      onPointerEnter={kind === 'ode' ? () => setFocus(entry.id) : undefined}
+      onPointerLeave={kind === 'ode' ? () => setFocus(null) : undefined}
       onDrop={(e) => {
         e.preventDefault();
         setDropping(false);
@@ -181,6 +187,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
       {entry.expanded && parsed?.kind === 'ode' && (
         <IVPControls entry={entry} depVar={parsed.depVar} order={parsed.order} />
       )}
+      {entry.expanded && parsed?.kind === 'ode' && <OdeViewControls entry={entry} />}
       {entry.expanded && sweepLabel && <PolarControls entry={entry} label={sweepLabel} />}
     </div>
   );
