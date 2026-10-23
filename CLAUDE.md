@@ -69,7 +69,7 @@ Entry.raw (string)  ──parse──▶  Parsed (discriminated union)  ──co
 | Chrome | `App.tsx`, `Tutorial.tsx`, `HelpMenu.tsx` (the ? menu), `GraphMenu.tsx`, `ThemeToggle.tsx`, `SigFigs.tsx`, `Logo.tsx` |
 | Docs (in-app) | `components/Docs/` — `content.ts` (all docs as data), `examples.ts` (example type + the tour's 4 examples), `DocsPanel.tsx` + `Docs.css` (lazy chunk), `search.ts`, `hash.ts` (`#docs/<id>`), `docs.test.ts`; `lib/openGraph.ts` ("Try it" → GraphMenu's load + Undo toast) |
 | Tokens | `styles/theme.css` (all `--var`s, light+dark), `styles/global.css` |
-| URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
+| URL API (agents) | `lib/api/spec.ts` (FluxionSpec v1 + validation), `check.ts` (headless semantic check), `url.ts` (link encode/decode; `buildShareLink` = the share button: compressed spec `#z=`, or `#gz=` deflated graph when it carries frame clips; old `#g=` still loads), `load.ts` (URL → graph, `sanitizeGraph`), `cli/fluxion.ts`; docs `public/llms.txt` + `public/fluxion-spec.schema.json` |
 
 ## Conventions & gotchas (hard-won — don't relearn these)
 

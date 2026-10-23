@@ -100,7 +100,7 @@ export function sanitizeGraph(g: GraphData): GraphData {
       if (typeof e.pointLabel === 'string') out.pointLabel = e.pointLabel.slice(0, LIMITS.maxLabelLength);
       const dir = oneOf(e.pointLabelDir, POINT_DIRS);
       if (dir) out.pointLabelDir = dir;
-      if (finite(e.pointSize)) out.pointSize = Math.min(14, Math.max(2, Math.round(e.pointSize)));
+      if (finite(e.pointSize)) out.pointSize = Math.min(14, Math.max(2, e.pointSize));
       const drag = oneOf(e.pointDrag, DRAG_MODES);
       if (drag) out.pointDrag = drag;
       return out;
