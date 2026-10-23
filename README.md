@@ -46,10 +46,34 @@ intersections.
   with cut lines you drag on the graph (and that you can drive with a variable).
 - **Share & save** — export/import a graph file, or copy a shareable link; plus a
   built-in getting-started tutorial.
+- **URL API for AI agents** — build a graph from a link (see below and `llms.txt`).
 - **Polished UX** — light/dark/system themes, configurable significant figures,
   drag-to-reorder, resizable sidebar and panels, equal-aspect grid, power-notation
   axes, and **per-tab** persistence (two browser tabs stay independent; your work
   survives a refresh).
+
+## Links for AI agents (URL API)
+
+LLM agents (and scripts) can build a graph for their user with a link: no API key
+or backend. The graph is carried in the URL fragment, and the link is the shareable
+result:
+
+```text
+https://osmansiddiquer.github.io/Fluxion/#expr=y''=-0.3y'-sin(y)&ic=2,0&xmin=0&xmax=20
+https://osmansiddiquer.github.io/Fluxion/#spec=<JSON spec, percent-encoded or base64url>
+https://osmansiddiquer.github.io/Fluxion/#z=<compressed JSON spec>
+```
+
+- **[`llms.txt`](https://osmansiddiquer.github.io/Fluxion/llms.txt)** documents the
+  URL forms, the full expression syntax, common mistakes, and Python/JS link builders.
+  Every example in it is checked by the test suite.
+- **[`fluxion-spec.schema.json`](https://osmansiddiquer.github.io/Fluxion/fluxion-spec.schema.json)**
+  is the JSON Schema for the graph spec.
+- **CLI** (uses the app's real parser): `npm run fluxion -- link --expr "y' = -y" --ic 1`,
+  `npm run fluxion -- check spec.json` (a JSON report of how each expression parses
+  and what's wrong), `npm run fluxion -- decode <link>`.
+- In the app, **Share → Copy as JSON spec** copies the current graph in this format,
+  ready to paste to an assistant.
 
 ## Tech
 

@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { makeGraph, encodeGraph, decodeGraph, parseGraphFile } from '../lib/graphFile';
+import { makeGraph, encodeGraph, parseGraphFile } from '../lib/graphFile';
+import { loadFromUrl, sanitizeGraph } from '../lib/api/load';
+import { stripApiParams } from '../lib/api/url';
+import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
+
+const isPlainSpecLike = (x: unknown) => !!x && typeof x === 'object' && 'expressions' in x;
 
 const ShareIcon = (
   <svg width="17" height="17" viewBox="0 0 18 18" fill="none" aria-hidden="true">
@@ -12,21 +17,38 @@ const ShareIcon = (
 );
 
 /** Share-link / export-to-file / import-from-file menu, and one-time import of a
- * graph encoded in the page URL (#g=…). */
+ * graph carried by the page URL — a legacy share link (#g=…) or the agent-facing
+ * URL API (#expr=…, #spec=…, #z=…; see lib/api and public/llms.txt). */
 export default function GraphMenu() {
   const loadGraph = useStore((s) => s.loadGraph);
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState('');
+  const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  // Import a graph carried in the URL fragment, then strip it from the address bar.
+  // Import a graph carried in the URL, then strip it from the address bar — on
+  // load, and when a link is pasted into an already-open tab (only the hash
+  // changes, so there's no reload). Only the live effect run applies it
+  // (StrictMode mounts effects twice in dev).
   useEffect(() => {
-    const m = location.hash.match(/^#g=(.+)$/);
-    if (!m) return;
-    const g = decodeGraph(m[1]);
-    if (g) loadGraph(g);
-    history.replaceState(null, '', location.pathname + location.search);
+    let live = true;
+    const importFromUrl = () => {
+      const { hash, search, pathname } = location;
+      loadFromUrl(hash, search).then((r) => {
+        if (!r) return;
+        if (live) {
+          if (r.graph) loadGraph(r.graph);
+          if (r.message) flash(r.message, r.tone === 'error');
+        }
+        history.replaceState(null, '', pathname + stripApiParams(search));
+      });
+    };
+    importFromUrl();
+    window.addEventListener('hashchange', importFromUrl);
+    return () => {
+      live = false;
+      window.removeEventListener('hashchange', importFromUrl);
+    };
   }, [loadGraph]);
 
   useEffect(() => {
@@ -38,9 +60,11 @@ export default function GraphMenu() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  const flash = (msg: string) => {
-    setToast(msg);
-    window.setTimeout(() => setToast(''), 2200);
+  const toastTimer = useRef(0);
+  const flash = (msg: string, error = false) => {
+    setToast({ msg, error });
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), error ? 6000 : 2200);
   };
 
   const current = () => makeGraph(useStore.getState());
@@ -51,6 +75,18 @@ export default function GraphMenu() {
     try {
       await navigator.clipboard.writeText(url);
       flash('Share link copied to clipboard');
+    } catch {
+      flash('Could not copy — clipboard blocked');
+    }
+  };
+
+  // A readable FluxionSpec of the current graph — paste it to an AI assistant to
+  // have it edit the graph and hand back a link.
+  const copySpec = async () => {
+    setOpen(false);
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(graphToSpec(current()), null, 2));
+      flash('Graph JSON copied to clipboard');
     } catch {
       flash('Could not copy — clipboard blocked');
     }
@@ -70,12 +106,29 @@ export default function GraphMenu() {
     const f = e.target.files?.[0];
     e.target.value = '';
     if (!f) return;
-    const g = parseGraphFile(await f.text());
+    const text = await f.text();
+    const g = parseGraphFile(text);
     if (g) {
-      loadGraph(g);
+      loadGraph(sanitizeGraph(g));
       flash('Graph loaded');
+      return;
+    }
+    // Also accept a FluxionSpec JSON file (what "Copy as JSON spec" produces).
+    let spec: unknown;
+    try {
+      spec = JSON.parse(text);
+    } catch {
+      /* not JSON */
+    }
+    const v = spec === undefined ? null : validateSpec(spec);
+    if (v?.ok) {
+      loadGraph(specToGraph(v.spec));
+      flash('Graph loaded');
+    } else if (v && !v.ok && isPlainSpecLike(spec)) {
+      const e = v.errors[0];
+      flash(`Invalid graph spec — ${e.path ? e.path + ': ' : ''}${e.message}`, true);
     } else {
-      flash('That file is not a Fluxion graph');
+      flash('That file is not a Fluxion graph', true);
     }
   };
 
@@ -92,11 +145,18 @@ export default function GraphMenu() {
       {open && (
         <div className="graph-menu-pop" role="menu">
           <button onClick={share}>Copy share link</button>
+          <button onClick={copySpec} title="A readable spec an AI assistant can edit (see llms.txt)">
+            Copy as JSON spec
+          </button>
           <button onClick={exportFile}>Export to file…</button>
           <button onClick={() => fileRef.current?.click()}>Import from file…</button>
         </div>
       )}
-      {toast && <div className="graph-toast">{toast}</div>}
+      {toast && (
+        <div className={toast.error ? 'graph-toast error' : 'graph-toast'} role={toast.error ? 'alert' : 'status'}>
+          {toast.msg}
+        </div>
+      )}
       <input
         ref={fileRef}
         type="file"

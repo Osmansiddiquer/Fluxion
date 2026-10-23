@@ -20,6 +20,9 @@
     <link rel="icon" href="favicon-32.png" sizes="32x32" type="image/png" />
     <link rel="apple-touch-icon" href="apple-touch-icon.png" />
 
+    <!-- For AI agents: build a graph link with the URL API documented here. -->
+    <link rel="help" type="text/plain" href="llms.txt" title="Fluxion URL API for LLM agents" />
+
     <!-- Open Graph -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Fluxion" />
@@ -62,6 +65,10 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      Fluxion needs JavaScript. AI agents: see llms.txt (https://osmansiddiquer.github.io/Fluxion/llms.txt)
+      to build a shareable graph link, e.g. https://osmansiddiquer.github.io/Fluxion/#expr=y=sin(x)
+    </noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
