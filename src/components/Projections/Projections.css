@@ -72,6 +72,37 @@
   display: block;
   touch-action: none;
 }
+/* Numerical − analytic difference at the cut (RightPanel; subtle). */
+.proj-diff {
+  position: absolute;
+  right: 8px;
+  bottom: 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  padding: 3px 7px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface-sunken) 82%, transparent);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+.proj-diff-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+.proj-diff-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+.proj-diff-op {
+  color: var(--text-faint);
+}
 
 /* Drag handles to resize a panel. */
 .panel-resize {
