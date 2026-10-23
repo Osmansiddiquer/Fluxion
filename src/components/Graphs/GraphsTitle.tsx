@@ -17,7 +17,7 @@ export default function GraphsTitle() {
   const label = name || 'Untitled graph';
   return (
     <button
-      className={`graphs-title status-${status}`}
+      className={`graphs-title status-${status}${status === 'new' && !dirty ? ' pristine' : ''}`}
       onClick={() => openSheet()}
       title={`${STATUS_TEXT[status]}${status === 'new' && dirty ? ' (autosaved to Recent)' : ''} — open My graphs (Ctrl+S saves)`}
       aria-label={`${label}, ${STATUS_TEXT[status]}. Open My graphs`}

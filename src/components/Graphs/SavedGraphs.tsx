@@ -195,7 +195,7 @@ function CurrentCard({ focusName }: { focusName: boolean }) {
   };
 
   return (
-    <div className={`graphs-current status-${status}`}>
+    <div className={`graphs-current status-${status}${status === 'new' && !dirty ? ' pristine' : ''}`}>
       <Thumb src={thumb} />
       <div className="graphs-current-body">
         <div className="graphs-current-top">

@@ -376,14 +376,15 @@ export function quickSave() {
 }
 
 /** Replace the current graph with `g` (filing the old one in Recent), with Undo. */
-async function replaceWith(g: GraphData, link: (h: string) => void, msg: string) {
+async function replaceWith(g: GraphData, link: (h: string) => void, msg: string | ((filed: boolean) => string)) {
   const snap = snapshot();
+  const filed = get().dirty; // unsaved work (new, or edits to a saved graph) goes to Recent
   await flushRecent(snap.graph);
   apply(g);
   session = newId();
   link(graphHash(current()));
   recomputeDirty();
-  flash(msg, { undo: () => restore(snap) });
+  flash(typeof msg === 'string' ? msg : msg(filed), { undo: () => restore(snap) });
 }
 
 export async function openSaved(id: string) {
@@ -435,7 +436,7 @@ export async function newGraph() {
       setLink({ docId: null, name: UNTITLED, baseRev: undefined, savedHash: h });
       set({ remote: null });
     },
-    'New graph — the previous one is in Recent',
+    (filed) => (filed ? 'New graph — the previous one is in Recent' : 'New graph'),
   );
   closeSheet();
 }

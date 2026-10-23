@@ -17,7 +17,7 @@ export default function SavedMenuItems({ onPick }: { onPick: () => void }) {
   };
   return (
     <>
-      <div className={`graphs-menu-head status-${status}`}>
+      <div className={`graphs-menu-head status-${status}${status === 'new' && !dirty ? ' pristine' : ''}`}>
         <span className="graphs-menu-name">{name || 'Untitled graph'}</span>
         <span className="graphs-menu-status">
           <span className="graphs-dot" aria-hidden="true" />

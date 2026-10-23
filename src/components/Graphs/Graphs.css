@@ -20,7 +20,11 @@
   border-radius: 999px;
   background: var(--graphs-status, var(--text-faint));
 }
-.status-saved .graphs-dot {
+.status-new.pristine {
+  --graphs-status: var(--text-faint);
+}
+.status-saved .graphs-dot,
+.status-new.pristine .graphs-dot {
   background: transparent;
   box-shadow: inset 0 0 0 1.5px var(--graphs-status);
 }
