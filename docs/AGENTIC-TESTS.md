@@ -73,6 +73,27 @@ localStorage.setItem('ode-plotter',JSON.stringify(st));location.reload();
 - [ ] Click a curve → pins a trace point; drag along it; it snaps to features.
 - [ ] "Points" toggle menu (top-left of plot) shows/hides each family.
 
+### ODE qualitative view
+Automated: `node scripts/e2e-ode-view.cjs http://localhost:5173/ [--shots dir]`
+(IC drag, shift-click, clear, phase switch, equilibrium tooltips, Lorenz axes, family,
+the exact-difference footer, timings under a 4× CPU throttle; light + dark, desktop +
+390 px shots). By eye: In the seed above, `y' = y` now shows a faint
+slope field and a dashed unstable equilibrium line y = 0 (intended defaults).
+- [ ] `y' = y*(1 - y)`: slope field; dashed lines y = 0 (hollow tab, unstable) and y = 1
+      (filled, stable); row switch **Slope field** hides it.
+- [ ] Drag the ring at (t₀, y₀) → the IC sliders follow; shift-click the plot → a thinner
+      extra solution; **Clear N extra solutions** removes them.
+- [ ] `x' = x*(1 - y)`, `y' = y*(x - 1)`, **Plot → phase** on the first row: closed
+      orbits, axes labelled x / y, arrows, dashed nullclines, half-filled saddle at the
+      origin, centre ring at (1, 1); hover a marker → type, λ, J. The second row says
+      "Drawn in the phase plane…". Right panel still shows x(t), y(t) and a dot marks the
+      cut time on the orbit.
+- [ ] `y'' = -sin(y)` phase: centres at 2kπ, saddles at odd π; Lorenz with **Axes** x, z.
+- [ ] `c = 0.5` (0…3) + `y'' = -c*y' - y`: the fan button under the slider draws 7 ghost
+      curves (pale → full colour).
+- [ ] `y' = -y` + `y = e^(-x)` with the right panel open: a small "● − ● = …" footer.
+- [ ] Points menu shows **Equilibria** only when there is an ODE.
+
 ### Projections
 - [ ] Right panel shows `y(sliceT)` for each curve; editable `t` field in header.
 - [ ] Bottom panel shows `t` where `y = sliceY`; editable `y` field.

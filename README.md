@@ -17,7 +17,7 @@ intersections.
 | --- | --- |
 | `y' = t*y` | First-order ODE, solved from an initial condition |
 | `y'' = -y` | Higher-order ODE (reduced to a first-order system internally) |
-| `x' = x - x*y`, `y' = x*y - y` | Coupled system (equations reference each other) |
+| `x' = x - x*y`, `y' = x*y - y` | Coupled system (equations reference each other); switch it to the phase plane |
 | `y = sin(t)/t` or `sin(t)` | Plain function of `t` (holes/asymptotes handled) |
 | `t^2 + y^2 = 9` | Implicit curve (marching squares) |
 | `r = 1 + cos(theta)` | Polar curve, drawn as the (x, y) parametric overlay |
@@ -124,6 +124,14 @@ browser storage separately from your per-tab graph state.
 ## Highlights
 
 - **Numerical ODE engine** — any-order / coupled, RK4 with per-direction step budget.
+- **The qualitative picture** — slope fields behind first-order equations; a
+  *vs t | phase* switch that draws a 2-D system (or `y''` as (y, y′)) in the phase plane
+  with its vector field and dashed nullclines (two chosen axes for 3-D systems such as
+  Lorenz); equilibria classified by stability (stable / unstable / semi-stable, and
+  node / saddle / spiral / centre from the Jacobian's eigenvalues, shown on hover); a
+  draggable initial-condition ring and **shift-click** to add more solutions; a
+  **family** button on sliders that ghosts the solution across the slider's range; and
+  a numerical-vs-exact difference in the right panel when an ODE and a function agree.
 - **Inline LaTeX editing** (MathLive) with friendly names (`arctan`, `ln`), Greek
   words (`alpha`→α), and symbol autocomplete.
 - **Inspection markers** — extrema, roots, intercepts, intersections (works across
