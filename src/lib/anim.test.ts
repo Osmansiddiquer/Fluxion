@@ -36,8 +36,10 @@ describe('advance', () => {
     expect(r.value).toBe(4);
     expect(r.finished).toBe(true);
   });
-  it('clamps a tiny speed', () => {
-    expect(advance(0, 1, 0, 4, 'loop', 0, 1).value).toBeCloseTo(0.05);
+  it('allows very slow (real-time clip) speeds but never zero', () => {
+    // A 219 s clip on a 0…219 slider plays in real time at speed 4/219.
+    expect(advance(0, 1, 0, 219, 'loop', 4 / 219, 1).value).toBeCloseTo(1);
+    expect(advance(0, 1, 0, 4, 'loop', 0, 1).value).toBeGreaterThan(0);
   });
 });
 

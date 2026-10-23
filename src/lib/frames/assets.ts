@@ -55,10 +55,15 @@ export function hashString(s: string): string {
   return (h >>> 0).toString(16).padStart(8, '0');
 }
 
-/** Store a payload; returns its content id (stable for identical data). */
+/** Content id of a payload (stable for identical data). */
+export function assetId(data: string): string {
+  return `fx${hashString(data)}${data.length.toString(36)}`;
+}
+
+/** Store a payload; returns its content id. */
 export function putAsset(data: string): string {
   load();
-  const id = `fx${hashString(data)}${data.length.toString(36)}`;
+  const id = assetId(data);
   if (!mem.has(id)) {
     mem.set(id, data);
     save();

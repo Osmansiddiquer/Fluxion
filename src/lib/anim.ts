@@ -11,7 +11,7 @@ export function advance(
   dt: number,
 ): { value: number; dir: 1 | -1; finished: boolean } {
   const span = Math.max(1e-9, max - min);
-  const rate = (span * Math.max(0.05, speed)) / 4; // full sweep in ~4s at 1×
+  const rate = (span * Math.max(1e-4, speed)) / 4; // full sweep in ~4s at 1× (tiny speeds allowed: real-time clips)
   let v = value + dir * rate * dt;
   let d = dir;
   let finished = false;

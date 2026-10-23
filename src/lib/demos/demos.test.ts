@@ -20,6 +20,7 @@ function at(entries: Entry[], name: string, value: number): Entry[] {
 
 describe.each(DEMOS.map((d) => [d.id, d] as const))('demo %s', (_id, demo) => {
   const g = demo.build();
+  registerAssets(g.assets); // as the graph menu does when opening an example
 
   it('is a valid graph file and round-trips through JSON', () => {
     expect(isGraph(g)).toBe(true);
@@ -164,6 +165,7 @@ describe('silhouette clip', () => {
   });
   it('exports with its frames and plays after re-import into a fresh store', () => {
     const g = DEMOS.find((d) => d.id === 'silhouette')!.build();
+    registerAssets(g.assets);
     const exported = JSON.parse(JSON.stringify(makeGraph(g)));
     expect(Object.keys(exported.assets)).toHaveLength(1);
     _resetAssets();

@@ -1,8 +1,7 @@
 import type { GraphData } from '../graphFile';
 import { encodeClip, type IPoly } from '../frames/codec';
 import { vectorize } from '../frames/trace';
-import { putAsset } from '../frames/assets';
-import { entryMaker, graph } from './common';
+import { clipGraph } from '../frames/clipGraph';
 
 /**
  * A short, procedurally generated black-and-white silhouette clip in the
@@ -97,27 +96,6 @@ let cachedClip: string | null = null;
 /** Goal 4 (machinery): a frame-sequence entry playing the generated clip. */
 export function silhouetteDemo(): GraphData {
   cachedClip ??= buildSilhouetteClip();
-  const id = putAsset(cachedClip);
-  const E = entryMaker('sil');
-  const seconds = CLIP_FRAMES / CLIP_FPS;
-  const entries = [
-    E('T = 0', '#2d70b3', {
-      varMin: 0,
-      varMax: seconds,
-      varStep: 1 / CLIP_FPS,
-      animMode: 'loop',
-      animSpeed: 4 / seconds, // real time: a full sweep takes `seconds`
-      autoplay: true,
-      expanded: true,
-    }),
-    // The "screen" behind the clip.
-    E('((-4, -3), (4, -3), (4, 3), (-4, 3), (-4, -3))', '#3a3f47', {
-      fill: true,
-      fillOpacity: 1,
-      fillColor: '#f6f4ef',
-      lineWidth: 2,
-    }),
-    E(`frames(${CLIP_FPS} T)`, '#111111', { frames: id }),
-  ];
-  return graph(entries, { tMin: -5.5, tMax: 5.5, yMin: -3.6, yMax: 3.6 }, { [id]: cachedClip });
+  return clipGraph(cachedClip, { idPrefix: `sil${Date.now().toString(36)}${(n++).toString(36)}` });
 }
+let n = 0;
