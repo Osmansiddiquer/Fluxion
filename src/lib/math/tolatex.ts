@@ -63,6 +63,25 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
         })
         .join(' \\wedge ');
     }
+    case 'parametric':
+      return `\\left(${postTex(parsed.xNode.toTex(TEX_OPTS))},\\ ${postTex(
+        parsed.yNode.toTex(TEX_OPTS),
+      )}\\right)`;
+    case 'fndef':
+      // Ternaries render as a cases environment that can't round-trip through the
+      // editor — show those definitions as typed.
+      if (/[?[]/.test(parsed.rhs)) return null;
+      return `${greekWordToTex(parsed.name)}\\left(${parsed.params
+        .map(greekWordToTex)
+        .join(',')}\\right) = ${texOf(parsed.rhs)}`;
+    case 'repeat': {
+      const body = entryToLatex(parsed.body);
+      if (body == null) return null;
+      const loops = parsed.loops.map((l) => `${greekWordToTex(l.name)}=${l.text}`).join(',\\ ');
+      return `${body}\\ \\operatorname{for}\\ ${loops}`;
+    }
+    case 'frames':
+      return `\\operatorname{frames}\\left(${postTex(parsed.indexNode.toTex(TEX_OPTS))}\\right)`;
     default:
       return null;
   }

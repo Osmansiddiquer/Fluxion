@@ -11,6 +11,7 @@ import {
   DRAG_MODES,
   FEATURE_KEYS,
   LIMITS,
+  LINE_STYLES,
   POINT_DIRS,
   isSafeExpression,
   resolveColor,
@@ -18,6 +19,9 @@ import {
   validateSpec,
 } from './spec';
 import { readUrlPayload } from './url';
+import { isColorExpr } from '../color';
+import { assetId } from '../frames/assets';
+import { parseHeader } from '../frames/codec';
 
 /**
  * Glue between the URL API and the app: turn the current location into a graph
@@ -75,7 +79,24 @@ export function sanitizeGraph(g: GraphData): GraphData {
       }
       const anim = oneOf(e.animMode, ANIM_MODES);
       if (anim) out.animMode = anim;
-      if (finite(e.animSpeed)) out.animSpeed = Math.min(5, Math.max(0.1, e.animSpeed));
+      if (finite(e.animSpeed)) {
+        out.animSpeed = Math.min(LIMITS.maxSpeed, Math.max(LIMITS.minSpeed, e.animSpeed));
+      }
+      if (e.autoplay === true) out.autoplay = true;
+      // Drawing style (cosmetic; colour expressions only reach the mathjs pipeline,
+      // and evalColor refuses calls to anything but built-ins / user functions).
+      if (finite(e.lineWidth)) out.lineWidth = Math.min(LIMITS.maxLineWidth, Math.max(0, e.lineWidth));
+      const ls = oneOf(e.lineStyle, LINE_STYLES);
+      if (ls) out.lineStyle = ls;
+      if (typeof e.fill === 'boolean') out.fill = e.fill;
+      if (finite(e.fillOpacity)) out.fillOpacity = Math.min(1, Math.max(0, e.fillOpacity));
+      for (const k of ['colorExpr', 'fillColor'] as const) {
+        const c = e[k];
+        if (typeof c === 'string' && c.trim() && c.length <= LIMITS.maxColorExprLength && isColorExpr(c)) {
+          out[k] = c;
+        }
+      }
+      if (typeof e.frames === 'string' && ASSET_ID.test(e.frames)) out.frames = e.frames;
       if (typeof e.pointLabel === 'string') out.pointLabel = e.pointLabel.slice(0, LIMITS.maxLabelLength);
       const dir = oneOf(e.pointLabelDir, POINT_DIRS);
       if (dir) out.pointLabelDir = dir;
@@ -114,7 +135,45 @@ export function sanitizeGraph(g: GraphData): GraphData {
   if (okSlice(p.sliceYExpr)) projections.sliceYExpr = p.sliceYExpr;
 
   const sigFigs = finite(g.sigFigs) ? Math.min(12, Math.max(1, Math.round(g.sigFigs))) : DEFAULT_SIG_FIGS;
-  return { v: 1, entries, viewport, features, projections, sigFigs };
+  const out: GraphData = { v: 1, entries, viewport, features, projections, sigFigs };
+  const assets = sanitizeAssets(g.assets, entries);
+  if (assets) out.assets = assets;
+  return out;
+}
+
+const ASSET_ID = /^fx[0-9a-f]{8}[0-9a-z]{1,10}$/;
+
+/**
+ * Frame-sequence payloads carried by a graph file / link. Keep only assets an
+ * entry references, whose id is the content hash of the data (so a link can't
+ * smuggle a different payload under a known id), which parse as a clip, and
+ * that fit the size caps. Entries pointing at a dropped asset just show
+ * "Frame data not found".
+ */
+export function sanitizeAssets(
+  raw: unknown,
+  entries: Entry[],
+): Record<string, string> | undefined {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const wanted = new Set(entries.map((e) => e.frames).filter((f): f is string => !!f));
+  const out: Record<string, string> = {};
+  let total = 0;
+  let n = 0;
+  for (const [id, data] of Object.entries(raw as Record<string, unknown>)) {
+    if (!wanted.has(id) || typeof data !== 'string') continue;
+    if (n >= LIMITS.maxAssets || data.length > LIMITS.maxAssetChars) continue;
+    if (total + data.length > LIMITS.maxAssetsTotalChars) continue;
+    if (assetId(data) !== id) continue;
+    try {
+      parseHeader(data);
+    } catch {
+      continue;
+    }
+    out[id] = data;
+    total += data.length;
+    n++;
+  }
+  return n ? out : undefined;
 }
 
 function plural(n: number, word: string) {

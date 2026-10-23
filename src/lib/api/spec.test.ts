@@ -184,7 +184,8 @@ describe('validateSpec — rejects with helpful errors', () => {
     expect(msgs({ expressions: [{ expr: 'k=1', min: 5, max: 1 }] })).toMatch(/greater than min/);
     expect(msgs({ expressions: [{ expr: 'k=1', step: 0 }] })).toMatch(/> 0/);
     expect(msgs({ expressions: [{ expr: 'k=1', anim: 'spin' }] })).toMatch(/"loop", "bounce", "once"/);
-    expect(msgs({ expressions: [{ expr: 'k=1', speed: 50 }] })).toMatch(/≤ 5/);
+    expect(msgs({ expressions: [{ expr: 'k=1', speed: 500 }] })).toMatch(/≤ 100/);
+    expect(msgs({ expressions: [{ expr: 'k=1', speed: 0 }] })).toMatch(/≥ 0.0001/);
   });
   it('bad polar ranges (bounded so the region test stays cheap)', () => {
     expect(msgs({ expressions: [{ expr: 'r<2', thetaMin: 3, thetaMax: 1 }] })).toMatch(/greater than thetaMin/);

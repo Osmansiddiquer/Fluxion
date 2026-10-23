@@ -31,14 +31,15 @@
     "features": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Inspection markers shown on curves.",
+      "description": "Inspection markers shown on curves, and the grid.",
       "properties": {
         "extrema": { "type": "boolean", "default": true },
         "xIntercepts": { "type": "boolean", "default": true },
         "yIntercept": { "type": "boolean", "default": true },
         "endpoints": { "type": "boolean", "default": false },
         "discontinuities": { "type": "boolean", "default": true },
-        "intersections": { "type": "boolean", "default": true }
+        "intersections": { "type": "boolean", "default": true },
+        "grid": { "type": "boolean", "default": true, "description": "Grid lines and axes. Turn off for drawings / animations." }
       }
     },
     "panels": {
@@ -58,7 +59,7 @@
     "exprString": {
       "type": "string",
       "maxLength": 1000,
-      "description": "Plain-text expression, e.g. \"y = sin(x)\", \"y'' = -y\", \"k = 2\", \"x^2 + y^2 = 9\", \"r = 1 + cos(theta)\", \"y < x\", \"(1, 2)\"."
+      "description": "Plain-text expression, e.g. \"y = sin(x)\", \"y'' = -y\", \"k = 2\", \"x^2 + y^2 = 9\", \"r = 1 + cos(theta)\", \"y < x\", \"(1, 2)\", \"(cos(t), sin(t))\", \"f(u) = u^2\", \"(k, k^2) for k = 0..3\"."
     },
     "number": {
       "description": "A finite number, or a constant expression string such as \"2pi\" or \"-pi/2\". |value| <= 1e9.",
@@ -101,13 +102,20 @@
         "max": { "$ref": "#/$defs/number", "description": "Slider: maximum." },
         "step": { "$ref": "#/$defs/number", "description": "Slider: step (> 0)." },
         "anim": { "enum": ["loop", "bounce", "once"], "description": "Slider: play-button mode." },
-        "speed": { "type": "number", "minimum": 0.1, "maximum": 5, "description": "Slider: play speed." },
-        "thetaMin": { "$ref": "#/$defs/number", "description": "Polar curve/region: start angle (default 0)." },
-        "thetaMax": { "$ref": "#/$defs/number", "description": "Polar curve/region: end angle (default 2pi; at most 50 turns from thetaMin)." },
+        "speed": { "type": "number", "minimum": 0.0001, "maximum": 100, "description": "Slider: play speed (1 = a full sweep in about 4 s)." },
+        "thetaMin": { "$ref": "#/$defs/number", "description": "Polar curve/region: start angle; parametric curve (x(t), y(t)): start of t (default 0)." },
+        "thetaMax": { "$ref": "#/$defs/number", "description": "Polar curve/region: end angle; parametric curve: end of t (default 2pi; at most 50 turns from thetaMin)." },
         "label": { "type": "string", "maxLength": 100, "description": "Point: label (LaTeX)." },
         "labelDir": { "enum": ["n", "ne", "e", "se", "s", "sw", "w", "nw"], "description": "Point: label direction." },
         "pointSize": { "type": "number", "minimum": 2, "maximum": 14, "description": "Point: marker radius in px." },
-        "drag": { "enum": ["auto", "off", "x", "y", "both"], "description": "Point: drag behaviour." }
+        "drag": { "enum": ["auto", "off", "x", "y", "both"], "description": "Point: drag behaviour." },
+        "lineWidth": { "type": "number", "minimum": 0, "maximum": 20, "description": "Stroke width in px (default 2.25; 0 hides the stroke)." },
+        "lineStyle": { "enum": ["solid", "dashed", "dotted"], "description": "Stroke dash style." },
+        "fill": { "type": "boolean", "description": "Fill closed shapes (parametric, polar, polygons; inequalities fill by default)." },
+        "fillOpacity": { "type": "number", "minimum": 0, "maximum": 1, "description": "Fill opacity (default 0.4 for shapes, 0.16 for regions)." },
+        "colorExpr": { "type": "string", "maxLength": 200, "description": "Colour expression over sliders, overriding color: rgb(r,g,b) 0-255, rgba(r,g,b,a), hsv(h,s,v) / hsl(h,s,l) with h in degrees, e.g. \"hsv(360*a, 0.8, 1)\"." },
+        "fillColor": { "type": "string", "maxLength": 200, "description": "Fill colour (hex or colour expression); defaults to the line colour." },
+        "autoplay": { "type": "boolean", "description": "Slider: start playing when the graph opens." }
       }
     }
   }

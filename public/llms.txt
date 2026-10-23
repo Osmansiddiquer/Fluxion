@@ -1,6 +1,6 @@
 # Fluxion
 
-> Fluxion (https://osmansiddiquer.github.io/Fluxion/) is a free, browser-based grapher for differential equations, functions, implicit curves, polar curves, inequalities (shaded regions) and points. AI agents can make a graph for their user by building a URL: the link opens straight to the plot, and the link itself is the shareable result. No API key, no backend, nothing to install.
+> Fluxion (https://osmansiddiquer.github.io/Fluxion/) is a free, browser-based grapher for differential equations, functions, implicit curves, polar and parametric curves, inequalities (shaded regions) and points, with user functions, repeats, keyframed animation and styling for drawings. AI agents can make a graph for their user by building a URL: the link opens straight to the plot, and the link itself is the shareable result. No API key, no backend, nothing to install.
 
 Base URL: `https://osmansiddiquer.github.io/Fluxion/`
 
@@ -47,7 +47,7 @@ https://osmansiddiquer.github.io/Fluxion/#expr=x^2+y^2=9&expr=x^2+y^2<9%26y>0&co
 | `ic` | ODE initial conditions at t0: `y(t0),y'(t0),...` (one value per order) | `ic=2,0` |
 | `t0` | ODE initial time (default 0) | `t0=1` |
 | `min`, `max`, `step` | slider range and step for a variable such as `k=2` | `min=0&max=5&step=0.1` |
-| `anim`, `speed` | slider play mode (`loop`, `bounce`, `once`) and speed (0.1 to 5) | `anim=bounce` |
+| `anim`, `speed` | slider play mode (`loop`, `bounce`, `once`) and speed (1 = a full sweep in about 4 s; 0.0001 to 100) | `anim=bounce` |
 | `thetamin`, `thetamax` | θ range for polar curves and polar regions (default 0 to 2pi) | `thetamax=6pi` |
 | `label`, `labeldir`, `size`, `drag` | point label (LaTeX), its direction (`n ne e se s sw w nw`), marker radius 2 to 14, drag mode (`auto off x y both`) | `label=P&labeldir=ne` |
 
@@ -172,6 +172,59 @@ B = (-1, -2)               # pointvar
 
 `(x, y)` is a point, `[(...), (...)]` a list of points, `((...), (...), ...)` a connected polyline, `A = (x, y)` a named point (draggable when its coordinates are sliders), and `(A, B)` the segment between two named points. Points accept `label`, `labeldir`, `size` and `drag`.
 
+### Parametric curves, definitions and repeats (drawings and animation)
+
+`(x(t), y(t))` is a parametric curve; `t` runs over `thetaMin`..`thetaMax` (default 0 to 2pi).
+
+```fluxion
+(3cos(t), 2sin(t))         # parametric
+(cos(3t), sin(2t))         # parametric
+```
+
+`f(u, v) = ...` defines a function you can call anywhere (a one-parameter `f(x) = ...` is also drawn). `name = expression` without `y` is a derived value that updates live. Order doesn't matter.
+
+```fluxion
+a = 1                      # variable
+f(u) = u^2 - a             # fndef
+y = f(x) - 1               # function
+b = 2a + 1                 # function
+y = b                      # function
+```
+
+`body for k = a..b` draws any curve, point, polygon or region once per value of `k` (`for i = 0..3, j = 0..3`, `for k = 0..10 step 2`, at most 2000 copies; a repeated region is the union).
+
+```fluxion
+(cos(t) + 3k, sin(t)) for k = -1..1      # repeat
+(k, k^2/4) for k = -4..4                 # repeat
+(x - 3k)^2 + y^2 < 1 for k = -1..1       # repeat
+```
+
+Animation: give a slider `"anim"` and `"autoplay": true`, then drive everything from it. `keys(T, t0, v0, t1, v1, ...)` is a keyframe track (held before the first and after the last key; `skeys` eases each span); also `lerp(a, b, u)`, `clamp(x, lo, hi)`, `smoothstep(e0, e1, x)`, `ease(u)`, `step(x)`, `pulse(x, a, b)`, 2D rotation `rotx(x, y, angle)`/`roty(x, y, angle)`, and 3D projection `projx(x, y, z, yaw, pitch, dist)`/`projy(...)` (dist = camera distance; 0 = orthographic).
+
+```fluxion
+T = 1                                    # variable
+s = skeys(T, 0, 1, 2, 3)                 # function
+(s*cos(t), s*sin(t))                     # parametric
+(rotx(2, 0, T), roty(2, 0, T))           # points
+```
+
+Style options (JSON spec): `lineWidth` (px, 0 hides the line), `lineStyle` (`solid`, `dashed`, `dotted`), `fill` and `fillOpacity` for closed shapes, and `colorExpr` / `fillColor`: colour expressions over sliders, `rgb(r, g, b)` (0 to 255), `rgba(r, g, b, a)`, `hsv(h, s, v)`, `hsl(h, s, l)` (h in degrees, the rest 0 to 1) or `"#rrggbb"`. Set `"features": {"grid": false}` for a clean canvas. A rotating 3D cube:
+
+```json
+{
+  "expressions": [
+    { "expr": "a = 0", "min": 0, "max": "2pi", "anim": "loop", "speed": 0.5, "autoplay": true },
+    "X(p, q, w) = 3projx(p, q, w, a, 0.5, 6)",
+    "Y(p, q, w) = 3projy(p, q, w, a, 0.5, 6)",
+    { "expr": "((X(-1,-1,k), Y(-1,-1,k)), (X(1,-1,k), Y(1,-1,k)), (X(1,1,k), Y(1,1,k)), (X(-1,1,k), Y(-1,1,k)), (X(-1,-1,k), Y(-1,-1,k))) for k = -1..1 step 2", "lineWidth": 3, "fill": true, "fillOpacity": 0.15, "colorExpr": "hsv(57*a, 0.7, 0.85)" },
+    { "expr": "((X(i,j,-1), Y(i,j,-1)), (X(i,j,1), Y(i,j,1))) for i = -1..1 step 2, j = -1..1 step 2", "lineWidth": 3, "lineStyle": "dashed", "color": "blue" }
+  ],
+  "viewport": { "xmin": -8, "xmax": 8 },
+  "features": { "grid": false },
+  "panels": { "right": false, "bottom": false }
+}
+```
+
 ### Common mistakes
 
 Each line shows something that fails, then what to write instead. (The suite checks that the left side fails and the right side works.)
@@ -181,7 +234,7 @@ y' = x*y              =>  y' = t*y
 y = sin(πx)           =>  y = sin(pi*x)
 P' = P(1 - P)         =>  P' = P*(1 - P)
 y = |x|               =>  y = abs(x)
-f(x) = x^2            =>  y = x^2
+y = k*x for k = 1..n  =>  y = k*x for k = 1..3
 y = a*x^2             =>  y = a*x^2 ; a = 1
 y = sin x             =>  y = sin(x)
 y = x^2 if x > 0      =>  y = max(x, 0)^2
@@ -190,7 +243,7 @@ y = x^2 if x > 0      =>  y = max(x, 0)^2
 - `πx` is read as one name, `pix`. Put an operator or a space between: `pi*x`, `pi x`, `2pi`.
 - `P(1 - P)` calls a function named P. Write `P*(1 - P)`.
 - Functions need parentheses: `sin(x)`, not `sin x`.
-- No absolute-value bars, no user-defined functions `f(x) = ...`, no piecewise syntax.
+- No absolute-value bars. For piecewise definitions use a ternary inside a function, `h(u) = u < 0 ? 0 : u`, or `max`/`min`/`step(x)`.
 - Don't reuse built-in names (`e`, `pi`, `tau`, `phi`, `i`, `t`, `x`, `y`, `r`, `theta`) as slider names.
 - LaTeX is converted when it can be, but plain text is more reliable.
 
@@ -215,10 +268,10 @@ For full control (initial conditions, slider ranges, panels, markers) use a JSON
 }
 ```
 
-- Only `expressions` is required. An expression is a string, or an object with `expr` plus options: `color`, `hidden`, `t0`, `ic`, `min`, `max`, `step`, `anim`, `speed`, `thetaMin`, `thetaMax`, `label`, `labelDir`, `pointSize`, `drag`.
+- Only `expressions` is required. An expression is a string, or an object with `expr` plus options: `color`, `hidden`, `t0`, `ic`, `min`, `max`, `step`, `anim`, `speed`, `autoplay`, `thetaMin`, `thetaMax`, `label`, `labelDir`, `pointSize`, `drag`, `lineWidth`, `lineStyle`, `fill`, `fillOpacity`, `colorExpr`, `fillColor`.
 - `color`: `"#rrggbb"`, `"#rgb"` or a palette name. Without one, colours are assigned from the palette in order.
 - Numbers may be given as constant strings: `"2pi"`, `"-pi/2"`, `"sqrt(2)"`.
-- `features` turns marker families on/off. `panels.sliceX` / `panels.sliceY` position the cross-section cursors; they may be a slider expression like `"k"`.
+- `features` turns marker families on/off, and `grid` the grid lines and axes. `panels.sliceX` / `panels.sliceY` position the cross-section cursors; they may be a slider expression like `"k"`.
 - Validation is strict: unknown keys, wrong types and out-of-range values are rejected with a message naming the field (and "did you mean ...?"). A link with an invalid spec shows that message instead of a graph.
 
 ### Putting a JSON spec in a link

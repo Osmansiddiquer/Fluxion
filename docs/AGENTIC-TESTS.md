@@ -92,6 +92,25 @@ localStorage.setItem('ode-plotter',JSON.stringify(st));location.reload();
 - [ ] `r < 2θ` with `θ [0]→[4π]` → two-turn spiral region (boundary spirals across turns).
 - [ ] `1 < y < sin(t)` → two dotted boundaries, region only where satisfiable.
 
+### Scripting & animation
+- [ ] Share menu → **Examples** → each of the 4 demos opens on a clean canvas (no grid,
+      no markers), starts animating by itself, and shows an **Undo** toast that restores
+      the previous graph. Check light and dark.
+- [ ] Rotating Sharingan: red iris, black pupil, three filled tomoe orbit seamlessly
+      (no jump when `a` wraps at 2π/3).
+- [ ] Rotating cube: 12 edges, 8 vertex dots, tinted translucent faces; `b`/`d`
+      sliders tilt / change perspective.
+- [ ] Eye → Sharingan → Mangekyō: brown iris turns red, tomoe grow and spin, morph into
+      three curved blades, then back to a plain eye; `T` loops every 12 s.
+- [ ] Silhouette clip: black-and-white frames play in real time; the ‹ › step buttons
+      move exactly one frame; Export to file → Import from file → still plays.
+- [ ] Right-click a colour dot → Line width / dashed / dotted, Fill toggle + opacity
+      (closed shapes & inequalities only), Colour expression (`hsv(360a,1,1)` animates
+      with `a`; invalid text gets a red border and falls back to the swatch colour).
+- [ ] `b = 2a` shows a live `= value` badge and no colour dot; `f(x) = x^2` plots;
+      `(t, k) for k = 0..3` shows a `×4` badge; Points menu → **Grid & axes** toggles
+      the grid.
+
 ### Performance (4× CPU throttle)
 - [ ] Styling-only edits (colour, expanded, point size, anim speed) don't recompute curves.
 - [ ] Dragging/animating a variable re-samples only the curves that depend on it; an

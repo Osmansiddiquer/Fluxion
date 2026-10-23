@@ -31,12 +31,13 @@ function PiField({ value, onCommit }: { value: number; onCommit: (v: number) => 
   );
 }
 
-/** θ sweep range for a polar curve (defaults to 0 … 2π), shown in multiples of π. */
-export default function PolarControls({ entry }: { entry: Entry }) {
+/** Sweep range for a polar curve (θ) or parametric curve (t) — defaults to
+ * 0 … 2π, shown in multiples of π. */
+export default function PolarControls({ entry, label = 'θ' }: { entry: Entry; label?: string }) {
   const update = useStore((s) => s.updateEntry);
   return (
     <div className="polar-ctrl">
-      <span className="polar-label">θ</span>
+      <span className="polar-label">{label}</span>
       <PiField value={entry.thetaMin ?? 0} onCommit={(n) => update(entry.id, { thetaMin: n })} />
       <span className="polar-arrow">→</span>
       <PiField value={entry.thetaMax ?? TWO_PI} onCommit={(n) => update(entry.id, { thetaMax: n })} />

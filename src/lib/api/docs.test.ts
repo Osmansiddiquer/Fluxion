@@ -44,7 +44,7 @@ describe('llms.txt', () => {
   it('has expression examples for every kind', () => {
     const kinds = new Set(exampleBlocks.flatMap((b) => [...b.matchAll(/#\s*(\w+)\s*$/gm)].map((m) => m[1])));
     expect([...kinds].sort()).toEqual(
-      ['function', 'implicit', 'inequality', 'ode', 'pointvar', 'points', 'polar', 'variable'].sort(),
+      ['fndef', 'function', 'implicit', 'inequality', 'ode', 'parametric', 'pointvar', 'points', 'polar', 'repeat', 'variable'].sort(),
     );
   });
 

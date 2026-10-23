@@ -2,7 +2,15 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { useStore } from '../../store/useStore';
 import { useEntryResult } from '../../state/results';
 import { PALETTE } from '../../utils/colors';
-import type { Entry, PointDir } from '../../store/types';
+import type { Entry, LineStyle, PointDir } from '../../store/types';
+import {
+  canFillShape,
+  isRegion,
+  DEFAULT_LINE_WIDTH,
+  DEFAULT_REGION_OPACITY,
+  DEFAULT_SHAPE_OPACITY,
+} from '../../lib/style';
+import { isColorExpr } from '../../lib/color';
 
 const DIR_CELLS: (PointDir | 'c')[] = ['nw', 'n', 'ne', 'w', 'c', 'e', 'sw', 's', 'se'];
 const ARROW = { strokeWidth: 1.5, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' } as const;
@@ -24,6 +32,42 @@ const IconBoth = (
     />
   </svg>
 );
+
+const LINE_ICON = (dash?: string) => (
+  <svg viewBox="0 0 22 10" width="22" height="10" stroke="currentColor" aria-hidden="true">
+    <path d="M2 5 H20" strokeWidth={2} strokeLinecap="round" strokeDasharray={dash} />
+  </svg>
+);
+const LINE_OPTS: { value: LineStyle; label: ReactNode; title: string }[] = [
+  { value: 'solid', label: LINE_ICON(), title: 'Solid' },
+  { value: 'dashed', label: LINE_ICON('5 3.5'), title: 'Dashed' },
+  { value: 'dotted', label: LINE_ICON('0.01 4'), title: 'Dotted' },
+];
+
+/** A text field for a colour expression; red border while it doesn't parse. */
+function ExprField({
+  value,
+  placeholder,
+  title,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  title: string;
+  onCommit: (v: string | undefined) => void;
+}) {
+  const ok = !value.trim() || isColorExpr(value);
+  return (
+    <input
+      className={`point-label-input style-expr${ok ? '' : ' style-expr-bad'}`}
+      placeholder={placeholder}
+      title={title}
+      spellCheck={false}
+      value={value}
+      onChange={(e) => onCommit(e.target.value || undefined)}
+    />
+  );
+}
 
 const DRAG_OPTS: {
   value: 'auto' | 'off' | 'x' | 'y' | 'both';
@@ -55,6 +99,21 @@ export default function ColorPopover({
   const dir = entry.pointLabelDir ?? 'ne';
   const drag = entry.pointDrag ?? 'auto';
   const size = entry.pointSize ?? 6;
+  const kind = res?.parsed.kind;
+  const drawable =
+    !!res &&
+    kind !== 'variable' &&
+    kind !== 'empty' &&
+    kind !== 'error' &&
+    !(kind === 'fndef' && res.curve.segments.length === 0) &&
+    !(kind === 'function' && res.value !== undefined);
+  const region = isRegion(res);
+  const fillable = region || canFillShape(res);
+  const isFrames = kind === 'frames';
+  const fillOn = entry.fill ?? (region || isFrames);
+  const width = entry.lineWidth ?? (isFrames ? 0 : DEFAULT_LINE_WIDTH);
+  const opacity =
+    entry.fillOpacity ?? (region ? DEFAULT_REGION_OPACITY : isFrames ? 1 : DEFAULT_SHAPE_OPACITY);
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
@@ -93,6 +152,88 @@ export default function ColorPopover({
           {entry.visible ? 'Hide' : 'Show'}
         </button>
       </div>
+
+      {drawable && (
+        <div className="point-opts style-opts">
+          <div className="point-opt-row">
+            <span className="point-opt-label">Line</span>
+            <input
+              className="range"
+              type="range"
+              min={0}
+              max={10}
+              step={0.25}
+              value={width}
+              aria-label="Line width"
+              onChange={(e) => update(entry.id, { lineWidth: Number(e.target.value) })}
+            />
+            <span className="style-val">{width === 0 ? 'off' : width}</span>
+          </div>
+          <div className="point-opt-row">
+            <span className="point-opt-label" />
+            <div className="seg">
+              {LINE_OPTS.map((o) => (
+                <button
+                  key={o.value}
+                  className={`seg-btn${(entry.lineStyle ?? 'solid') === o.value ? ' active' : ''}`}
+                  title={o.title}
+                  aria-label={`${o.title} line`}
+                  onClick={() => update(entry.id, { lineStyle: o.value })}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          {fillable && (
+            <div className="point-opt-row">
+              <span className="point-opt-label">Fill</span>
+              <button
+                className={`style-toggle${fillOn ? ' on' : ''}`}
+                role="switch"
+                aria-checked={fillOn}
+                aria-label="Fill"
+                title={fillOn ? 'Fill on' : 'Fill off'}
+                onClick={() => update(entry.id, { fill: !fillOn })}
+              >
+                <span />
+              </button>
+              <input
+                className="range"
+                type="range"
+                min={0}
+                max={1}
+                step={0.01}
+                value={opacity}
+                disabled={!fillOn}
+                aria-label="Fill opacity"
+                onChange={(e) => update(entry.id, { fillOpacity: Number(e.target.value) })}
+              />
+              <span className="style-val">{Math.round(opacity * 100)}%</span>
+            </div>
+          )}
+          <div className="point-opt-row">
+            <span className="point-opt-label">Colour</span>
+            <ExprField
+              value={entry.colorExpr ?? ''}
+              placeholder="hsv(360a, 0.8, 1)"
+              title="Colour expression (rgb, rgba, hsv, hsl, gray, #hex) — may use variables"
+              onCommit={(v) => update(entry.id, { colorExpr: v })}
+            />
+          </div>
+          {fillable && fillOn && (
+            <div className="point-opt-row">
+              <span className="point-opt-label" />
+              <ExprField
+                value={entry.fillColor ?? ''}
+                placeholder="fill colour (= line)"
+                title="Fill colour (literal or expression); defaults to the line colour"
+                onCommit={(v) => update(entry.id, { fillColor: v })}
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {isPoints && (
         <div className="point-opts">

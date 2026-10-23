@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../store/useStore';
-import { makeGraph, encodeGraph, parseGraphFile } from '../lib/graphFile';
+import { makeGraph, encodeGraph, parseGraphFile, type GraphData } from '../lib/graphFile';
 import { loadFromUrl, sanitizeGraph } from '../lib/api/load';
 import { stripApiParams } from '../lib/api/url';
 import { graphToSpec, specToGraph, validateSpec } from '../lib/api/spec';
+import { registerAssets } from '../lib/frames/assets';
+import { DEMOS } from '../lib/demos';
 
 const isPlainSpecLike = (x: unknown) => !!x && typeof x === 'object' && 'expressions' in x;
 
@@ -16,15 +18,40 @@ const ShareIcon = (
   </svg>
 );
 
-/** Share-link / export-to-file / import-from-file menu, and one-time import of a
- * graph carried by the page URL — a legacy share link (#g=…) or the agent-facing
- * URL API (#expr=…, #spec=…, #z=…; see lib/api and public/llms.txt). */
+interface Toast {
+  msg: string;
+  error?: boolean;
+  /** The graph an example replaced — offered back via an Undo button. */
+  undo?: GraphData;
+}
+
+/** Share-link / export-to-file / import-from-file menu, examples, and one-time
+ * import of a graph carried by the page URL — a legacy share link (#g=…) or the
+ * agent-facing URL API (#expr=…, #spec=…, #z=…; see lib/api and public/llms.txt). */
 export default function GraphMenu() {
   const loadGraph = useStore((s) => s.loadGraph);
   const [open, setOpen] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+
+  // Every load path goes through here: frame-sequence assets must be registered
+  // before the entries that reference them are computed.
+  const applyGraph = (g: GraphData) => {
+    registerAssets(g.assets);
+    loadGraph(g);
+  };
+  const applyRef = useRef(applyGraph);
+  applyRef.current = applyGraph;
+
+  const toastTimer = useRef(0);
+  const flash = (msg: string, error = false, undo?: GraphData) => {
+    setToast({ msg, error, undo });
+    window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), error || undo ? 6000 : 2200);
+  };
+  const flashRef = useRef(flash);
+  flashRef.current = flash;
 
   // Import a graph carried in the URL, then strip it from the address bar — on
   // load, and when a link is pasted into an already-open tab (only the hash
@@ -37,8 +64,8 @@ export default function GraphMenu() {
       loadFromUrl(hash, search).then((r) => {
         if (!r) return;
         if (live) {
-          if (r.graph) loadGraph(r.graph);
-          if (r.message) flash(r.message, r.tone === 'error');
+          if (r.graph) applyRef.current(r.graph);
+          if (r.message) flashRef.current(r.message, r.tone === 'error');
         }
         history.replaceState(null, '', pathname + stripApiParams(search));
       });
@@ -60,14 +87,16 @@ export default function GraphMenu() {
     return () => document.removeEventListener('mousedown', onDown);
   }, [open]);
 
-  const toastTimer = useRef(0);
-  const flash = (msg: string, error = false) => {
-    setToast({ msg, error });
-    window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), error ? 6000 : 2200);
-  };
-
   const current = () => makeGraph(useStore.getState());
+
+  const openDemo = (id: string) => {
+    setOpen(false);
+    const demo = DEMOS.find((d) => d.id === id);
+    if (!demo) return;
+    const prev = current();
+    applyGraph(demo.build());
+    flash(`Opened “${demo.title}”`, false, prev);
+  };
 
   const share = async () => {
     setOpen(false);
@@ -109,7 +138,7 @@ export default function GraphMenu() {
     const text = await f.text();
     const g = parseGraphFile(text);
     if (g) {
-      loadGraph(sanitizeGraph(g));
+      applyGraph(sanitizeGraph(g));
       flash('Graph loaded');
       return;
     }
@@ -122,7 +151,7 @@ export default function GraphMenu() {
     }
     const v = spec === undefined ? null : validateSpec(spec);
     if (v?.ok) {
-      loadGraph(specToGraph(v.spec));
+      applyGraph(specToGraph(v.spec));
       flash('Graph loaded');
     } else if (v && !v.ok && isPlainSpecLike(spec)) {
       const e = v.errors[0];
@@ -150,11 +179,29 @@ export default function GraphMenu() {
           </button>
           <button onClick={exportFile}>Export to file…</button>
           <button onClick={() => fileRef.current?.click()}>Import from file…</button>
+          <div className="graph-menu-sep" role="separator" />
+          <div className="graph-menu-label">Examples</div>
+          {DEMOS.map((d) => (
+            <button key={d.id} className="graph-menu-demo" title={d.blurb} onClick={() => openDemo(d.id)}>
+              {d.title}
+            </button>
+          ))}
         </div>
       )}
       {toast && (
         <div className={toast.error ? 'graph-toast error' : 'graph-toast'} role={toast.error ? 'alert' : 'status'}>
           {toast.msg}
+          {toast.undo && (
+            <button
+              className="graph-toast-undo"
+              onClick={() => {
+                applyGraph(toast.undo!);
+                setToast(null);
+              }}
+            >
+              Undo
+            </button>
+          )}
         </div>
       )}
       <input

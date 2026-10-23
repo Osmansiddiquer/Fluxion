@@ -37,12 +37,50 @@ describe('checkSpec', () => {
     expect(r.errors[0].message).toMatch(/cannot parse/);
   });
 
-  it('flags unknown functions, explaining f(x) = … is unsupported', () => {
-    const r = checkSpec({ expressions: ['f(x) = x^2', 'y = foo(x)'] });
+  it('flags unknown functions, suggesting a definition (user functions are supported)', () => {
+    const r = checkSpec({ expressions: ['f(x) = x^2', 'y = foo(x)', 'y = f(x) + 1'] });
     expect(r.ok).toBe(false);
-    expect(r.errors.map((e) => e.path)).toEqual(['expressions[0]', 'expressions[1]']);
-    expect(r.errors[0].message).toMatch(/unknown function f.*not supported/);
-    expect(r.errors[1].message).toMatch(/unknown function foo/);
+    expect(r.errors.map((e) => e.path)).toEqual(['expressions[1]']);
+    expect(r.errors[0].message).toMatch(/unknown function foo.*define it/);
+    expect(r.expressions[0]).toMatchObject({ kind: 'fndef', summary: 'function definition f(x)' });
+  });
+
+  it('accepts the scripting syntax and style options without warnings', () => {
+    const r = checkSpec({
+      expressions: [
+        { expr: 'a = 0', min: 0, max: '2pi', anim: 'loop', speed: 0.01, autoplay: true },
+        'g(u, v) = u*cos(v)',
+        'b = 2a + 1',
+        { expr: '(g(2, t), sin(t))', thetaMin: 0, thetaMax: 'pi', fill: true, lineWidth: 0, colorExpr: 'hsv(360*a, 0.8, 1)' },
+        { expr: '(k, b) for k = -2..2', lineStyle: 'dotted', fillColor: '#ff0000' },
+        { expr: 'y = keys(a, 0, 0, 1, 2) * x', colorExpr: 'rgba(0, 0, 0, clamp(a))' },
+      ],
+      features: { grid: false },
+    });
+    expect(r.errors).toEqual([]);
+    expect(r.warnings).toEqual([]);
+    expect(r.expressions.map((e) => e.kind)).toEqual(['variable', 'fndef', 'function', 'parametric', 'repeat', 'function']);
+    expect(r.expressions[2].summary).toBe('derived value b');
+    expect(r.spec!.features.grid).toBe(false);
+  });
+
+  it('rejects bad style options and colour expressions calling undefined functions', () => {
+    const bad = checkSpec({
+      expressions: [{ expr: 'y = x', lineWidth: 50, lineStyle: 'wavy', colorExpr: 'not a colour(' }],
+    });
+    expect(bad.ok).toBe(false);
+    expect(bad.errors.map((e) => e.path).sort()).toEqual(
+      ['expressions[0].colorExpr', 'expressions[0].lineStyle', 'expressions[0].lineWidth'].sort(),
+    );
+    const undef = checkSpec({ expressions: [{ expr: 'y = x', colorExpr: 'hsv(huey(1), 1, 1)' }] });
+    expect(undef.errors[0]).toMatchObject({ path: 'expressions[0].colorExpr' });
+    expect(undef.errors[0].message).toMatch(/unknown function huey/);
+  });
+
+  it('warns when autoplay or the t-range is set where it does not apply', () => {
+    const r = checkSpec({ expressions: [{ expr: 'y = x', autoplay: true, thetaMax: 1 }] });
+    expect(r.warnings.map((w) => w.message).join(' ')).toMatch(/autoplay.*sliders/);
+    expect(r.warnings.map((w) => w.message).join(' ')).toMatch(/thetaMin\/thetaMax/);
   });
 
   it('flags undefined variables with a slider hint', () => {

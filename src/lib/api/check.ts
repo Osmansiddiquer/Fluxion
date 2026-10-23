@@ -2,6 +2,8 @@ import { parseEntry, type Parsed } from '../math/parse';
 import { computeAll, type CurveResult } from '../compute';
 import type { GraphData } from '../graphFile';
 import type { Viewport } from '../../store/types';
+import { colorExprCalls } from '../color';
+import { isDerived, isPlottableFnDef } from '../scope';
 import { specToGraph, validateSpec, type Issue, type NormalizedSpec } from './spec';
 
 /**
@@ -39,6 +41,7 @@ const ord = (n: number) => ORDINAL[n] ?? `${n}th`;
 function summarize(p: Parsed): string {
   switch (p.kind) {
     case 'function':
+      if ((isDerived as (x: Parsed) => boolean)(p)) return `derived value ${p.name}`;
       return p.name === 'y' ? 'function y(x)' : `function ${p.name}(x)`;
     case 'ode':
       return `${ord(p.order)}-order ODE in ${p.depVar}(t)`;
@@ -56,6 +59,14 @@ function summarize(p: Parsed): string {
         : `${p.points.length} point${p.points.length === 1 ? '' : 's'}`;
     case 'pointvar':
       return `point ${p.name}`;
+    case 'parametric':
+      return 'parametric curve (x(t), y(t))';
+    case 'fndef':
+      return `function definition ${p.name}(${p.params.join(', ')})`;
+    case 'repeat':
+      return `${summarize(p.body)}, repeated for ${p.loops.map((l) => `${l.name} = ${l.text}`).join(', ')}`;
+    case 'frames':
+      return 'frame sequence (needs an imported clip)';
     case 'empty':
       return 'empty';
     case 'error':
@@ -89,6 +100,9 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
   const expressions: ExpressionReport[] = [];
   const results = computeAll(g.entries, g.viewport);
   const vp = g.viewport;
+  const fnNames = new Set(
+    g.entries.map((e) => parseEntry(e.raw)).flatMap((p) => (p.kind === 'fndef' ? [p.name] : [])),
+  );
 
   g.entries.forEach((entry, i) => {
     const parsed = parseEntry(entry.raw);
@@ -104,7 +118,7 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
     if (res?.unknownFns?.length) {
       errors.push({
         path,
-        message: `unknown function ${res.unknownFns.join(', ')} in "${entry.raw}" (user-defined functions like f(x) = … are not supported; write y = … instead)`,
+        message: `unknown function ${res.unknownFns.join(', ')} in "${entry.raw}" (define it first, e.g. "${res.unknownFns[0]}(u) = u^2")`,
       });
     }
     if (res?.undefinedVars?.length) {
@@ -119,7 +133,9 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
     }
 
     // Options that don't apply to this kind are ignored by the app — flag them.
-    const isPolar = parsed.kind === 'polar' || (parsed.kind === 'inequality' && parsed.polar);
+    const body = parsed.kind === 'repeat' ? parsed.body : parsed;
+    const isPolar =
+      body.kind === 'polar' || body.kind === 'parametric' || (body.kind === 'inequality' && body.polar);
     const isPoint = parsed.kind === 'points' || parsed.kind === 'pointvar';
     const misplaced: [boolean, string, string][] = [
       [entry.t0 !== undefined || entry.ic !== undefined, 't0/ic', 'ODEs'],
@@ -128,7 +144,12 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
         'min/max/step',
         'sliders (k = 2)',
       ],
-      [entry.thetaMin !== undefined || entry.thetaMax !== undefined, 'thetaMin/thetaMax', 'polar curves/regions'],
+      [
+        entry.thetaMin !== undefined || entry.thetaMax !== undefined,
+        'thetaMin/thetaMax',
+        'polar curves/regions and parametric curves (as the t-range)',
+      ],
+      [entry.autoplay !== undefined, 'autoplay', 'sliders (k = 2)'],
       [
         entry.pointLabel !== undefined || entry.pointSize !== undefined || entry.pointDrag !== undefined || entry.pointLabelDir !== undefined,
         'label/labelDir/pointSize/drag',
@@ -138,6 +159,7 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
     const applies: Record<string, boolean> = {
       't0/ic': parsed.kind === 'ode',
       'min/max/step': parsed.kind === 'variable',
+      autoplay: parsed.kind === 'variable',
       'thetaMin/thetaMax': isPolar,
       'label/labelDir/pointSize/drag': isPoint,
     };
@@ -145,6 +167,12 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
       if (present && !applies[what]) {
         warnings.push({ path, message: `${what} only apply to ${forWhat}; ignored for this ${parsed.kind} expression` });
       }
+    }
+    // Colour expressions may call built-ins and the graph's own functions only.
+    for (const [k, v] of [['colorExpr', entry.colorExpr], ['fillColor', entry.fillColor]] as const) {
+      if (!v) continue;
+      const missing = colorExprCalls(v).filter((f) => !fnNames.has(f));
+      if (missing.length) errors.push({ path: `${path}.${k}`, message: `unknown function ${missing.join(', ')} in "${v}"` });
     }
     if (parsed.kind === 'ode' && entry.ic && entry.ic.length > parsed.order) {
       warnings.push({
@@ -159,7 +187,11 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
       }
     }
 
-    const plottable = !['empty', 'variable', 'error'].includes(parsed.kind);
+    // Derived values (b = 2a) and helper definitions (f(u, v) = …) draw nothing by design.
+    const plottable =
+      !['empty', 'variable', 'error'].includes(parsed.kind) &&
+      res?.value === undefined &&
+      !(parsed.kind === 'fndef' && !isPlottableFnDef(parsed));
     if (plottable && res && !res.error && !res.undefinedVars?.length && entry.visible) {
       rep.visible = anyVisible(res, vp);
       if (!rep.visible) {

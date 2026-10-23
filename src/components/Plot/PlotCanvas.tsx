@@ -12,6 +12,9 @@ import { FEATURE_LABEL } from '../../lib/analysis/types';
 import { drawGrid, readGridColors } from './grid';
 import { drawMarkers, colorForMarker, type PlacedMarker } from './markers';
 import FeatureToggle from './FeatureToggle';
+import { resolveStyle, type ResolvedStyle } from '../../lib/style';
+import { rasterizeRegion, type Rect } from '../../lib/raster';
+import type { CurveResult } from '../../lib/compute';
 import './PlotCanvas.css';
 
 interface Size {
@@ -142,6 +145,17 @@ export default function PlotCanvas() {
     }
   }, [viewport, size, setViewport]);
 
+  // Per-entry drawing style for this frame (colour expressions read the scope).
+  const styles = useMemo(() => {
+    const m = new Map<string, ResolvedStyle>();
+    for (const entry of entries) {
+      m.set(entry.id, resolveStyle(entry, analysis.results.get(entry.id), analysis.scope));
+    }
+    return m;
+  }, [entries, analysis]);
+  // Rasterised inequality regions, reused while the result + viewport are unchanged.
+  const regionCache = useRef(new WeakMap<CurveResult, { key: string; rects: Rect[] }>());
+
   // Single-valued curves (function / ode) eligible for tracing.
   const traceable = useMemo(
     () =>
@@ -151,7 +165,7 @@ export default function PlotCanvas() {
         .filter(
           (x) =>
             x.res &&
-            (x.res.parsed.kind === 'function' || x.res.parsed.kind === 'ode') &&
+            (x.res.parsed.kind === 'function' || x.res.parsed.kind === 'ode' || x.res.parsed.kind === 'fndef') &&
             x.res.curve.segments.length > 0,
         ),
     [entries, analysis],
@@ -168,7 +182,9 @@ export default function PlotCanvas() {
             x.res &&
             (x.res.parsed.kind === 'implicit' ||
               x.res.parsed.kind === 'polar' ||
-              x.res.parsed.kind === 'inequality') &&
+              x.res.parsed.kind === 'inequality' ||
+              x.res.parsed.kind === 'parametric' ||
+              x.res.parsed.kind === 'repeat') &&
             x.res.curve.segments.length > 0,
         ),
     [entries, analysis],
@@ -216,8 +232,17 @@ export default function PlotCanvas() {
       if (!entry.visible) continue;
       const res = analysis.results.get(entry.id);
       if (!res?.points) continue;
-      if (res.parsed.kind !== 'points' && res.parsed.kind !== 'pointvar') continue;
-      const setting = entry.pointDrag ?? 'auto';
+      // Repeated points (`(k, k²) for k = …`) are markers too, but never draggable.
+      // Repeated polylines / segments are shapes (no vertex dots).
+      const repeated =
+        res.parsed.kind === 'repeat' && res.parsed.body.kind === 'points' && !res.parsed.body.polyline;
+      if (res.parsed.kind === 'repeat' && !repeated) continue;
+      if (res.parsed.kind !== 'points' && res.parsed.kind !== 'pointvar' && !repeated) continue;
+      // A filled polygon reads as a shape: no vertex dots.
+      if (res.parsed.kind === 'points' && res.parsed.polyline && styles.get(entry.id)?.fillMode === 'shape') {
+        continue;
+      }
+      const setting = repeated ? 'off' : (entry.pointDrag ?? 'auto');
       const size = entry.pointSize ?? 6;
       res.points.forEach((coord, index) => {
         let xSym: string | undefined;
@@ -250,11 +275,12 @@ export default function PlotCanvas() {
         const xDrag = !!xVar || xRaw;
         const yDrag = !!yVar || yRaw;
         const mode: DragMode = xDrag && yDrag ? 'free' : xDrag ? 'x' : yDrag ? 'y' : 'none';
-        list.push({ entryId: entry.id, index, coord, color: entry.color, size, mode, xVar, yVar, xRaw, yRaw });
+        const color = styles.get(entry.id)?.solid ?? entry.color;
+        list.push({ entryId: entry.id, index, coord, color, size, mode, xVar, yVar, xRaw, yRaw });
       });
     }
     return list;
-  }, [entries, analysis, varEntry]);
+  }, [entries, analysis, varEntry, styles]);
 
   // Draw.
   useEffect(() => {
@@ -268,65 +294,87 @@ export default function PlotCanvas() {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     const tf = makeTransform(viewport, size.w, size.h);
-    drawGrid(ctx, tf, readGridColors());
-
-    // Inequality regions (shaded), drawn under the curves. A coarse pixel grid is
-    // filled where the test holds; the boundary curve gives the crisp edge.
-    for (const entry of entries) {
-      const res = analysis.results.get(entry.id);
-      if (!res || !entry.visible || !res.inequality) continue;
-      const { test } = res.inequality;
-      const STEP = 6;
-      ctx.fillStyle = entry.color;
-      ctx.globalAlpha = 0.16;
-      for (let px = 0; px < size.w; px += STEP) {
-        const t = tf.ix(px + STEP / 2);
-        for (let py = 0; py < size.h; py += STEP) {
-          if (test(t, tf.iy(py + STEP / 2))) ctx.fillRect(px, py, STEP, STEP);
-        }
-      }
-      ctx.globalAlpha = 1;
+    if (toggles.grid === false) {
+      ctx.fillStyle = readGridColors().bg;
+      ctx.fillRect(0, 0, size.w, size.h);
+    } else {
+      drawGrid(ctx, tf, readGridColors());
     }
 
+    // Entries draw in list order (later rows on top): each one's fill, then its
+    // stroke. Inequality regions are rasterised adaptively (cached per result +
+    // viewport); closed shapes fill as paths.
+    const tracePath = (seg: [number, number][]) => {
+      for (let i = 0; i < seg.length; i++) {
+        const px = tf.tx(seg[i][0]);
+        const py = tf.ty(seg[i][1]);
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+    };
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
+    const rasterKey = `${viewport.tMin},${viewport.tMax},${viewport.yMin},${viewport.yMax},${size.w},${size.h}`;
     for (const entry of entries) {
       const res = analysis.results.get(entry.id);
       if (!res || !entry.visible) continue;
+      const st = styles.get(entry.id);
+      if (!st) continue;
+
+      if (st.fill && st.fillMode === 'region' && res.inequality) {
+        let hit = regionCache.current.get(res);
+        if (!hit || hit.key !== rasterKey) {
+          hit = { key: rasterKey, rects: rasterizeRegion(res.inequality.test, size.w, size.h, tf.ix, tf.iy) };
+          regionCache.current.set(res, hit);
+        }
+        ctx.fillStyle = st.fill;
+        for (const r of hit.rects) ctx.fillRect(r.x, r.y, r.w, r.h);
+      } else if (st.fill && st.fillMode === 'shape') {
+        ctx.fillStyle = st.fill;
+        if (st.fillRule === 'evenodd') {
+          // One shape: nested contours become holes.
+          ctx.beginPath();
+          for (const seg of res.curve.segments) {
+            tracePath(seg);
+            ctx.closePath();
+          }
+          ctx.fill('evenodd');
+        } else {
+          for (const seg of res.curve.segments) {
+            if (seg.length < 3) continue;
+            ctx.beginPath();
+            tracePath(seg);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
+
+      if (!st.stroke) continue;
+      ctx.strokeStyle = st.stroke;
+      ctx.lineWidth = st.lineWidth;
       // Inequality boundaries: dotted when strict (< >, excluded), solid when
       // inclusive (≤ ≥). Draw each boundary as ONE path so the dash phase carries
       // across the many short marching-squares segments (otherwise it looks solid).
       if (res.inequality) {
-        ctx.strokeStyle = entry.color;
-        ctx.lineWidth = 2.25;
         for (const b of res.inequality.boundaries) {
-          ctx.setLineDash(b.strict ? [2, 4] : []);
+          ctx.setLineDash(b.strict ? [2, 4] : st.dash);
           ctx.beginPath();
-          for (const seg of b.segments) {
-            for (let i = 0; i < seg.length; i++) {
-              const px = tf.tx(seg[i][0]);
-              const py = tf.ty(seg[i][1]);
-              if (i === 0) ctx.moveTo(px, py);
-              else ctx.lineTo(px, py);
-            }
-          }
+          for (const seg of b.segments) tracePath(seg);
           ctx.stroke();
         }
         ctx.setLineDash([]);
         continue;
       }
-      ctx.strokeStyle = entry.color;
-      ctx.lineWidth = 2.25;
+      ctx.setLineDash(st.dash);
+      const closeShapes = st.fillMode === 'shape';
       for (const seg of res.curve.segments) {
         ctx.beginPath();
-        for (let i = 0; i < seg.length; i++) {
-          const px = tf.tx(seg[i][0]);
-          const py = tf.ty(seg[i][1]);
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
+        tracePath(seg);
+        if (closeShapes) ctx.closePath();
         ctx.stroke();
       }
+      ctx.setLineDash([]);
     }
 
     drawMarkers(ctx, tf, markers);
@@ -451,7 +499,7 @@ export default function PlotCanvas() {
       if (rightOpen) grip(tf.tx(sliceT), 10, false);
       if (bottomOpen) grip(size.w - 11, tf.ty(sliceY), true);
     }
-  }, [analysis, viewport, size, entries, markers, pointMarkers, projections, pin, theme, sigFigs]);
+  }, [analysis, viewport, size, entries, styles, markers, pointMarkers, projections, pin, theme, sigFigs, toggles.grid]);
 
   // --- Interaction ---------------------------------------------------------
   const interaction = useRef<
@@ -541,7 +589,9 @@ export default function PlotCanvas() {
     if (
       res?.parsed.kind === 'implicit' ||
       res?.parsed.kind === 'polar' ||
-      res?.parsed.kind === 'inequality'
+      res?.parsed.kind === 'inequality' ||
+      res?.parsed.kind === 'parametric' ||
+      res?.parsed.kind === 'repeat'
     ) {
       const np = nearestPointOnCurve(res.curve, mx, my, tf);
       if (np) return { entryId, t: np.t, y: np.y };

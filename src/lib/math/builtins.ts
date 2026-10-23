@@ -1,5 +1,6 @@
 // Friendly math vocabulary: synonyms mapped onto mathjs names, the set of known
 // functions (for validation + autocomplete), and constants.
+import { HELPER_NAMES } from './helpers';
 
 /** Friendly function names → mathjs function names (applied when followed by `(`). */
 export const FUNCTION_SYNONYMS: Record<string, string> = {
@@ -54,6 +55,8 @@ export const KNOWN_FUNCTIONS = new Set([
   'abs', 'sign', 'floor', 'ceil', 'round', 'fix',
   'min', 'max', 'mod', 'pow', 'gamma', 'factorial', 'gcd', 'lcm',
   'hypot', 'sinc',
+  // Scripting helpers (lib/math/helpers.ts): lerp, keys, rotx, projx, …
+  ...HELPER_NAMES,
 ]);
 
 /** Built-in constants. */
@@ -64,4 +67,5 @@ export const FUNCTION_SUGGESTIONS = [
   'sin', 'cos', 'tan', 'arcsin', 'arccos', 'arctan',
   'sinh', 'cosh', 'tanh', 'sqrt', 'cbrt', 'exp', 'ln', 'log', 'log10',
   'abs', 'sign', 'floor', 'ceil', 'round', 'min', 'max', 'mod', 'gamma',
+  'lerp', 'clamp', 'smoothstep', 'ease', 'keys', 'skeys', 'rotx', 'roty', 'projx', 'projy',
 ];

@@ -4,10 +4,12 @@ import { KNOWN_FUNCTIONS } from '../math/builtins';
 import { latexToText } from '../math/fromlatex';
 import { PALETTE, nextColor } from '../../utils/colors';
 import type { GraphData } from '../graphFile';
+import { isColorExpr } from '../color';
 import type {
   AnimMode,
   Entry,
   FeatureToggles,
+  LineStyle,
   PointDir,
   Projections,
   Viewport,
@@ -47,6 +49,16 @@ export const LIMITS = {
   maxConstLength: 100,
   /** Max serialized spec size accepted from a link / file (bytes of JSON). */
   maxSpecBytes: 200_000,
+  /** Slider play speed (1 = a full sweep in ~4 s). Tiny speeds play long clips in real time. */
+  minSpeed: 1e-4,
+  maxSpeed: 100,
+  /** Stroke width in px, and max length of a colour expression like "hsv(360*a, 1, 1)". */
+  maxLineWidth: 20,
+  maxColorExprLength: 200,
+  /** Frame-sequence assets carried by a graph file (imported clips). */
+  maxAssets: 8,
+  maxAssetChars: 8_000_000,
+  maxAssetsTotalChars: 16_000_000,
 } as const;
 
 export type DragMode = NonNullable<Entry['pointDrag']>;
@@ -77,6 +89,16 @@ export interface ExpressionSpec {
   labelDir?: PointDir;
   pointSize?: number;
   drag?: DragMode;
+  /** Style: stroke width px (0 hides it), dash style, fill for closed shapes / regions. */
+  lineWidth?: number;
+  lineStyle?: LineStyle;
+  fill?: boolean;
+  fillOpacity?: number;
+  /** Colour expressions over sliders, e.g. "hsv(360*a, 0.8, 1)", "rgba(0,0,0,k)". */
+  colorExpr?: string;
+  fillColor?: string;
+  /** Slider: start playing when the graph opens. */
+  autoplay?: boolean;
 }
 
 export interface ViewportSpec {
@@ -124,6 +146,13 @@ export interface NormalizedExpression {
   labelDir?: PointDir;
   pointSize?: number;
   drag?: DragMode;
+  lineWidth?: number;
+  lineStyle?: LineStyle;
+  fill?: boolean;
+  fillOpacity?: number;
+  colorExpr?: string;
+  fillColor?: string;
+  autoplay?: boolean;
 }
 
 export interface NormalizedSpec {
@@ -177,6 +206,7 @@ export const COLOR_NAMES: Record<string, string> = {
 export const ANIM_MODES: readonly AnimMode[] = ['loop', 'bounce', 'once'];
 export const POINT_DIRS: readonly PointDir[] = ['n', 'ne', 'e', 'se', 's', 'sw', 'w', 'nw'];
 export const DRAG_MODES: readonly DragMode[] = ['auto', 'off', 'x', 'y', 'both'];
+export const LINE_STYLES: readonly LineStyle[] = ['solid', 'dashed', 'dotted'];
 
 export const TOP_KEYS = [
   '$schema',
@@ -204,9 +234,17 @@ export const EXPRESSION_KEYS = [
   'labelDir',
   'pointSize',
   'drag',
+  'lineWidth',
+  'lineStyle',
+  'fill',
+  'fillOpacity',
+  'colorExpr',
+  'fillColor',
+  'autoplay',
 ] as const;
 export const VIEWPORT_KEYS = ['xmin', 'xmax', 'ymin', 'ymax'] as const;
-export const FEATURE_KEYS = Object.keys(DEFAULT_FEATURES) as (keyof FeatureToggles)[];
+/** Feature toggles a spec may set; `grid` (grid lines + axes) defaults to shown. */
+export const FEATURE_KEYS = [...Object.keys(DEFAULT_FEATURES), 'grid'] as (keyof FeatureToggles)[];
 export const PANEL_KEYS = ['right', 'bottom', 'sliceX', 'sliceY'] as const;
 
 /** Common mistakes → the key that was probably meant. */
@@ -230,6 +268,16 @@ const KEY_ALIASES: Record<string, string> = {
   thetamin: 'thetaMin',
   thetamax: 'thetaMax',
   size: 'pointSize',
+  width: 'lineWidth',
+  linewidth: 'lineWidth',
+  thickness: 'lineWidth',
+  dash: 'lineStyle',
+  style: 'lineStyle',
+  opacity: 'fillOpacity',
+  colour_expr: 'colorExpr',
+  colorexpression: 'colorExpr',
+  fillcolour: 'fillColor',
+  play: 'autoplay',
   tmin: 'xmin',
   tmax: 'xmax',
   left: 'xmin',
@@ -469,7 +517,9 @@ function validateExpression(
     else out.step = s;
   }
   if (obj.anim !== undefined) out.anim = c.oneOf(obj.anim, ANIM_MODES, `${path}.anim`);
-  if (obj.speed !== undefined) out.speed = c.num(obj.speed, `${path}.speed`, { min: 0.1, max: 5 });
+  if (obj.speed !== undefined) {
+    out.speed = c.num(obj.speed, `${path}.speed`, { min: LIMITS.minSpeed, max: LIMITS.maxSpeed });
+  }
   if (obj.thetaMin !== undefined) {
     out.thetaMin = c.num(obj.thetaMin, `${path}.thetaMin`, { abs: LIMITS.maxThetaAbs });
   }
@@ -498,6 +548,25 @@ function validateExpression(
     if (n !== undefined) out.pointSize = Math.round(n);
   }
   if (obj.drag !== undefined) out.drag = c.oneOf(obj.drag, DRAG_MODES, `${path}.drag`);
+  if (obj.lineWidth !== undefined) {
+    out.lineWidth = c.num(obj.lineWidth, `${path}.lineWidth`, { min: 0, max: LIMITS.maxLineWidth });
+  }
+  if (obj.lineStyle !== undefined) out.lineStyle = c.oneOf(obj.lineStyle, LINE_STYLES, `${path}.lineStyle`);
+  if (obj.fill !== undefined) out.fill = c.bool(obj.fill, `${path}.fill`);
+  if (obj.fillOpacity !== undefined) {
+    out.fillOpacity = c.num(obj.fillOpacity, `${path}.fillOpacity`, { min: 0, max: 1 });
+  }
+  for (const k of ['colorExpr', 'fillColor'] as const) {
+    const v = obj[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'string' || !v.trim()) c.error(`${path}.${k}`, `must be a colour string, got ${describe(v)}`);
+    else if (v.length > LIMITS.maxColorExprLength) {
+      c.error(`${path}.${k}`, `is too long (max ${LIMITS.maxColorExprLength} chars)`);
+    } else if (!isColorExpr(v)) {
+      c.error(`${path}.${k}`, `"${v}" is not a colour: use "#rrggbb", rgb(r,g,b) (0–255), rgba(r,g,b,a), hsv(h,s,v) or hsl(h,s,l) (h in degrees, s/v/l/a in 0–1)`);
+    } else out[k] = v.trim();
+  }
+  if (obj.autoplay !== undefined) out.autoplay = c.bool(obj.autoplay, `${path}.autoplay`);
 
   // Drop keys whose value failed validation (left as undefined above).
   for (const k of Object.keys(out) as (keyof typeof out)[]) if (out[k] === undefined) delete out[k];
@@ -675,6 +744,13 @@ export function specToGraph(spec: NormalizedSpec): GraphData {
     if (e.labelDir !== undefined) entry.pointLabelDir = e.labelDir;
     if (e.pointSize !== undefined) entry.pointSize = e.pointSize;
     if (e.drag !== undefined) entry.pointDrag = e.drag;
+    if (e.lineWidth !== undefined) entry.lineWidth = e.lineWidth;
+    if (e.lineStyle !== undefined) entry.lineStyle = e.lineStyle;
+    if (e.fill !== undefined) entry.fill = e.fill;
+    if (e.fillOpacity !== undefined) entry.fillOpacity = e.fillOpacity;
+    if (e.colorExpr !== undefined) entry.colorExpr = e.colorExpr;
+    if (e.fillColor !== undefined) entry.fillColor = e.fillColor;
+    if (e.autoplay) entry.autoplay = true;
     return entry;
   });
   return {
@@ -733,6 +809,13 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
     if (e.pointLabelDir !== undefined) x.labelDir = e.pointLabelDir;
     if (e.pointSize !== undefined) x.pointSize = e.pointSize;
     if (e.pointDrag !== undefined) x.drag = e.pointDrag;
+    if (e.lineWidth !== undefined) x.lineWidth = e.lineWidth;
+    if (e.lineStyle !== undefined) x.lineStyle = e.lineStyle;
+    if (e.fill !== undefined) x.fill = e.fill;
+    if (e.fillOpacity !== undefined) x.fillOpacity = e.fillOpacity;
+    if (e.colorExpr) x.colorExpr = e.colorExpr;
+    if (e.fillColor) x.fillColor = e.fillColor;
+    if (e.autoplay) x.autoplay = true;
     // A slider's current value lives in varValue; fold it back into the text.
     if (e.varValue !== undefined) {
       const m = e.raw.match(/^\s*([A-Za-z]\w*)\s*=/);
@@ -746,10 +829,12 @@ export function graphToSpec(g: Pick<GraphData, 'entries' | 'viewport'> & Partial
   if (!sameObj(vp, DEFAULT_VIEWPORT)) {
     spec.viewport = { xmin: vp.tMin, xmax: vp.tMax, ymin: vp.yMin, ymax: vp.yMax };
   }
-  if (g.features && !sameObj(g.features, DEFAULT_FEATURES)) {
+  if (g.features) {
+    // grid is optional (undefined = shown), so compare effective values.
+    const eff = (fs: Partial<FeatureToggles>, k: keyof FeatureToggles) => (k === 'grid' ? fs[k] !== false : !!fs[k]);
     const f: Partial<FeatureToggles> = {};
-    for (const k of FEATURE_KEYS) if (g.features[k] !== DEFAULT_FEATURES[k]) f[k] = !!g.features[k];
-    spec.features = f;
+    for (const k of FEATURE_KEYS) if (eff(g.features, k) !== eff(DEFAULT_FEATURES, k)) f[k] = eff(g.features, k);
+    if (Object.keys(f).length) spec.features = f;
   }
   const p = g.projections;
   if (p) {
