@@ -229,8 +229,15 @@ export function latexToText(latex: string): string {
   // Strip backslash from remaining commands (functions, Greek, etc.).
   s = s.replace(/\\([a-zA-Z]+)/g, '$1');
 
-  // Subscripts: x_{1} -> x_1 (keep simple identifier subscripts).
-  s = s.replace(/_\{([A-Za-z0-9]+)\}/g, '_$1');
+  // Subscripts: x_{1} -> x_1 (keep simple identifier subscripts). A subscript
+  // ends the name, so what follows is a new factor: \omega_0X is ω₀·X (an
+  // unbraced subscript is one character), never the name omega_0X.
+  // (log_b keeps its base glued on: replaceLogBase reads it below.)
+  s = s.replace(/_(?:\{([A-Za-z0-9]+)\}|([A-Za-z0-9]))/g, (m, braced, single, off: number, str: string) => {
+    const sub = braced ?? single;
+    const ends = str.slice(Math.max(0, off - 3), off) !== 'log' && /[A-Za-z0-9]/.test(str[off + m.length] ?? '');
+    return `_${sub}${ends ? ' ' : ''}`;
+  });
 
   // Remaining braces (exponent/grouping) become parentheses.
   s = s.replace(/\{/g, '(').replace(/\}/g, ')');

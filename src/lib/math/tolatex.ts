@@ -1,6 +1,6 @@
 import { parse as mjParse, type MathNode } from 'mathjs';
 import { hasWhere, isNaNNode, type CondSpec, type Parsed } from './parse';
-import { greekWordToTex } from './greek';
+import { greekWordToTex, nameToTex } from './greek';
 import { fmtSig } from '../format';
 
 function fmtNum(n: number): string {
@@ -36,8 +36,13 @@ function postTex(tex: string): string {
   // into it (\cdot\mathrm{t} -> \cdot{t}, never \cdott).
   s = s.replace(/\\mathrm\{([A-Za-z][A-Za-z0-9]*)\}/g, '{$1}');
   s = s.replace(
-    /D(\d+)\\?_\{?([A-Za-z][A-Za-z0-9]*)\}?/g,
-    (_m, k: string, name: string) => name + "'".repeat(Number(k)),
+    /D(\d+)\\?_\{?([A-Za-z][A-Za-z0-9]*)(?:\\?_([A-Za-z0-9]+))?\}?/g,
+    (_m, k: string, name: string, sub: string | undefined) =>
+      nameToTex(sub ? `${name}_${sub}` : name) + "'".repeat(Number(k)),
+  );
+  // Subscripted names, which mathjs escapes (omega\_0): typeset ω₀, a₁.
+  s = s.replace(/(?<![\\A-Za-z0-9])([A-Za-z][A-Za-z0-9]*)\\_([A-Za-z0-9]+)/g, (_m, name: string, sub: string) =>
+    nameToTex(`${name}_${sub}`),
   );
   return s;
 }
@@ -67,6 +72,10 @@ function texHandler(node: MathNode, options: object): string | undefined {
   const type = (node as { type: string }).type;
   // The braces already delimit a piecewise value: no extra parentheses.
   if (type === 'ParenthesisNode' && (unparen(node) as { type: string }).type === 'ConditionalNode') {
+    return unparen(node).toTex(options);
+  }
+  // (b) shows as b: brackets around a lone name add nothing.
+  if (type === 'ParenthesisNode' && (unparen(node) as { type: string }).type === 'SymbolNode') {
     return unparen(node).toTex(options);
   }
   if (type !== 'ConditionalNode') return undefined;
@@ -120,7 +129,7 @@ function texOf(src: string): string {
 function condsTex(conds: CondSpec[]): string {
   return conds
     .map((c) => {
-      const name = greekWordToTex(c.depVar) + "'".repeat(c.k);
+      const name = nameToTex(c.depVar) + "'".repeat(c.k);
       return `${name}\\left(${postTex(c.at.toTex(TEX_OPTS))}\\right) = ${postTex(c.value.toTex(TEX_OPTS))}`;
     })
     .join(',\\ ');
@@ -130,7 +139,7 @@ function condsTex(conds: CondSpec[]): string {
 function odeLhsTex(lhs: string, depVar: string, order: number, indep?: 'x'): string {
   const bare = lhs.replace(/^\((.*)\)$/, '$1').trim();
   if (indep === 'x' && bare === `D${order}_${depVar}`) {
-    const v = greekWordToTex(depVar);
+    const v = nameToTex(depVar);
     return order === 1 ? `\\frac{d${v}}{dx}` : `\\frac{d^${order}${v}}{dx^${order}}`;
   }
   return texOf(lhs);
@@ -148,7 +157,7 @@ function baseLatex(parsed: Parsed, varValue?: number): string | null {
   if ('raw' in parsed && typeof parsed.raw === 'string' && hasWhere(parsed.raw)) return null;
   switch (parsed.kind) {
     case 'variable':
-      return `${greekWordToTex(parsed.name)} = ${fmtNum(varValue ?? parsed.value)}`;
+      return `${nameToTex(parsed.name)} = ${fmtNum(varValue ?? parsed.value)}`;
     case 'function':
       if (parsed.lhs != null && parsed.rhs != null) {
         return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
@@ -181,13 +190,13 @@ function baseLatex(parsed: Parsed, varValue?: number): string | null {
     case 'fndef':
       // Indexing / arrays don't round-trip through the editor: shown as typed.
       if (/\[/.test(parsed.rhs)) return null;
-      return `${greekWordToTex(parsed.name)}\\left(${parsed.params
-        .map(greekWordToTex)
+      return `${nameToTex(parsed.name)}\\left(${parsed.params
+        .map(nameToTex)
         .join(',')}\\right) = ${texOf(parsed.rhs)}`;
     case 'repeat': {
       const body = entryToLatex(parsed.body);
       if (body == null) return null;
-      const loops = parsed.loops.map((l) => `${greekWordToTex(l.name)}=${l.text}`).join(',\\ ');
+      const loops = parsed.loops.map((l) => `${nameToTex(l.name)}=${l.text}`).join(',\\ ');
       return `${body}\\ \\operatorname{for}\\ ${loops}`;
     }
     case 'frames':
