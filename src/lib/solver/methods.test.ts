@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { runSteps, globalErrors, methodStep, STEP_ORDER, type StepMethod } from './methods';
 import { shoot } from './shooting';
 import type { DerivFn } from './rk4';
+import { checkSpec } from '../api/check';
 
 const oscillator: DerivFn = (_t, y) => [y[1], -y[0]];
 const decay: DerivFn = (_t, y) => [-y[0]];
@@ -115,5 +116,19 @@ describe('shooting (BVP)', () => {
   it('rejects a = b', () => {
     const r = shoot({ deriv: oscillator, a: 1, b: 1, ia: 0, alpha: 0, ib: 0, beta: 0 });
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('typed conditions that name an undefined slider (mid-typing)', () => {
+  // Used to throw "Undefined symbol a" out of computeAll and take the app down.
+  it.each([
+    "y''=-y, y(0)=0, y(2)=a",
+    "y''=-y, y(a)=0, y(2)=1",
+    "y''=-y, y(0)=a, y'(0)=1",
+    "y'=-y, y(a)=1",
+  ])('%s: reports the undefined name instead of throwing', (expr) => {
+    const r = checkSpec({ expressions: [expr] });
+    expect(r.errors.map((e) => e.message).join()).toMatch(/undefined variable a/);
+    expect(checkSpec({ expressions: ['a = 0.5', expr] }).errors).toEqual([]);
   });
 });

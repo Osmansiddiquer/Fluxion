@@ -38,8 +38,16 @@ const E = (raw: string, extra: Partial<Entry> = {}): Entry => ({
 beforeEach(() => clearOdeOverlayCaches());
 
 describe('slope field', () => {
-  it('is on by default for a first-order scalar ODE and samples f(t, y)', () => {
+  it('is off by default (opt-in)', () => {
     const a = E("y' = y - t");
+    const o = computeAll([a], VP).get(a.id)!.ode!;
+    expect(o.fieldKind).toBe('slope');
+    expect(o.fieldOn).toBe(false);
+    expect(o.field).toBeUndefined();
+  });
+
+  it('field: true samples f(t, y)', () => {
+    const a = E("y' = y - t", { field: true });
     const r = computeAll([a], VP).get(a.id)!;
     const f = r.ode!.field!;
     expect(f.kind).toBe('slope');
@@ -52,7 +60,7 @@ describe('slope field', () => {
   });
 
   it('grid follows the zoom and snaps to nice multiples', () => {
-    const a = E("y' = -y");
+    const a = E("y' = -y", { field: true });
     const f1 = computeAll([a], VP).get(a.id)!.ode!.field!;
     const f2 = computeAll([a], { tMin: -80, tMax: 80, yMin: -50, yMax: 50 }).get(a.id)!.ode!.field!;
     expect(f2.spacing / f1.spacing).toBeCloseTo(10, 9);
@@ -61,21 +69,21 @@ describe('slope field', () => {
     expect(Math.abs(x0 - Math.round(x0))).toBeLessThan(1e-9);
   });
 
-  it('only the first eligible ODE gets the automatic field; field: false/true override', () => {
+  it('field: true/false per row; no automatic slope field', () => {
     const a = E("y' = y");
     const b = E("y' = -y");
     let res = computeAll([a, b], VP);
-    expect(res.get(a.id)!.ode!.field).toBeDefined();
+    expect(res.get(a.id)!.ode!.field).toBeUndefined();
     expect(res.get(b.id)!.ode!.field).toBeUndefined();
+    a.field = true;
+    b.field = true;
+    res = computeAll([a, b], VP);
+    expect(res.get(a.id)!.ode!.fieldOn).toBe(true);
+    expect(res.get(b.id)!.ode!.fieldOn).toBe(true);
     a.field = false;
     res = computeAll([a, b], VP);
     expect(res.get(a.id)!.ode!.field).toBeUndefined();
     expect(res.get(b.id)!.ode!.field).toBeDefined();
-    b.field = false;
-    a.field = true;
-    res = computeAll([a, b], VP);
-    expect(res.get(a.id)!.ode!.fieldOn).toBe(true);
-    expect(res.get(b.id)!.ode!.fieldOn).toBe(false);
   });
 
   it('has no field for higher-order equations or systems against t', () => {
@@ -509,8 +517,8 @@ describe('regression: graphs without the new options', () => {
       expect(res.get(id)!.ode!.phase).toBeUndefined();
     }
     for (const r of res.values()) expect(r.ghosts).toBeUndefined();
-    // Only the first first-order ODE gets the (intended) default slope field.
-    expect(res.get('1')!.ode!.field?.kind).toBe('slope');
+    // Slope fields are opt-in.
+    expect(res.get('1')!.ode!.field).toBeUndefined();
     expect(res.get('2')!.ode!.field).toBeUndefined();
     // Non-ODE rows carry no ODE info.
     for (const id of ['3', '4', '5', '6', '9']) expect(res.get(id)!.ode).toBeUndefined();

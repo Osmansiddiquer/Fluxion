@@ -312,19 +312,19 @@ const odes: DocSection = {
     }),
     H('Slope fields'),
     P(
-      'A first-order equation $y\' = f(t, y)$ draws its **slope field** behind the solution: a short faint segment with slope $f$ at each grid point, in the equation’s colour. Every solution runs along the segments, so the field shows the whole family at once. The grid follows the zoom. The graph’s first first-order equation gets a field automatically; expand its row (▸) to switch it off with **Slope field**, or on for another row.',
+      'A first-order equation $y\' = f(t, y)$ draws its **slope field** behind the solution: a short faint segment with slope $f$ at each grid point, in the equation’s colour. Every solution runs along the segments, so the field shows the whole family at once. The grid follows the zoom. Fields are off by default: expand the equation’s row (▸) and switch on **Slope field**.',
     ),
     LIST(
       '**Drag the ring** at $(t_0, y_0)$ on the graph to move the initial condition; the sliders follow.',
       '**Shift-click** anywhere on the plot to add another solution through that point, drawn thinner in the same colour, without a new row. **Clear extra solutions** in the row removes them.',
-      'In a JSON spec or link, `"field": false` hides a field and `"extraICs": [[t0, y0], …]` adds solutions (see [For AI agents](#agents)).',
+      'In a JSON spec or link, `"field": true` shows a slope field and `"extraICs": [[t0, y0], …]` adds solutions (see [For AI agents](#agents)).',
     ),
     EX({
       id: 'slope-field',
       title: 'Logistic slope field',
       blurb: 'The field of y′ = y(1 − y) with three solutions: every one heads to y = 1 or away from y = 0.',
       tex: "y' = y(1 - y)",
-      lines: [L("y' = y*(1 - y)", 'ode', { ic: [0.1], expanded: true, extraICs: [[0, 1.6], [0, -0.05]] })],
+      lines: [L("y' = y*(1 - y)", 'ode', { ic: [0.1], expanded: true, field: true, extraICs: [[0, 1.6], [0, -0.05]] })],
       viewport: { tMin: -4, tMax: 6, yMin: -1.5, yMax: 2.5 },
     }),
     H('Phase plane'),

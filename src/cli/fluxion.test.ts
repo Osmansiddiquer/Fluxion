@@ -176,3 +176,16 @@ describe('fluxion CLI', () => {
     }
   });
 });
+
+describe('check runs a spec script against its own expressions', () => {
+  it('graph.ode sees the ODE (used to get none: the normalised spec was re-validated)', async () => {
+    const spec = {
+      expressions: [{ expr: "theta'' = -g/L*sin(theta)", ic: [1, 0] }, 'g = 9.81', { expr: 'L = 3', min: 1, max: 5 }],
+      script: 'const th = graph.ode("theta")\ncircle(0, th(time), 0.3)',
+      viewport: { xmin: -5, xmax: 5 },
+    };
+    const r = await run(['check', 's.json'], { 's.json': JSON.stringify(spec) });
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.out).errors).toEqual([]);
+  }, 30000);
+});

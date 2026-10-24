@@ -118,6 +118,60 @@ a.report-bug {
 .graph-menu-pop .graph-menu-demo {
   white-space: nowrap;
 }
+.graph-menu-sub {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+.graph-menu-pop .graph-menu-subtrigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+.graph-menu-subtrigger svg {
+  flex: none;
+  color: var(--text-faint);
+  transform: rotate(180deg);
+  transition: transform 0.12s ease;
+}
+.graph-menu-pop .graph-menu-subtrigger.open {
+  background: var(--surface-hover);
+}
+/* Flies out to the left: the menu sits at the right edge of the header. */
+.graph-menu-subpop {
+  position: absolute;
+  top: -6px;
+  right: calc(100% + 4px);
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+  padding: 5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 10px);
+  box-shadow: var(--shadow-md, 0 8px 24px rgba(0, 0, 0, 0.18));
+}
+/* Phones: no room on the left, so the list opens in place. */
+@media (max-width: 600px) {
+  .graph-menu-subtrigger svg {
+    transform: rotate(90deg);
+  }
+  .graph-menu-subtrigger.open svg {
+    transform: rotate(-90deg);
+  }
+  .graph-menu-subpop {
+    position: static;
+    min-width: 0;
+    max-height: 40vh;
+    padding: 0 0 0 10px;
+    border: 0;
+    box-shadow: none;
+    background: none;
+  }
+}
 .graph-menu-label {
   padding: 4px 10px 2px;
   font-size: 10.5px;
