@@ -11,7 +11,8 @@ import { buildSystem } from './math/reduce';
 import { compileNode } from './math/compileCache';
 import { KNOWN_FUNCTIONS } from './math/builtins';
 import type { Trajectory } from './solver/integrate';
-import { applyOdeNotation, forcing, resolveGroupSetup, runGroup, type OdeNumerics } from './solver/odeGroup';
+import { applyOdeNotation, forcing, odeGroups, resolveGroupSetup, runGroup, type OdeNumerics } from './solver/odeGroup';
+import { SOLUTION_IN_EQUATION, shieldCalls, solutionLabel, whileSolving } from './solver/solutions';
 import { sampleFunction } from './solver/sample';
 import { sampleImplicit } from './solver/implicit';
 import { EMPTY_CURVE, type Point, type SampledCurve } from './solver/curve';
@@ -283,6 +284,8 @@ interface SampleCtx {
   viewport: Viewport;
   samples: number;
   pointScope: Map<string, [number, number]>;
+  /** Callable ODE solutions (lib/solver/solutions). */
+  solNames: Set<string>;
   /** The entry's own `samples` override, if any. */
   own?: number;
   /** Data-space margin around the viewport for off-screen culling; null = never cull. */
@@ -324,7 +327,10 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
       return { parsed, curve };
     }
     case 'implicit':
-      return { parsed, curve: sampleImplicit(compileNode(parsed.node), scope, viewport, gridFor(ctx)) };
+      return {
+        parsed,
+        curve: sampleImplicit(compileNode(shieldCalls(parsed.node, ctx.solNames)), scope, viewport, gridFor(ctx)),
+      };
     case 'polar': {
       const tMinP = entry.thetaMin ?? 0;
       const tMaxP = entry.thetaMax ?? Math.PI * 2;
@@ -475,7 +481,8 @@ function sampleInequality(
   const thMin = entry.thetaMin ?? 0;
   const thMax = entry.thetaMax ?? TWO_PI;
   const parts = parsed.parts.map((p) => ({
-    ev: compileNode(p.node),
+    // (y is a coordinate here, so solution calls y(…) go through their alias.)
+    ev: compileNode(shieldCalls(p.node, ctx.solNames)),
     op: p.op,
     // A polar part references r or θ — its θ is the swept angle, not a position.
     polar: hasSymbol(p.node, 'r') || hasSymbol(p.node, 'θ') || hasSymbol(p.node, 'theta'),
@@ -630,8 +637,12 @@ export function computeAll(
   const parsedList = entries.map((e) => ({ entry: e, parsed: parseEntry(e.raw) }));
 
   // Defined names: variables, derived values, user functions (+ ODE dep vars).
-  const ectx: EvalContext = buildEvalContext(parsedList);
-  const { scope, varNames, derivedNames, fnNames } = ectx;
+  // (Fixed-step ODE solutions called as y(T) step like the drawn curve.)
+  const ectx: EvalContext = buildEvalContext(parsedList, { odeStep: (tMax - tMin) / samples });
+  const { scope, varNames, derivedNames, fnNames, solutions } = ectx;
+  const solNames = solutions.names;
+  const callable = (f: string) => KNOWN_FUNCTIONS.has(f) || fnNames.has(f) || solNames.has(f);
+  const callsSolution = (p: Parsed) => solNames.size > 0 && [...callsOf(p)].some((f) => solNames.has(f));
   const depVars = new Set<string>();
   for (const { parsed } of parsedList) if (parsed.kind === 'ode') depVars.add(parsed.depVar);
   const valueNames = new Set([...varNames, ...derivedNames]);
@@ -646,7 +657,7 @@ export function computeAll(
   for (const { parsed } of parsedList) {
     if (parsed.kind !== 'pointvar') continue;
     // Never evaluate calls to unknown functions (links are untrusted input).
-    if ([...callsOf(parsed)].some((f) => !KNOWN_FUNCTIONS.has(f) && !fnNames.has(f))) continue;
+    if ([...callsOf(parsed)].some((f) => !callable(f))) continue;
     pointvarNames.add(parsed.name);
     try {
       const t = compileNode(parsed.tNode).evaluate(scope);
@@ -666,43 +677,22 @@ export function computeAll(
   const odes = parsedList.filter(
     (p): p is { entry: Entry; parsed: OdeParsed } => p.parsed.kind === 'ode',
   );
-  const defByVar = new Map<string, number>();
-  odes.forEach((o, i) => {
-    if (!defByVar.has(o.parsed.depVar)) defByVar.set(o.parsed.depVar, i);
-  });
-  const parent = odes.map((_, i) => i);
-  const find = (x: number): number => {
-    while (parent[x] !== x) {
-      parent[x] = parent[parent[x]];
-      x = parent[x];
-    }
-    return x;
-  };
-  const union = (a: number, b: number) => {
-    const ra = find(a);
-    const rb = find(b);
-    if (ra !== rb) parent[ra] = rb;
-  };
-  odes.forEach((o, i) => {
-    for (const dep of o.parsed.deps) {
-      const j = defByVar.get(baseVar(dep));
-      if (j !== undefined && j !== i) union(i, j);
-    }
-  });
-  const groups = new Map<number, number[]>();
-  odes.forEach((_, i) => {
-    const r = find(i);
-    const g = groups.get(r);
-    if (g) g.push(i);
-    else groups.set(r, [i]);
-  });
+  const groups = odeGroups(odes.map((o) => o.parsed));
 
   const odeCurve = new Map<string, SampledCurve>();
   const odeError = new Map<string, string>();
   const solvedGroups: SolvedGroup[] = [];
   const odeNumerics = new Map<string, OdeNumerics>();
-  for (const idxs of groups.values()) {
+  for (const idxs of groups) {
     const members = idxs.map((i) => odes[i]);
+    // An equation reading a solution value (y'' = −y + y(1)) is a cycle: refused.
+    const eqCalls = (p: OdeParsed) =>
+      [p.node, ...(p.impulses ?? []).flatMap((q) => [q.arg, q.coef])].flatMap((n) => [...calledFunctions(n)]);
+    if (solNames.size && members.some((m) => eqCalls(m.parsed).some((f) => solNames.has(f)))) {
+      for (const m of members) odeError.set(m.entry.id, SOLUTION_IN_EQUATION);
+      ODE_GROUP_CACHE.delete(members.map((m) => m.entry.id).sort().join('+'));
+      continue;
+    }
     // Cache the (expensive) RK4 integration: a group re-integrates only when a
     // member's expression / IVP / a referenced variable / the t-range changes.
     const cacheId = members.map((m) => m.entry.id).sort().join('+');
@@ -716,7 +706,7 @@ export function computeAll(
       .join(';');
     const fnSig = members.some((m) => callsUser(m.parsed)) ? ectx.fnKey : '';
     // Typed conditions, boundary mode, solver and shown steps (resolved numbers).
-    const setup = resolveGroupSetup(members, condRows, scope, entries, fnNames);
+    const setup = resolveGroupSetup(members, condRows, scope, entries, fnNames, solNames);
     // Phase plane: integrate a fixed window around t0 (the axes are state
     // variables, so the viewport's x-range isn't a time range).
     const view = groupView(
@@ -747,7 +737,9 @@ export function computeAll(
     const numerics = new Map<string, OdeNumerics>();
     try {
       const system = buildSystem(members.map((m) => m.parsed), scope);
-      const run = runGroup(system, members, setup, scope, { tMin: range.tMin, tMax: range.tMax, samples: steps });
+      const run = whileSolving(() =>
+        runGroup(system, members, setup, scope, { tMin: range.tMin, tMax: range.tMax, samples: steps }),
+      );
       system.blocks.forEach((block, b) => {
         curves.set(members[b].entry.id, extractComponent(run.traj, block.offset));
         numerics.set(members[b].entry.id, run.numerics[b]);
@@ -826,7 +818,7 @@ export function computeAll(
       }
 
       // Validation common to plottable kinds.
-      const unknownFns = [...callsOf(parsed)].filter((f) => !KNOWN_FUNCTIONS.has(f) && !fnNames.has(f));
+      const unknownFns = [...callsOf(parsed)].filter((f) => !callable(f)).map(solutionLabel);
       let defined: Set<string>;
       if (parsed.kind === 'ode') defined = new Set([...valueNames, ...depVars]);
       else if (
@@ -847,6 +839,11 @@ export function computeAll(
       }
       if (undefinedVars.length) {
         return { parsed, curve: EMPTY_CURVE, undefinedVars };
+      }
+      // A call of an ODE solution whose equation can't be solved: say why.
+      if (parsed.kind !== 'ode' && parsed.kind !== 'condition' && callsSolution(parsed)) {
+        const err = solutions.errorFor(callsOf(parsed));
+        if (err) return { parsed, curve: EMPTY_CURVE, error: err };
       }
 
       // Derived values and function definitions draw nothing (unless a one-
@@ -916,6 +913,7 @@ export function computeAll(
           viewport,
           samples,
           pointScope,
+          solNames,
           own: entrySamples(entry),
           cullMargin: cullMarginFor(entry, viewport, samples),
         };
@@ -943,7 +941,9 @@ export function computeAll(
         `${tMin},${tMax},${viewport.yMin},${viewport.yMax}|${samples}|` +
         `${entry.thetaMin ?? ''},${entry.thetaMax ?? ''}|${entry.samples ?? ''}|${entry.layer ?? ''}|` +
         `${entry.glow ?? ''},${entry.blur ?? ''}|${depKey(parsed.deps)}|${definedKey}|` +
-        `${callsUser(parsed) ? ectx.fnKey : ''}|${parsed.kind === 'frames' ? entry.frames ?? '' : ''}`;
+        `${callsUser(parsed) ? ectx.fnKey : ''}|${parsed.kind === 'frames' ? entry.frames ?? '' : ''}|` +
+        // ODE solutions it calls (y(t)^2): their group's equations, values, conditions, solver.
+        `${callsSolution(parsed) ? solutions.keyFor(callsOf(parsed)) : ''}`;
       const hit = RESULT_CACHE.get(entry.id);
       if (hit && hit.key === key) {
         results.set(entry.id, hit.result);

@@ -53,5 +53,12 @@
     "blurb": "Graph mode: m y'' + c y' + k y = J delta(t - T) with y(0) = 0, y'(0) = 0 typed inline: the impulse at t = T kicks the spring, which rings down.",
     "link": "https://osmansiddiquer.github.io/Fluxion/#example=impulse",
     "spec": "examples/impulse.json"
+  },
+  {
+    "id": "spring-ball",
+    "title": "Ball on a spring",
+    "blurb": "Graph mode: the solution of y'' = -k y - c y' is called as y(T) to move a ball on a spring along its curve while the clock T plays.",
+    "link": "https://osmansiddiquer.github.io/Fluxion/#example=spring-ball",
+    "spec": "examples/spring-ball.json"
   }
 ]

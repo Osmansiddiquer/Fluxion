@@ -6,6 +6,7 @@ import { silhouetteDemo } from './silhouette';
 import { mandalaDemo } from './mandala';
 import { sunsetDemo } from './sunset';
 import { impulseDemo } from './impulse';
+import { springBallDemo } from './springBall';
 import { cubeScript, mandalaScript, mangekyoScript, pendulumScript, sharinganScript, silhouetteScript } from './scripted';
 
 export interface Demo {
@@ -65,6 +66,12 @@ export const DEMOS: Demo[] = [
     title: 'Spring hit by a hammer',
     blurb: "Graph mode: m y'' + c y' + k y = J delta(t - T) with y(0) = 0, y'(0) = 0 typed inline: the impulse at t = T kicks the spring, which rings down.",
     build: impulseDemo,
+  },
+  {
+    id: 'spring-ball',
+    title: 'Ball on a spring',
+    blurb: "Graph mode: the solution of y'' = -k y - c y' is called as y(T) to move a ball on a spring along its curve while the clock T plays.",
+    build: springBallDemo,
   },
 ];
 

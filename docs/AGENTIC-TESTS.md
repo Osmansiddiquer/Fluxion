@@ -131,6 +131,13 @@ equilibrium line y = 0 and no slope field (fields are opt-in).
 - [ ] `b = 2a` shows a live `= value` badge and no colour dot; `f(x) = x^2` plots;
       `(t, k) for k = 0..3` shows a `×4` badge; Points menu → **Grid & axes** toggles
       the grid.
+- [ ] ODE solutions as functions: Examples → **Ball on a spring** (`#example=spring-ball`)
+      autoplays; the ball on the coil spring (its mount sliding along the ceiling) rides
+      exactly on the drawn curve of `y'' = -k*y - c*y', y(0) = 3, y'(0) = 0`; the `E = …` badge falls
+      as the damping drains energy (constant with `c = 0`). Drag `k` → curve, ball and
+      spring all follow. Typing `y'' = -y + y(1)` shows "An ODE's equation can't use a
+      solution value"; `(1, z(1))` with no ODE in z shows "Unknown function: z". Nothing
+      new appears in graphs that don't call a solution.
 
 ### Script mode
 Automated: `node scripts/e2e-script-mode.cjs http://localhost:5173/ --shots /tmp/shots`
@@ -149,6 +156,8 @@ import). By eye:
 - [ ] Dragging/animating a variable re-samples only the curves that depend on it; an
       independent implicit/inequality curve is reused (no marching-squares re-run).
 - [ ] Pan/zoom + a playing slider together stay smooth.
+- [ ] Ball on a spring playing T: smooth (the ODE isn't re-integrated per frame; the
+      y(T) solution is cached per group key and only extended).
 
 ## All core features shipped
 Animatable sliders, implicit intersections/trace, projection redesign, accurate

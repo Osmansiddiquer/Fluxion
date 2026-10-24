@@ -331,10 +331,17 @@ function highestDerivative(
   return { depVar: [...varsAtMax][0], order: maxOrder };
 }
 
+/** Is this node the name of a call (`y` in `y(2)`), not a variable? */
+function isCallName(path: string | null, parent: MathNode | null): boolean {
+  return path === 'fn' && !!parent && (parent as { type: string }).type === 'FunctionNode';
+}
+
 function zeroOut(node: MathNode, symbol: string): MathNode {
-  return node.transform((n: MathNode) =>
+  // (A call y(2) — an ODE solution's value — is left alone.)
+  return node.transform((n: MathNode, path: string | null, parent: MathNode | null) =>
     (n as { isSymbolNode?: boolean }).isSymbolNode &&
-    (n as unknown as { name: string }).name === symbol
+    (n as unknown as { name: string }).name === symbol &&
+    !isCallName(path, parent)
       ? mjParse('0')
       : n,
   );
@@ -359,9 +366,11 @@ function xIsIndependent(node: MathNode): boolean {
 
 /** Rewrite every standalone `x` to `t` so x can serve as the horizontal axis. */
 function rewriteXtoT(node: MathNode): MathNode {
-  return node.transform((n) =>
+  // (A call x(…) — the solution of an ODE in x — keeps its name.)
+  return node.transform((n, path, parent) =>
     (n as { isSymbolNode?: boolean }).isSymbolNode &&
-    (n as unknown as { name: string }).name === 'x'
+    (n as unknown as { name: string }).name === 'x' &&
+    !isCallName(path, parent)
       ? mjParse('t')
       : n,
   );
