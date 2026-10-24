@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { useStore } from '../store/useStore';
+import { DEFAULT_FEATURES, DEFAULT_PROJECTIONS, useStore } from '../store/useStore';
 import { makeGraph, type GraphData } from '../lib/graphFile';
 import { buildShareLink } from '../lib/api/url';
 import { copyPendingText } from '../lib/saved/clipboard';
@@ -426,8 +426,11 @@ export async function newGraph() {
     v: 1,
     entries: [{ id: newId(), raw: '', color: '#c74440', visible: true, expanded: true }],
     viewport: { ...DEFAULT_VIEWPORT },
-    features: s.features,
-    projections: s.projections,
+    // Graph settings start fresh (a demo's hidden grid / markers or an
+    // animation's letterbox and fps must not leak in); only which panels are
+    // open and the sig-fig choice carry over, as preferences.
+    features: { ...DEFAULT_FEATURES },
+    projections: { ...DEFAULT_PROJECTIONS, rightOpen: s.projections.rightOpen, bottomOpen: s.projections.bottomOpen },
     sigFigs: s.sigFigs,
   };
   await replaceWith(

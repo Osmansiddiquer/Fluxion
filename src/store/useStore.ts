@@ -19,7 +19,7 @@ function makeEntry(raw: string, color: string): Entry {
 
 const DEFAULT_VIEWPORT: Viewport = { tMin: -8, tMax: 8, yMin: -5, yMax: 5 };
 
-const DEFAULT_FEATURES: FeatureToggles = {
+export const DEFAULT_FEATURES: FeatureToggles = {
   extrema: true,
   xIntercepts: true,
   yIntercept: true,
@@ -28,7 +28,7 @@ const DEFAULT_FEATURES: FeatureToggles = {
   intersections: true,
 };
 
-const DEFAULT_PROJECTIONS: Projections = {
+export const DEFAULT_PROJECTIONS: Projections = {
   rightOpen: true,
   bottomOpen: true,
   sliceT: 0,
