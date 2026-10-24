@@ -235,6 +235,15 @@ const curves: DocSection = {
       row('(A, B)', 'points', 'The segment between two named points', {
         with: [L('A = (-2, -1)', 'pointvar'), L('B = (3, 2)', 'pointvar')],
       }),
+      row('B = (A.x + 1, A.y)', 'pointvar', 'A.x and A.y read a named point’s coordinates', {
+        with: [L('A = (1, 2)', 'pointvar')],
+      }),
+      row('y = (x - A.x)^2 + A.y', 'function', 'Coordinates work in any expression: curves, regions, values, ODEs', {
+        with: [L('A = (1, 2)', 'pointvar')],
+      }),
+    ),
+    P(
+      '`A.x` and `A.y` follow A when it is dragged or animated, even when A’s coordinates call an ODE solution, like `center = (X(T) + 4, 2)`. Points may build on other points in any order; a cycle (A from B, B from A) is reported on its rows. Only a named point has `.x` and `.y`: on a slider `k.x` is an error.',
     ),
     P(
       'Right-click a point row’s colour dot to set its **label** (LaTeX), label direction, marker size and **drag** mode: auto (drag along whichever coordinates are sliders), off, horizontal only, vertical only, or both.',
@@ -250,6 +259,21 @@ const curves: DocSection = {
         L('(x - a)^2 + (y - b)^2 = 1', 'implicit'),
         L('O = (0, 0)', 'pointvar', { pointLabel: 'O', pointLabelDir: 'sw' }),
         L('(O, P)', 'points', { lineStyle: 'dashed' }),
+      ],
+      viewport: { tMin: -6, tMax: 6, yMin: -4, yMax: 4 },
+    }),
+    EX({
+      id: 'point-coords',
+      title: 'Built on a point',
+      blurb: 'Drag P: the circle, Q, the dashed segment and d all read P.x and P.y.',
+      lines: [
+        L('a = 1', 'variable', { varMin: -4, varMax: 4 }),
+        L('b = 1', 'variable', { varMin: -3, varMax: 3 }),
+        L('P = (a, b)', 'pointvar', { pointLabel: 'P', pointLabelDir: 'ne', pointSize: 7 }),
+        L('(P.x + cos(t), P.y + sin(t))', 'parametric'),
+        L('Q = (P.x + 1, 0)', 'pointvar', { pointLabel: 'Q', pointLabelDir: 'se' }),
+        L('((P.x, P.y), (Q.x, Q.y))', 'points', { lineStyle: 'dashed' }),
+        { ...L('d = sqrt(P.x^2 + P.y^2)', 'function'), derived: true },
       ],
       viewport: { tMin: -6, tMax: 6, yMin: -4, yMax: 4 },
     }),

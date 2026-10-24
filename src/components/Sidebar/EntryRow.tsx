@@ -174,10 +174,15 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
           {undefinedVars.map((v) => {
             const glyph = greekWordToGlyph(v);
             const twin = lookalike(v, allEntries);
+            // Used as A.x / A.y: offer a point, not a slider.
+            const asPoint = res?.undefinedPoints?.includes(v);
             return (
               <span key={v} className="define-item">
-                <button className="define-btn" onClick={() => addAssignment(glyph)}>
-                  {glyph} = …
+                <button
+                  className="define-btn"
+                  onClick={() => (asPoint ? addAssignment(glyph, '(0, 0)') : addAssignment(glyph))}
+                >
+                  {glyph} = {asPoint ? '(…, …)' : '…'}
                 </button>
                 {twin && <span className="define-hint">or did you mean {greekWordToGlyph(twin)}?</span>}
               </span>

@@ -2,6 +2,7 @@ import { parse as mjParse, type MathNode } from 'mathjs';
 import { hasWhere, isNaNNode, type CondSpec, type Parsed } from './parse';
 import { greekWordToTex, nameToTex } from './greek';
 import { fmtSig } from '../format';
+import { splitCoord } from './coords';
 
 function fmtNum(n: number): string {
   return fmtSig(n);
@@ -70,6 +71,11 @@ type CondNode = { type: string; condition: MathNode; trueExpr: MathNode; falseEx
 
 function texHandler(node: MathNode, options: object): string | undefined {
   const type = (node as { type: string }).type;
+  // A point coordinate A__x (typed A.x) shows as A.x.
+  if (type === 'SymbolNode') {
+    const c = splitCoord((node as unknown as { name: string }).name);
+    return c ? `\\mathit{${nameToTex(c.point)}}.${c.prop}` : undefined;
+  }
   // The braces already delimit a piecewise value: no extra parentheses.
   if (type === 'ParenthesisNode' && (unparen(node) as { type: string }).type === 'ConditionalNode') {
     return unparen(node).toTex(options);

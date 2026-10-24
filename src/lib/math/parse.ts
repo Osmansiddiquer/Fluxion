@@ -4,6 +4,7 @@ import { parsePoints, looksLikePoints, specNodes, specRefs, type PointSpec } fro
 import { KNOWN_FUNCTIONS, SOFT_FUNCTIONS } from './builtins';
 import { HELPER_NAMES } from './helpers';
 import { braceError, conditionToMath, isConditionText, splitRestrictions } from './piecewise';
+import { leftoverAccess, splitCoord } from './coords';
 
 const HELPERS_SET = new Set(HELPER_NAMES);
 
@@ -695,6 +696,12 @@ function parseEntryUncached(raw: string): Parsed {
     };
   }
 
+  // `.x` / `.y` read a named point's coordinates (A.x, rewritten to A__x by
+  // normalizeInput); anything else would be a mathjs property access.
+  if (leftoverAccess(normalized)) {
+    return { kind: 'error', message: '.x and .y go right after a point’s name, like A.x' };
+  }
+
   // Frame sequence: frames(index expression).
   const fm = /^frames\s*\((.*)\)$/.exec(normalized);
   if (fm) {
@@ -821,6 +828,13 @@ function parseEntryUncached(raw: string): Parsed {
 
   const [lhs, rhs] = split;
   if (!rhs) return { kind: 'error', message: 'Missing right-hand side' };
+  const coordLhs = splitCoord(lhs.trim());
+  if (coordLhs) {
+    return {
+      kind: 'error',
+      message: `${coordLhs.point}.${coordLhs.prop} is read from the point: define ${coordLhs.point} = (…, …) instead`,
+    };
+  }
 
   // Function definition: f(a, b) = …
   const fndef = parseFnDef(lhs, rhs, raw);

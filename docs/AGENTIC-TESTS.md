@@ -65,6 +65,15 @@ localStorage.setItem('ode-plotter',JSON.stringify(st));location.reload();
 - [ ] Right-click a point's colour dot → popover with Size / Drag (Auto/Off/↔/↕/✛
       SVG icons) / label + 8-direction grid (label only for single points).
 - [ ] Drag setting `↔` → only horizontal; `↕` → only vertical; `Off` → not draggable.
+- [ ] Point coordinates: with `A=(a,b)`, add `B=(A.x+1,A.y)`, `(A.x+cos(t),A.y+sin(t))`,
+      `y=A.y` and `d=sqrt(A.x^2+A.y^2)` → B sits right of A, a unit circle around A, a
+      horizontal line through A, and a live `= …` badge on d. Drag A → all of them follow.
+- [ ] Rows render `A.x` as A.x (typeset); typing `y = center.y` in the editor keeps `center.y`.
+- [ ] Errors: `y=k.x` on a slider k → "k is a number, not a point"; `y=A.z` → "a point has
+      .x and .y"; `y=Q.x` with no Q → "Define Q = (…, …)" button (adds `Q = (0, 0)`);
+      `A=(B.x,0)` + `B=(A.x,1)` → "Circular definition" on both rows.
+- [ ] ODE point: `#expr=X''=-1.8X-0.5X'&ic=4,0&expr=T=0&min=0&max=20&autoplay=1&expr=center=(X(T)+4,2)&expr=(center.x+0.5cos(t),center.y+0.5sin(t))&xmin=-2&xmax=12`
+      → the circle rides on center as T plays (smooth under 4× CPU throttle).
 
 ### Inspection
 - [ ] Maxima/minima dots on `y''=-y`; zeros on the t-axis; y-intercept at t=0.

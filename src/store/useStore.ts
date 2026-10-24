@@ -66,7 +66,8 @@ export interface AppState {
   scriptPanelWidth?: number;
 
   addEntry: () => void;
-  addAssignment: (name: string) => void;
+  /** Append `name = value` (default `1`; a point prompt passes `(0, 0)`). */
+  addAssignment: (name: string, value?: string) => void;
   updateEntry: (id: string, patch: Partial<Entry>) => void;
   removeEntry: (id: string) => void;
   reorderEntry: (id: string, toIndex: number) => void;
@@ -122,13 +123,13 @@ export const useStore = create<AppState>()(
           ],
         })),
 
-      addAssignment: (name) =>
+      addAssignment: (name, value = '1') =>
         set((s) => {
           // Don't duplicate an existing definition of `name`.
           if (s.entries.some((e) => e.raw.trim().startsWith(`${name} =`) || e.raw.trim().startsWith(`${name}=`))) {
             return s;
           }
-          const entry = makeEntry(`${name} = 1`, nextColor(s.entries.map((e) => e.color)));
+          const entry = makeEntry(`${name} = ${value}`, nextColor(s.entries.map((e) => e.color)));
           return { entries: [...s.entries, entry] };
         }),
 

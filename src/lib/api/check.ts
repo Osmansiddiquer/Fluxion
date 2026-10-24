@@ -186,7 +186,9 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
       const hint =
         parsed.kind === 'ode' && names.includes('x')
           ? ' This equation also uses t, so t is the independent variable and x would be a slider: write it in t only (y\' = t*y) or in x only (y\' = x*y, dy/dx = x*y).'
-          : ` Add a slider expression such as "${names[0]} = 1".`;
+          : res.undefinedPoints?.includes(names[0])
+            ? ` Add a point such as "${names[0]} = (1, 2)" (${names[0]}.x and ${names[0]}.y read its coordinates).`
+            : ` Add a slider expression such as "${names[0]} = 1".`;
       errors.push({ path, message: `undefined variable${names.length > 1 ? 's' : ''} ${names.join(', ')}.${hint}` });
     } else if (res?.error && !res.unknownFns?.length) {
       errors.push({ path, message: res.error });
