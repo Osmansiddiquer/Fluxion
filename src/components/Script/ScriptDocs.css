@@ -91,6 +91,48 @@
   font-size: 0.92em;
   color: var(--text);
 }
+.sd-table-wrap {
+  margin: 2px 0 4px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.sd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.3px;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+.sd-table th {
+  padding: 6px 9px;
+  text-align: left;
+  font-weight: 650;
+  color: var(--text);
+  background: var(--surface-sunken);
+  border-bottom: 1px solid var(--border);
+}
+.sd-table td {
+  padding: 6px 9px;
+  vertical-align: top;
+  border-top: 1px solid var(--border);
+}
+.sd-table tr:first-child td {
+  border-top: 0;
+}
+.sd-table td:first-child {
+  color: var(--text);
+}
+.sd-table code {
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 0.92em;
+  color: var(--text);
+  white-space: nowrap;
+}
+.sd-table strong,
 .sd-text strong,
 .sd-intro strong {
   color: var(--text);
