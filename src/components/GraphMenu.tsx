@@ -215,12 +215,7 @@ export default function GraphMenu() {
           <button onClick={exportFile}>Export to file…</button>
           <button onClick={() => fileRef.current?.click()}>Import from file…</button>
           <div className="graph-menu-sep" role="separator" />
-          <div className="graph-menu-label">Examples</div>
-          {DEMOS.map((d) => (
-            <button key={d.id} className="graph-menu-demo" title={d.blurb} onClick={() => openDemo(d.id)}>
-              {d.title}
-            </button>
-          ))}
+          <ExamplesSubmenu onPick={openDemo} />
         </div>
       )}
       {toast && (
@@ -246,6 +241,53 @@ export default function GraphMenu() {
         hidden
         onChange={onFile}
       />
+    </div>
+  );
+}
+
+/** "Examples ›": the demos in a flyout (inline on narrow screens). Hover opens it
+ * with a mouse; a tap or click toggles it. */
+function ExamplesSubmenu({ onPick }: { onPick: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  // Closing waits a moment so the pointer can cross the gap to the flyout.
+  const closeTimer = useRef<ReturnType<typeof setTimeout>>();
+  useEffect(() => () => clearTimeout(closeTimer.current), []);
+  const mouse = (e: React.PointerEvent) => e.pointerType === 'mouse';
+  return (
+    <div
+      className="graph-menu-sub"
+      onPointerEnter={(e) => {
+        if (!mouse(e)) return;
+        clearTimeout(closeTimer.current);
+        setOpen(true);
+      }}
+      onPointerLeave={(e) => {
+        if (mouse(e)) closeTimer.current = setTimeout(() => setOpen(false), 250);
+      }}
+    >
+      <button
+        className={`graph-menu-subtrigger${open ? ' open' : ''}`}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+        onKeyDown={(e) => {
+          if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') setOpen(true);
+        }}
+      >
+        <span>Examples</span>
+        <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
+          <path d="M4.5 2.5 8 6l-3.5 3.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="graph-menu-subpop" role="menu" aria-label="Examples">
+          {DEMOS.map((d) => (
+            <button key={d.id} role="menuitem" className="graph-menu-demo" title={d.blurb} onClick={() => onPick(d.id)}>
+              {d.title}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

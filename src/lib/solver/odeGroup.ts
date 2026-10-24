@@ -115,9 +115,14 @@ function resolveIC(ic: number[] | undefined, order: number): number[] {
 const callsOk = (c: CondSpec, fnNames: Set<string>) =>
   [c.at, c.value].every((n) => [...calledFunctions(n)].every((f) => KNOWN_FUNCTIONS.has(f) || fnNames.has(f)));
 
+/** A condition's number, or NaN while it names something undefined (mid-typing). */
 function evalNum(node: CondSpec['at'], scope: Record<string, unknown>): number {
-  const v = compileNode(node).evaluate(scope);
-  return typeof v === 'number' ? v : NaN;
+  try {
+    const v = compileNode(node).evaluate(scope);
+    return typeof v === 'number' ? v : NaN;
+  } catch {
+    return NaN;
+  }
 }
 
 const prime = (name: string, k: number) => name + '′'.repeat(k);

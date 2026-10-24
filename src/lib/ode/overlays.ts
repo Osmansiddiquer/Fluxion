@@ -379,8 +379,9 @@ function fieldSetting(g: SolvedGroup): boolean | undefined {
 
 /**
  * Build every ODE entry's view info. Groups are visited in list order so that
- * the automatic field goes to the first eligible one only (two fields on one
- * plot would just be noise; `field: true` forces more).
+ * the automatic vector field goes to the first phase plane only (two fields on
+ * one plot would just be noise; `field: true` forces more). Slope fields are
+ * off unless `field: true`.
  */
 export function buildOdeInfo(
   groups: SolvedGroup[],
@@ -403,7 +404,9 @@ export function buildOdeInfo(
     let fieldOn = false;
     if (fieldKind && visible) {
       if (setting !== undefined) fieldOn = setting;
-      else if (!autoFieldTaken && (fieldKind === 'slope' || autonomous)) fieldOn = true;
+      // Slope fields are opt-in (the row's Slope field switch); the phase
+      // plane's vector field is part of what the phase switch asks for.
+      else if (!autoFieldTaken && fieldKind === 'vector' && autonomous) fieldOn = true;
       if (fieldOn) autoFieldTaken = true;
     }
     const ov = visible ? overlaysFor(g, ctx.viewport, fieldKind, fieldOn, autonomous) : {};

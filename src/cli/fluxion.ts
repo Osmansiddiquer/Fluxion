@@ -1,6 +1,6 @@
 import { checkSpec, type CheckReport } from '../lib/api/check';
 import { buildLink, linkToSpec, DEFAULT_BASE_URL, type LinkFormat } from '../lib/api/url';
-import type { FluxionSpec, Issue } from '../lib/api/spec';
+import type { FluxionSpec, Issue, NormalizedSpec } from '../lib/api/spec';
 import { exampleSpec, listExamples } from '../lib/api/examples';
 import { specToGraph } from '../lib/api/spec';
 import { checkScript, type ScriptCheckReport } from './scriptCheck';
@@ -148,15 +148,20 @@ async function loadSpec(p: Parsed, io: CliIO): Promise<unknown> {
 
 function entriesOf(spec: unknown): GraphEntryData[] {
   const v = checkSpec(spec);
-  if (!v.spec) return [];
-  return specToGraph(v.spec).entries.map((e) => ({ raw: e.raw, visible: e.visible, t0: e.t0, ic: e.ic, varValue: e.varValue }));
+  return v.spec ? graphEntries(v.spec) : [];
+}
+
+/** The Graph-mode expressions a script reads (graph.ode / fn / value). */
+function graphEntries(spec: NormalizedSpec): GraphEntryData[] {
+  return specToGraph(spec).entries.map((e) => ({ raw: e.raw, visible: e.visible, t0: e.t0, ic: e.ic, varValue: e.varValue }));
 }
 
 /** Run a spec's script (if any) and fold its problems into the report. */
 async function withScript(r: CheckReport): Promise<CheckReport & { script?: ScriptCheckReport }> {
   const code = r.spec?.script;
   if (!code) return r;
-  const s = await checkScript(code, { entries: entriesOf(r.spec) });
+  // r.spec is already validated and normalised: re-checking it would fail.
+  const s = await checkScript(code, { entries: r.spec ? graphEntries(r.spec) : [] });
   const errors = [
     ...r.errors,
     ...s.errors.map((e) => ({ path: 'script', message: `${e.line ? `line ${e.line}: ` : ''}${e.message} (at time ${e.time})` })),

@@ -77,10 +77,10 @@ localStorage.setItem('ode-plotter',JSON.stringify(st));location.reload();
 Automated: `node scripts/e2e-ode-view.cjs http://localhost:5173/ [--shots dir]`
 (IC drag, shift-click, clear, phase switch, equilibrium tooltips, Lorenz axes, family,
 the exact-difference footer, timings under a 4× CPU throttle; light + dark, desktop +
-390 px shots). By eye: In the seed above, `y' = y` now shows a faint
-slope field and a dashed unstable equilibrium line y = 0 (intended defaults).
-- [ ] `y' = y*(1 - y)`: slope field; dashed lines y = 0 (hollow tab, unstable) and y = 1
-      (filled, stable); row switch **Slope field** hides it.
+390 px shots). By eye: In the seed above, `y' = y` shows a dashed unstable
+equilibrium line y = 0 and no slope field (fields are opt-in).
+- [ ] `y' = y*(1 - y)`: dashed lines y = 0 (hollow tab, unstable) and y = 1
+      (filled, stable); row switch **Slope field** shows the field.
 - [ ] Drag the ring at (t₀, y₀) → the IC sliders follow; shift-click the plot → a thinner
       extra solution; **Clear N extra solutions** removes them.
 - [ ] `x' = x*(1 - y)`, `y' = y*(x - 1)`, **Plot → phase** on the first row: closed
