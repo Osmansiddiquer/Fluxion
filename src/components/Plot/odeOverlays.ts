@@ -315,7 +315,8 @@ export function drawAxisNames(
   ctx.textBaseline = 'top';
   if (ax > 28 && ax <= tf.width - 4) {
     ctx.textAlign = 'right';
-    ctx.fillText(labels[1], ax - 7, 6);
+    // Clear of the slice cursor's handle, which often sits on this axis.
+    ctx.fillText(labels[1], ax - 15, 6);
   } else {
     ctx.textAlign = 'left';
     ctx.fillText(labels[1], Math.max(8, Math.min(tf.width - 30, ax)) + 7, 22);
