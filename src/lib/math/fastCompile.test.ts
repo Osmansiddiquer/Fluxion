@@ -221,3 +221,22 @@ describe('fastCompile: hoisting', () => {
     expect(() => ev.evaluate({})).toThrow();
   });
 });
+
+describe('fastCompile: piecewise conditions match mathjs', () => {
+  it('chained comparisons, and / or, NaN conditions and brace piecewise', () => {
+    const exprs = [
+      '0 < a < b', 'a <= b <= 2', '-1 <= a <= 1 ? a : NaN', 'a > 0 and b > 0', 'a < 0 or b < 0',
+      '(a > 0 and b > 0) ? 1 : 0', 'a ? 1 : 2', '{a < 0: -a, a < 2: a^2}', '{a < b: 1, 2}', '{a = b: 1, 0}',
+      '{a != 1}', '{0 < a < 2 or b > 1: a, b}', 'a == b',
+    ];
+    for (const a of EDGE) {
+      for (const b of [0, 1, -1, 2, NaN, 0.5]) {
+        for (const expr of exprs) {
+          const { s, f, sErr, fErr } = evalBoth(expr, { a, b });
+          expect(fErr, `${expr} a=${a} b=${b}`).toBe(sErr);
+          expect(same(f, s), `${expr} a=${a} b=${b} fast=${String(f)} mathjs=${String(s)}`).toBe(true);
+        }
+      }
+    }
+  });
+});

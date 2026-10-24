@@ -106,16 +106,71 @@ function replaceLogBase(s: string): string {
 }
 
 /** Replace \operatorname{name} and \mathrm{name} with name. */
-function replaceWrapped(s: string, cmd: string): string {
+function replaceWrapped(s: string, cmd: string, pad = ''): string {
   let out = s;
   let i = out.indexOf(cmd);
   let guard = 0;
   while (i !== -1 && guard++ < 500) {
     const p = skipSpace(out, i + cmd.length);
-    if (out[p] !== '{') break;
+    if (out[p] !== '{' || /[a-zA-Z]/.test(out[i + cmd.length] ?? '')) {
+      i = out.indexOf(cmd, i + 1);
+      continue;
+    }
     const a = braceEnd(out, p);
-    out = out.slice(0, i) + a.content + out.slice(a.end);
+    out = out.slice(0, i) + pad + a.content + pad + out.slice(a.end);
     i = out.indexOf(cmd);
+  }
+  return out;
+}
+
+// Placeholders for literal braces while grouping braces turn into parentheses.
+const LB = '\u0001';
+const RB = '\u0002';
+
+/** Split on `sep` outside TeX groups {…}. */
+function splitGroups(s: string, sep: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] === '{') depth++;
+    else if (s[i] === '}') depth--;
+    else if (depth === 0 && s.startsWith(sep, i) && s[i - 1] !== '\\') {
+      out.push(s.slice(start, i));
+      start = i + sep.length;
+      i += sep.length - 1;
+    }
+  }
+  out.push(s.slice(start));
+  return out;
+}
+
+/**
+ * `\begin{cases} v_1 & c_1 \\ v_2 & \text{otherwise} \end{cases}` (pasted, or
+ * mathjs' "v, if c" form) → the piecewise braces {c_1: v_1, v_2}.
+ */
+function replaceCases(s: string): string {
+  let out = s;
+  for (let guard = 0; guard < 50; guard++) {
+    const end = out.indexOf('\\end{cases}');
+    if (end < 0) break;
+    const begin = out.lastIndexOf('\\begin{cases}', end);
+    if (begin < 0) break;
+    const body = out.slice(begin + '\\begin{cases}'.length, end);
+    const pieces: string[] = [];
+    for (const row of body.split('\\\\')) {
+      if (!row.trim()) continue;
+      const [value = '', cond = ''] = splitGroups(row, '&');
+      const v = value.trim().replace(/,\s*$/, '');
+      const c = cond
+        .replace(/\\(?:quad|qquad|;|,|:|!|\s)/g, ' ')
+        .replace(/\\text\{\s*(?:if|otherwise|else)\s*\}/g, ' ')
+        .replace(/^\s*\{?\s*(?:if|otherwise|else)\b/, ' ')
+        .trim();
+      const empty = !c.replace(/[{}\s]/g, '');
+      pieces.push(empty ? v : `${c}: ${v}`);
+    }
+    out = `${out.slice(0, begin)}${LB}${pieces.join(', ')}${RB}${out.slice(end + '\\end{cases}'.length)}`;
   }
   return out;
 }
@@ -125,10 +180,15 @@ export function latexToText(latex: string): string {
 
   // Editor scaffolding.
   s = s.replace(/\\placeholder\{[^}]*\}/g, '');
+  s = replaceCases(s);
   s = s.replace(/\\(left|right|mleft|mright)(?=[([|{.)\]}])?/g, '');
   // Named delimiters MathLive may emit for [ ] etc.
   s = s.replace(/\\lbrack/g, '[').replace(/\\rbrack/g, ']');
-  s = s.replace(/\\lbrace/g, '{').replace(/\\rbrace/g, '}');
+  // Literal braces (\{ … \}, \lbrace … \rbrace) are piecewise / restriction
+  // braces: kept (via placeholders) while TeX grouping braces become parens.
+  s = s.replace(/\\lbrace|\\\{/g, LB).replace(/\\rbrace|\\\}/g, RB);
+  s = s.replace(/\\colon/g, ':');
+  s = replaceWrapped(s, '\\text', ' ');
   s = s.replace(/\\langle/g, '(').replace(/\\rangle/g, ')');
   s = s.replace(/\\,|\\;|\\:|\\!|\\>|\\ /g, ' ');
   s = s.replace(/\\quad|\\qquad/g, ' ');
@@ -155,6 +215,9 @@ export function latexToText(latex: string): string {
   s = s.replace(/\\geq/g, '>=').replace(/\\ge(?![a-zA-Z])/g, '>=');
   s = s.replace(/\\lt/g, '<').replace(/\\gt/g, '>');
   s = s.replace(/\\land|\\wedge|\\&/g, '&');
+  s = s.replace(/\\neq|\\ne(?![a-zA-Z])/g, '!=');
+  s = s.replace(/\\lor|\\vee/g, ' or ');
+  s = s.replace(/\\lnot|\\neg/g, ' not ');
 
   // Operators.
   s = s.replace(/\\cdot|\\times|\\ast/g, '*');
@@ -171,6 +234,7 @@ export function latexToText(latex: string): string {
 
   // Remaining braces (exponent/grouping) become parentheses.
   s = s.replace(/\{/g, '(').replace(/\}/g, ')');
+  s = s.split(LB).join('{').split(RB).join('}');
 
   // log_b(x) -> log(x, b)  (after braces became parens so a base like x+1 works).
   s = replaceLogBase(s);

@@ -62,9 +62,14 @@ describe('function definitions', () => {
     expect(parseEntry('y(t) = 3').kind).not.toBe('fndef');
     expect(parseEntry('r = 2').kind).toBe('polar');
   });
-  it('accepts a ternary body and keeps raw display for it', () => {
+  it('accepts a ternary body and shows it as Desmos-style piecewise braces', () => {
     const p = as(parseEntry('h(u) = u < 1 ? u : 2 - u'), 'fndef');
-    expect(entryToLatex(p)).toBeNull();
+    const tex = entryToLatex(p)!;
+    expect(tex).toContain('\\left\\{');
+    const back = as(parseEntry(latexToText(tex)), 'fndef');
+    expect(back.name).toBe('h');
+    expect(back.node.evaluate({ u: 0.5 })).toBe(0.5);
+    expect(back.node.evaluate({ u: 1.5 })).toBe(0.5);
   });
   it('round-trips through LaTeX', () => {
     const p = parseEntry('R(x, y) = x cos(a) - y sin(a)');

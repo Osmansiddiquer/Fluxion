@@ -1,5 +1,6 @@
 import { FUNCTION_SYNONYMS, UNICODE_MAP, INVERSE_BASE, KNOWN_FUNCTIONS } from './builtins';
 import { greekGlyphToWord } from './greek';
+import { desugarBraces } from './piecewise';
 
 /** Index of the `)` matching the `(` at `open`, or -1 if unbalanced. */
 function matchParen(s: string, open: number): number {
@@ -103,5 +104,7 @@ export function normalizeInput(raw: string): string {
   s = applySynonyms(s);
   s = rewritePowFunc(s);
   s = normalizeDerivatives(s);
+  // Desmos braces (piecewise / conditions) → nested ternaries (see piecewise.ts).
+  s = desugarBraces(s);
   return s;
 }

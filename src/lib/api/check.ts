@@ -39,6 +39,20 @@ const ORDINAL = ['', '1st', '2nd', '3rd'];
 const ord = (n: number) => ORDINAL[n] ?? `${n}th`;
 
 function summarize(p: Parsed): string {
+  return summarizeKind(p) + piecewiseNote(p);
+}
+
+/** Notes like ", piecewise (2 pieces), restricted to 0 < x < 2" (restrictions as typed). */
+function piecewiseNote(p: Parsed): string {
+  if (!('restrictions' in p) && !('pieces' in p)) return '';
+  const q = p as { pieces?: number; restrictions?: { text: string }[] };
+  let s = '';
+  if (q.pieces && q.pieces > 1) s += `, piecewise (${q.pieces} pieces)`;
+  if (q.restrictions?.length) s += `, restricted to ${q.restrictions.map((r) => r.text).join(' and ')}`;
+  return s;
+}
+
+function summarizeKind(p: Parsed): string {
   switch (p.kind) {
     case 'function':
       if ((isDerived as (x: Parsed) => boolean)(p)) return `derived value ${p.name}`;
@@ -72,7 +86,7 @@ function summarize(p: Parsed): string {
     case 'fndef':
       return `function definition ${p.name}(${p.params.join(', ')})`;
     case 'repeat':
-      return `${summarize(p.body)}, repeated for ${p.loops.map((l) => `${l.name} = ${l.text}`).join(', ')}`;
+      return `${summarizeKind(p.body)}${piecewiseNote(p.body)}, repeated for ${p.loops.map((l) => `${l.name} = ${l.text}`).join(', ')}`;
     case 'frames':
       return 'frame sequence (needs an imported clip)';
     case 'empty':
