@@ -38,7 +38,9 @@ export default function ScriptDocs() {
       .map((s) => ({
         ...s,
         intro: undefined,
-        entries: s.entries.filter((e) => `${e.name} ${e.sig ?? ''} ${e.text}`.toLowerCase().includes(q)),
+        entries: s.entries.filter((e) =>
+          `${e.name} ${e.sig ?? ''} ${e.text} ${e.table?.rows.flat().join(' ') ?? ''}`.toLowerCase().includes(q),
+        ),
       }))
       .filter((s) => s.entries.length);
   }, [docs, query]);
@@ -123,6 +125,30 @@ function Entry({ e }: { e: DocEntry }) {
       <h4 className="sd-name">{e.name}</h4>
       {e.sig && <code className="sd-sig">{e.sig}</code>}
       <Rich text={e.text} className="sd-text" />
+      {e.table && (
+        <div className="sd-table-wrap">
+          <table className="sd-table">
+            <thead>
+              <tr>
+                {e.table.head.map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {e.table.rows.map((row, i) => (
+                <tr key={i}>
+                  {row.map((cell, j) => (
+                    <td key={j}>
+                      <Inline text={cell} />
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
       {e.code && (
         <div className="sd-code">
           <Code code={e.code} />
@@ -223,17 +249,26 @@ function Rich({ text, className }: { text: string; className?: string }) {
     <div className={className}>
       {text.split(/\n\n+/).map((para, i) => (
         <p key={i}>
-          {para.split(/(`[^`]+`|\*\*[^*]+\*\*)/).map((bit, j) =>
-            bit.startsWith('`') ? (
-              <code key={j}>{bit.slice(1, -1)}</code>
-            ) : bit.startsWith('**') ? (
-              <strong key={j}>{bit.slice(2, -2)}</strong>
-            ) : (
-              <Fragment key={j}>{bit}</Fragment>
-            ),
-          )}
+          <Inline text={para} />
         </p>
       ))}
     </div>
+  );
+}
+
+/** One run of text with `code` and **bold**. */
+function Inline({ text }: { text: string }) {
+  return (
+    <>
+      {text.split(/(`[^`]+`|\*\*[^*]+\*\*)/).map((bit, j) =>
+        bit.startsWith('`') ? (
+          <code key={j}>{bit.slice(1, -1)}</code>
+        ) : bit.startsWith('**') ? (
+          <strong key={j}>{bit.slice(2, -2)}</strong>
+        ) : (
+          <Fragment key={j}>{bit}</Fragment>
+        ),
+      )}
+    </>
   );
 }
