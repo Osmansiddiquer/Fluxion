@@ -10,6 +10,8 @@ export interface SampleOpts {
   /** Visible y-range; a jump much larger than this between samples is an asymptote. */
   yMin?: number;
   yMax?: number;
+  /** Piecewise branch id at a scope (see branchOf): switches are located exactly. */
+  branch?: (scope: Record<string, number>) => number;
 }
 
 /**
@@ -67,18 +69,52 @@ export function sampleFunction(
     return best;
   };
 
+  // Piecewise: which branch each sample takes. Where it switches between two
+  // defined samples, bisect to the switch point: a jump ends the segment there
+  // (no vertical join), a continuous join (|x| at 0) gets its exact corner.
+  const branch = opts.branch;
+  const branchAt = (t: number): number => {
+    local.t = t;
+    return branch!(local);
+  };
+  const ySpan = opts.yMax != null && opts.yMin != null ? Math.abs(opts.yMax - opts.yMin) : 0;
+  const jumpTol = Math.max(1e-9, ySpan * 1e-6);
+  const switchAt = (t0: number, t1: number, b0: number): void => {
+    let lo = t0;
+    let hi = t1;
+    for (let k = 0; k < 48 && hi - lo > 0; k++) {
+      const mid = (lo + hi) / 2;
+      if (mid <= lo || mid >= hi) break;
+      if (branchAt(mid) === b0) lo = mid;
+      else hi = mid;
+    }
+    const yLo = evalAt(lo);
+    const yHi = evalAt(hi);
+    if (valid(yLo) && lo !== current[current.length - 1]?.[0]) current.push([lo, yLo]);
+    if (!valid(yLo) || !valid(yHi) || Math.abs(yHi - yLo) > jumpTol) {
+      if (current.length) segments.push(current);
+      current = [];
+    }
+    if (valid(yHi)) current.push([hi, yHi]);
+  };
+
   let prevT = NaN;
   let prevValid = false;
+  let prevBranch = 0;
   for (let i = 0; i <= samples; i++) {
     const t = tMin + i * h;
     const num = evalAt(t);
     const ok = valid(num);
     if (ok) {
+      const b = branch ? branchAt(t) : 0;
       // Entering the domain: prepend the boundary point.
       if (!prevValid && !Number.isNaN(prevT)) {
         const edge = edgePoint(t, prevT);
         if (edge) current.push(edge);
+      } else if (branch && prevValid && b !== prevBranch) {
+        switchAt(prevT, t, prevBranch);
       }
+      prevBranch = b;
       current.push([t, num]);
     } else {
       // Leaving the domain: append the boundary point, then break.

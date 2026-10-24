@@ -113,6 +113,23 @@ equilibrium line y = 0 and no slope field (fields are opt-in).
 - [ ] `r < 2θ` with `θ [0]→[4π]` → two-turn spiral region (boundary spirals across turns).
 - [ ] `1 < y < sin(t)` → two dotted boundaries, region only where satisfiable.
 
+### Piecewise & restrictions
+Seed with a link, e.g.
+`#expr=y%20%3D%20%7Bx%20%3C%200%3A%20-x%2C%20x%20%3C%202%3A%20x%5E2%7D&expr=y%20%3D%20t%20%3E%203%20%3F%20-t%20%3A%20t&xmin=-5&xmax=8`.
+- [ ] `y = {x < 0: -x, x < 2: x^2}` → V-then-parabola, exact corner at 0, nothing past
+      x = 2 (endpoint marker at (2, 4)). Badge says function, not implicit.
+- [ ] `y = t > 3 ? -t : t` (and `{x > 3: -x, x}`) → a function with a clean jump at 3:
+      no vertical line joining y = 3 to y = −3; open/closed discontinuity markers.
+- [ ] `y = x^2 {0 < x < 2}` ends exactly at x = 0 and x = 2; `y = x {x < a}` with a
+      slider `a`: dragging moves the end.
+- [ ] `r = θ {0 < θ < pi}` half-spiral; `(cos(t), sin(t)) {t < pi}` upper semicircle;
+      `x^2 + y^2 = 4 {y > 0}` upper half circle ending on the x-axis;
+      `x^2 + y^2 < 9 {x > 0}` right half-disc only.
+- [ ] Editor: type `y=` then `{x<0:-x,x^2}` in a MathLive row (keyboard) → braces render
+      as `{x < 0: −x, x²}`, the row is a function; blur and re-focus → unchanged.
+      Restrictions display as trailing braces. Ordinary rows show no braces.
+- [ ] Malformed braces (`y = x^2 {`, `y = {5}`) → a red ! with a clear message.
+
 ### Scripting & animation
 - [ ] Share menu → **Examples** → each of the 4 demos opens on a clean canvas (no grid,
       no markers), starts animating by itself, and shows an **Undo** toast that restores

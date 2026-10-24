@@ -105,7 +105,7 @@ function powNum(a: unknown, b: unknown): unknown {
 
 function testCondition(c: unknown): boolean {
   if (typeof c === 'boolean') return c;
-  if (typeof c === 'number') return c !== 0;
+  if (typeof c === 'number') return !!c; // (NaN is false, as in mathjs)
   if (c === null || c === undefined) return false;
   throw new FastMiss('condition type'); // let mathjs decide (BigNumber, Unit, …)
 }
@@ -250,12 +250,58 @@ class Builder {
           costly: true,
         };
       }
+      case 'RelationalNode': {
+        // Chained comparison a < b <= c (piecewise conditions): pairwise, lazily,
+        // with the same mathjs comparison functions (and their tolerance).
+        const conds = n.conditionals as string[];
+        const fns = conds.map((c) => MATH[c]);
+        if (fns.some((f) => typeof f !== 'function') || conds.some(unsafeName)) return this.embed(node);
+        const params = (n.params as MathNode[]).map((p) => this.build(p));
+        const evs = params.map((p) => p.ev);
+        const cmp = fns as ((a: unknown, b: unknown) => unknown)[];
+        return {
+          ev: (s) => {
+            let rhs = evs[0](s);
+            for (let i = 0; i < cmp.length; i++) {
+              const lhs = rhs;
+              rhs = evs[i + 1](s);
+              if (!cmp[i](lhs, rhs)) return false;
+            }
+            return true;
+          },
+          ...merge(params),
+          costly: true,
+        };
+      }
       default:
         return this.embed(node);
     }
   }
 
+  /** `a and b` / `a or b` on numbers / booleans, short-circuiting like mathjs. */
+  private logical(fn: 'and' | 'or', argNodes: MathNode[], node: MathNode): Built {
+    if (argNodes.length !== 2) return this.embed(node);
+    const args = argNodes.map((a) => this.build(a));
+    const A = args[0].ev;
+    const B = args[1].ev;
+    const plain = (v: unknown): v is number | boolean => typeof v === 'number' || typeof v === 'boolean';
+    const and = fn === 'and';
+    return {
+      ev: (s) => {
+        const a = A(s);
+        if (!plain(a)) throw new FastMiss('logical operand');
+        if (and ? !a : !!a) return !and;
+        const b = B(s);
+        if (!plain(b)) throw new FastMiss('logical operand');
+        return !!b;
+      },
+      ...merge(args),
+      costly: true,
+    };
+  }
+
   private operator(fn: string, argNodes: MathNode[], node: MathNode): Built {
+    if (fn === 'and' || fn === 'or') return this.logical(fn, argNodes, node);
     const args = argNodes.map((a) => this.build(a));
     const info = merge(args);
     const bin = (native: (a: number, b: number) => unknown, slow: (a: unknown, b: unknown) => unknown, costly = false): Built => {

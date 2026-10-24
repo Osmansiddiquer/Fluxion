@@ -192,6 +192,38 @@ const curves: DocSection = {
     P(
       'A polar region is swept over its whole θ range, so `r < 2θ` over two turns fills the area inside the spiral rather than one wedge. Boundaries are dotted for `<` and `>` (the edge is excluded) and solid for `<=` and `>=`.',
     ),
+    H('Piecewise functions and restrictions'),
+    P(
+      'Braces work like in Desmos. `{condition: value, …}` takes the first piece whose condition holds; a last value without a condition is the “otherwise” piece, and without one the curve stops where no condition holds. Conditions use `<` `<=` `>` `>=` `=` `!=`, chains like `0 < x < 2`, and `and` / `or`. Type `{` in a row to start one.',
+    ),
+    SYNTAX(
+      row('y = {x < 0: -x, x < 2: x^2}', 'function', 'Two pieces, nothing drawn past x = 2'),
+      row('y = {x < 1: 0, 2}', 'function', 'An “otherwise” piece; the jump is not joined'),
+      row('y = {x > 0}', 'function', 'A bare condition: 1 where it holds'),
+      row('y = x^2 {0 < x < 2}', 'function', 'A restriction: drawn only for 0 < x < 2, ending exactly there'),
+      row('y = x {x < a}', 'function', 'Conditions may use sliders', { with: [L('a = 2', 'variable')] }),
+      row('r = theta {0 < theta < pi}', 'polar', 'Polar curves are restricted by θ'),
+      row('(cos(t), sin(t)) {t < pi}', 'parametric', 'Parametric curves by t'),
+      row('x^2 + y^2 = 4 {y > 0}', 'implicit', 'The upper half of a circle'),
+      row('x^2 + y^2 < 9 {x > 0}', 'inequality', 'Shade only inside the restriction'),
+      row("y' = {t < 1: 1, 0}", 'ode', 'Piecewise forcing in an ODE (or restrict its drawn solution: y\' = y {0 < t < 3})', {
+        opts: { ic: [0] },
+      }),
+    ),
+    P(
+      'Several braces combine with AND (`y = sin(x) {x > 0} {y > 0}`), and `y = x^2, 0 < x < 2` works too. In a function, `y` in a condition is its own value. Piecewise values work anywhere: inside user functions (`f(x) = {x < 0: 0, x}`), derived values, colour expressions and nested braces. The ternary `c ? a : b` means the same as `{c: a, b}`.',
+    ),
+    EX({
+      id: 'piecewise-ramp',
+      title: 'A piecewise ramp',
+      blurb: 'Three pieces with a slider-controlled break point, restricted to x ≥ 0.',
+      lines: [
+        L('b = 3', 'variable', { varMin: 1, varMax: 6, expanded: true }),
+        L('y = {x < 1: 0, x < b: (x - 1)/2, (b - 1)/2 + 2} {x >= 0}', 'function'),
+        L('y = {x < 1: x, 2} {-2 < x < 4}', 'function'),
+      ],
+      viewport: { tMin: -3, tMax: 8, yMin: -2, yMax: 5 },
+    }),
     H('Points and segments'),
     SYNTAX(
       row('(1, 2)', 'points', 'One point'),

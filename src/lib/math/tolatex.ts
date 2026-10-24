@@ -1,5 +1,5 @@
-import { parse as mjParse } from 'mathjs';
-import { hasWhere, type CondSpec, type Parsed } from './parse';
+import { parse as mjParse, type MathNode } from 'mathjs';
+import { hasWhere, isNaNNode, type CondSpec, type Parsed } from './parse';
 import { greekWordToTex } from './greek';
 import { fmtSig } from '../format';
 
@@ -44,7 +44,69 @@ function postTex(tex: string): string {
 
 // `implicit: 'hide'` drops the · for implicit products the user didn't type — so
 // 2t shows as "2t", not "2·t", while an explicit pi*t keeps its ·.
-const TEX_OPTS = { implicit: 'hide' } as const;
+// Ternaries / piecewise values render Desmos-style as \left\{c: a,\ b\right\}
+// (a cases environment can't round-trip through the editor); `\{c\}` for the
+// bare condition c ? 1 : NaN.
+type TexOpts = { implicit: 'hide'; handler: (node: MathNode, options: object) => string | undefined };
+const TEX_OPTS: TexOpts = { implicit: 'hide', handler: texHandler };
+
+function unparen(n: MathNode): MathNode {
+  let m = n as MathNode & { type: string; content?: MathNode };
+  while (m.type === 'ParenthesisNode' && m.content) m = m.content as typeof m;
+  return m;
+}
+
+function isOne(n: MathNode): boolean {
+  const m = unparen(n) as unknown as { type: string; value?: unknown };
+  return m.type === 'ConstantNode' && m.value === 1;
+}
+
+type CondNode = { type: string; condition: MathNode; trueExpr: MathNode; falseExpr: MathNode };
+
+function texHandler(node: MathNode, options: object): string | undefined {
+  const type = (node as { type: string }).type;
+  // The braces already delimit a piecewise value: no extra parentheses.
+  if (type === 'ParenthesisNode' && (unparen(node) as { type: string }).type === 'ConditionalNode') {
+    return unparen(node).toTex(options);
+  }
+  if (type !== 'ConditionalNode') return undefined;
+  const tex = (n: MathNode) => unparen(n).toTex(options);
+  const first = node as unknown as CondNode;
+  if (isOne(first.trueExpr) && isNaNNode(first.falseExpr)) return `\\left\\{${tex(first.condition)}\\right\\}`;
+  const pieces: string[] = [];
+  let cur: MathNode = node;
+  for (;;) {
+    const c = unparen(cur) as unknown as CondNode;
+    if (c.type !== 'ConditionalNode') {
+      if (!isNaNNode(cur)) pieces.push(tex(cur));
+      break;
+    }
+    // \colon: tight before, a space after (`:` would space like a relation).
+    pieces.push(`${tex(c.condition)}\\colon\\, ${tex(c.trueExpr)}`);
+    cur = c.falseExpr;
+  }
+  return `\\left\\{${pieces.join(',\\ ')}\\right\\}`;
+}
+
+/** Trailing restrictions as braces: y = x^2 \{0 < x < 2\}. */
+function restrictionsTex(parsed: Parsed): string {
+  const rs = 'restrictions' in parsed ? parsed.restrictions : undefined;
+  if (!rs?.length) return '';
+  return rs.map((r) => `\\left\\{${postTex(unparen(r.node).toTex(TEX_OPTS))}\\right\\}`).join('');
+}
+
+/** The expression under k restriction guards (c ? (… node …) : NaN). */
+function peel(node: MathNode, k: number): MathNode {
+  let n = node;
+  for (let i = 0; i < k; i++) {
+    const c = unparen(n) as unknown as CondNode;
+    if (c.type !== 'ConditionalNode') break;
+    n = c.trueExpr;
+  }
+  return n;
+}
+
+const nRestr = (parsed: Parsed) => ('restrictions' in parsed ? parsed.restrictions?.length ?? 0 : 0);
 
 function texOf(src: string): string {
   try {
@@ -77,6 +139,11 @@ function odeLhsTex(lhs: string, depVar: string, order: number, indep?: 'x'): str
 /** Build a KaTeX-ready LaTeX string for an entry, or null if not renderable.
  *  `varValue` overrides a variable's displayed value (the live slider value). */
 export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
+  const base = baseLatex(parsed, varValue);
+  return base == null ? null : base + restrictionsTex(parsed);
+}
+
+function baseLatex(parsed: Parsed, varValue?: number): string | null {
   // Locals (`… where a = …`) are shown as typed: the parse is of the expanded text.
   if ('raw' in parsed && typeof parsed.raw === 'string' && hasWhere(parsed.raw)) return null;
   switch (parsed.kind) {
@@ -86,7 +153,7 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
       if (parsed.lhs != null && parsed.rhs != null) {
         return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
       }
-      return `y = ${postTex(parsed.node.toTex(TEX_OPTS))}`;
+      return `y = ${postTex(peel(parsed.node, nRestr(parsed)).toTex(TEX_OPTS))}`;
     case 'ode': {
       const conds = parsed.conds?.length ? `,\\ ${condsTex(parsed.conds)}` : '';
       return `${odeLhsTex(parsed.lhs, parsed.depVar, parsed.order, parsed.indep)} = ${texOf(parsed.rhs)}${conds}`;
@@ -96,7 +163,7 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
     case 'implicit':
       return `${texOf(parsed.lhs)} = ${texOf(parsed.rhs)}`;
     case 'polar':
-      return `r = ${postTex(parsed.rNode.toTex(TEX_OPTS))}`;
+      return `r = ${postTex(peel(parsed.rNode, nRestr(parsed)).toTex(TEX_OPTS))}`;
     case 'inequality': {
       const OP = { '<': '<', '>': '>', '<=': '\\le ', '>=': '\\ge ' } as const;
       return parsed.conjuncts
@@ -108,13 +175,12 @@ export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
         .join(' \\wedge ');
     }
     case 'parametric':
-      return `\\left(${postTex(parsed.xNode.toTex(TEX_OPTS))},\\ ${postTex(
-        parsed.yNode.toTex(TEX_OPTS),
+      return `\\left(${postTex(peel(parsed.xNode, nRestr(parsed)).toTex(TEX_OPTS))},\\ ${postTex(
+        peel(parsed.yNode, nRestr(parsed)).toTex(TEX_OPTS),
       )}\\right)`;
     case 'fndef':
-      // Ternaries render as a cases environment that can't round-trip through the
-      // editor — show those definitions as typed.
-      if (/[?[]/.test(parsed.rhs)) return null;
+      // Indexing / arrays don't round-trip through the editor: shown as typed.
+      if (/\[/.test(parsed.rhs)) return null;
       return `${greekWordToTex(parsed.name)}\\left(${parsed.params
         .map(greekWordToTex)
         .join(',')}\\right) = ${texOf(parsed.rhs)}`;

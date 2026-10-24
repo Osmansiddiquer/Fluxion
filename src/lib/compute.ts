@@ -14,6 +14,7 @@ import type { Trajectory } from './solver/integrate';
 import { applyOdeNotation, forcing, odeGroups, resolveGroupSetup, runGroup, type OdeNumerics } from './solver/odeGroup';
 import { SOLUTION_IN_EQUATION, shieldCalls, solutionLabel, whileSolving } from './solver/solutions';
 import { sampleFunction } from './solver/sample';
+import { branchOf, clipSegments, restrictionTest, sampleCurve } from './solver/branches';
 import { sampleImplicit } from './solver/implicit';
 import { EMPTY_CURVE, type Point, type SampledCurve } from './solver/curve';
 import { buildEvalContext, isDerived, isPlottableFnDef, type EvalContext } from './scope';
@@ -133,6 +134,13 @@ function baseVar(symbol: string): string {
 
 /** Every expression node an entry evaluates (recursing into repeat bodies). */
 export function nodesOf(parsed: Parsed): MathNode[] {
+  // A restriction kept beside the expression (implicit, inequality, ODE) is
+  // evaluated too, so it goes through the same function checks.
+  const r = 'restrict' in parsed && parsed.restrict ? [parsed.restrict] : [];
+  return [...nodesOfBody(parsed), ...r];
+}
+
+function nodesOfBody(parsed: Parsed): MathNode[] {
   switch (parsed.kind) {
     case 'function':
     case 'implicit':
@@ -185,32 +193,28 @@ function samplePolar(
   thetaMin: number,
   thetaMax: number,
   n?: number,
+  branch?: (s: Record<string, number>) => number,
 ): SampledCurve {
   const span = thetaMax - thetaMin;
   // ~720 samples per full turn, capped, so wide sweeps stay smooth but bounded.
   const N = n ?? Math.max(2, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 720)));
   const ps = { ...scope } as Record<string, number>;
-  const segments: Point[][] = [];
-  let cur: Point[] = [];
-  for (let i = 0; i <= N; i++) {
-    const th = thetaMin + (i / N) * span;
+  const set = (th: number) => {
     ps['θ'] = th;
     ps.theta = th;
+  };
+  const at = (th: number): Point | null => {
+    set(th);
     let r: unknown;
     try {
       r = rEval.evaluate(ps);
     } catch {
       r = NaN;
     }
-    if (typeof r === 'number' && Number.isFinite(r)) {
-      cur.push([r * Math.cos(th), r * Math.sin(th)]);
-    } else if (cur.length) {
-      if (cur.length >= 2) segments.push(cur);
-      cur = [];
-    }
-  }
-  if (cur.length >= 2) segments.push(cur);
-  return { segments };
+    return typeof r === 'number' && Number.isFinite(r) ? [r * Math.cos(th), r * Math.sin(th)] : null;
+  };
+  const br = branch && ((th: number) => (set(th), branch(ps)));
+  return { segments: sampleCurve(at, thetaMin, thetaMax, N, br) };
 }
 
 /**
@@ -224,15 +228,14 @@ export function sampleParametric(
   tMin: number,
   tMax: number,
   n?: number,
+  branch?: (s: Record<string, number>) => number,
 ): SampledCurve {
   const span = tMax - tMin;
   if (!Number.isFinite(span)) return EMPTY_CURVE;
   const N = n ?? Math.max(200, Math.min(8000, Math.round((Math.abs(span) / (Math.PI * 2)) * 480)));
   const ps = { ...scope } as Record<string, number>;
-  const segments: Point[][] = [];
-  let cur: Point[] = [];
-  for (let i = 0; i <= N; i++) {
-    ps.t = tMin + (i / N) * span;
+  const at = (t: number): Point | null => {
+    ps.t = t;
     let x: unknown;
     let y: unknown;
     try {
@@ -241,15 +244,10 @@ export function sampleParametric(
     } catch {
       x = NaN;
     }
-    if (typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y)) {
-      cur.push([x, y]);
-    } else if (cur.length) {
-      if (cur.length >= 2) segments.push(cur);
-      cur = [];
-    }
-  }
-  if (cur.length >= 2) segments.push(cur);
-  return { segments };
+    return typeof x === 'number' && typeof y === 'number' && Number.isFinite(x) && Number.isFinite(y) ? [x, y] : null;
+  };
+  const br = branch && ((t: number) => ((ps.t = t), branch(ps)));
+  return { segments: sampleCurve(at, tMin, tMax, N, br) };
 }
 
 /**
@@ -323,21 +321,28 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
         samples: ctx.own ?? samples,
         yMin: viewport.yMin,
         yMax: viewport.yMax,
+        branch: branchOf(parsed.node),
       });
       return { parsed, curve };
     }
-    case 'implicit':
-      return {
-        parsed,
-        curve: sampleImplicit(compileNode(shieldCalls(parsed.node, ctx.solNames)), scope, viewport, gridFor(ctx)),
-      };
+    case 'implicit': {
+      const curve = sampleImplicit(compileNode(shieldCalls(parsed.node, ctx.solNames)), scope, viewport, gridFor(ctx));
+      if (!parsed.restrict) return { parsed, curve };
+      // x² + y² = 4 {y > 0}: the contour clipped exactly at the restriction's edge.
+      const test = restrictionTest(shieldCalls(parsed.restrict, ctx.solNames), scope);
+      const inside = (p: Point) => test((s) => ((s.t = p[0]), (s.y = p[1])));
+      return { parsed, curve: { segments: clipSegments(curve.segments, inside) } };
+    }
     case 'polar': {
       const tMinP = entry.thetaMin ?? 0;
       const tMaxP = entry.thetaMax ?? Math.PI * 2;
       if (ctx.cullMargin !== null && boxOutside(polarBox(parsed.rNode, scope, tMinP, tMaxP), viewport, ctx.cullMargin)) {
         return { parsed, curve: CULLED, culled: 1 };
       }
-      return { parsed, curve: samplePolar(compileNode(parsed.rNode), scope, tMinP, tMaxP, ctx.own) };
+      return {
+        parsed,
+        curve: samplePolar(compileNode(parsed.rNode), scope, tMinP, tMaxP, ctx.own, branchOf(parsed.rNode)),
+      };
     }
     case 'parametric': {
       const t0 = entry.thetaMin ?? 0;
@@ -353,7 +358,15 @@ function sampleDrawable(parsed: Drawable, scope: Record<string, number>, ctx: Sa
       }
       return {
         parsed,
-        curve: sampleParametric(compileNode(parsed.xNode), compileNode(parsed.yNode), scope, t0, t1, ctx.own),
+        curve: sampleParametric(
+          compileNode(parsed.xNode),
+          compileNode(parsed.yNode),
+          scope,
+          t0,
+          t1,
+          ctx.own,
+          branchOf([parsed.xNode, parsed.yNode]),
+        ),
       };
     }
     case 'frames': {
@@ -489,6 +502,17 @@ function sampleInequality(
   }));
   const anyPolar = parts.some((p) => p.polar);
   const sc: Record<string, number> = { ...scope };
+  // Restrictions ({y > 0}): shade only inside, evaluated with the same coordinates.
+  const rEv = parsed.restrict ? compileNode(shieldCalls(parsed.restrict, ctx.solNames)) : null;
+  const restrictOk = (): boolean => {
+    if (!rEv) return true;
+    try {
+      const v = rEv.evaluate(sc);
+      return typeof v === 'number' && Number.isFinite(v);
+    } catch {
+      return false;
+    }
+  };
   const okOp = (v: unknown, op: (typeof parts)[number]['op']): boolean =>
     typeof v === 'number' &&
     Number.isFinite(v) &&
@@ -510,7 +534,7 @@ function sampleInequality(
         }
         if (!okOp(v, p.op)) return false;
       }
-      return true;
+      return restrictOk();
     }
     sc.r = Math.hypot(t, y);
     let phi = Math.atan2(y, t);
@@ -534,7 +558,7 @@ function sampleInequality(
           break;
         }
       }
-      if (allOk) return true;
+      if (allOk && restrictOk()) return true;
     }
     return false;
   };
@@ -577,10 +601,27 @@ function sampleInequality(
     if (cur.length >= 2) segs.push(cur);
     return segs;
   };
+  // A restricted region's boundaries are clipped to the restriction too.
+  const clip = (segs: Point[][]): Point[][] => {
+    if (!rEv) return segs;
+    const TWO = Math.PI * 2;
+    return clipSegments(segs, ([t, y]) => {
+      sc.t = t;
+      sc.y = y;
+      sc.r = Math.hypot(t, y);
+      let phi = Math.atan2(y, t);
+      if (phi < 0) phi += TWO;
+      sc['θ'] = phi;
+      sc.theta = phi;
+      return restrictOk();
+    });
+  };
   const boundaries = parts.map((p) => ({
-    segments: p.polar
-      ? samplePolarBoundary(p.ev)
-      : sampleImplicit(p.ev as unknown as Parameters<typeof sampleImplicit>[0], scope, viewport, gridFor(ctx)).segments,
+    segments: clip(
+      p.polar
+        ? samplePolarBoundary(p.ev)
+        : sampleImplicit(p.ev as unknown as Parameters<typeof sampleImplicit>[0], scope, viewport, gridFor(ctx)).segments,
+    ),
     strict: p.op === '<' || p.op === '>',
   }));
   return {
@@ -867,6 +908,7 @@ export function computeAll(
           samples: entrySamples(entry) ?? samples,
           yMin: viewport.yMin,
           yMax: viewport.yMax,
+          branch: branchOf(parsed.node, { [parsed.params[0]]: 't' }),
         });
         return { parsed, curve };
       }
@@ -901,9 +943,17 @@ export function computeAll(
           // Typed conditions / boundary values fix the start: no draggable IC ring
           // (a drag would write ic that the typed conditions override).
           if (ode?.ic && ode.groupIds.some((id) => icLocked(odeNumerics.get(id)))) ode = { ...ode, ic: undefined };
+          let curve = odeCurve.get(entry.id) ?? EMPTY_CURVE;
+          if (parsed.restrict && curve.segments.length) {
+            // y' = y {0 < t < 3}: draw the solution only inside the window.
+            const test = restrictionTest(parsed.restrict, scope);
+            const dv = parsed.depVar;
+            const inside = (p: Point) => test((s) => ((s.t = p[0]), (s[dv] = p[1])));
+            curve = { segments: clipSegments(curve.segments, inside) };
+          }
           return {
             parsed,
-            curve: odeCurve.get(entry.id) ?? EMPTY_CURVE,
+            curve,
             ...(numerics ? { numerics } : {}),
             ...(ode ? { ode } : {}),
           };

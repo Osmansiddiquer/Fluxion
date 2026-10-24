@@ -1,8 +1,9 @@
-import { parse as mjParse, derivative, simplify, type MathNode } from 'mathjs';
+import { parse as mjParse, derivative, simplify, ConditionalNode, ParenthesisNode, type MathNode } from 'mathjs';
 import { normalizeInput, usesLeibnizX } from './normalize';
 import { parsePoints, looksLikePoints, specNodes, specRefs, type PointSpec } from './points';
 import { KNOWN_FUNCTIONS, SOFT_FUNCTIONS } from './builtins';
 import { HELPER_NAMES } from './helpers';
+import { braceError, conditionToMath, isConditionText, splitRestrictions } from './piecewise';
 
 const HELPERS_SET = new Set(HELPER_NAMES);
 
@@ -25,11 +26,30 @@ const RESERVED = new Set([
   'LN2', 'LN10', 'LOG2E', 'LOG10E', 'SQRT2', 'SQRT1_2',
 ]);
 
+/** A restriction typed after an expression: `{0 < x < 2}` or `, 0 < x < 2`. */
+export interface Restriction {
+  /** As typed (for summaries). */
+  text: string;
+  /** The condition, axis-rewritten like the entry (x → t), for display. */
+  node: MathNode;
+}
+
+/** Fields shared by the kinds that take restrictions / piecewise values. */
+interface Restricted {
+  /** Trailing restrictions, in order (they combine with AND). */
+  restrictions?: Restriction[];
+  /** For kinds that can't fold a restriction into their expression (implicit,
+   * inequality, ODE): 1 where every restriction holds, NaN elsewhere. */
+  restrict?: MathNode;
+  /** Number of pieces of a top-level piecewise value (2 for {x<0: -x, x}). */
+  pieces?: number;
+}
+
 export type Parsed =
   | { kind: 'empty' }
   | { kind: 'error'; message: string }
   | { kind: 'variable'; name: string; value: number; raw: string }
-  | {
+  | (Restricted & {
       kind: 'function';
       name: string;
       node: MathNode;
@@ -37,8 +57,8 @@ export type Parsed =
       raw: string;
       lhs?: string;
       rhs?: string;
-    }
-  | {
+    })
+  | (Restricted & {
       kind: 'ode';
       depVar: string;
       order: number;
@@ -60,7 +80,7 @@ export type Parsed =
       /** Arguments of step functions (heaviside / H / u / step): the integrator
        * splits the step where they cross 0. */
       breaks?: MathNode[];
-    }
+    })
   | {
       /** Conditions on their own row: `y(0) = 2`, `y'(0) = 0`, `y(0) = 0, y(pi) = 0`.
        * They set the initial (or boundary) values of the ODE in that variable. */
@@ -70,7 +90,7 @@ export type Parsed =
       deps: string[];
       raw: string;
     }
-  | {
+  | (Restricted & {
       kind: 'implicit';
       /** F where the curve is F(t, y) = 0. */
       node: MathNode;
@@ -78,7 +98,7 @@ export type Parsed =
       lhs: string;
       rhs: string;
       raw: string;
-    }
+    })
   | {
       kind: 'points';
       points: PointSpec[];
@@ -100,13 +120,13 @@ export type Parsed =
       deps: string[];
       raw: string;
     }
-  | {
+  | (Restricted & {
       kind: 'polar';
       rNode: MathNode;
       deps: string[];
       raw: string;
-    }
-  | {
+    })
+  | (Restricted & {
       kind: 'inequality';
       /** AND of constraints; the region is where every `node` satisfies its `op` 0. */
       parts: { node: MathNode; op: IneqOp }[];
@@ -116,16 +136,16 @@ export type Parsed =
       polar: boolean;
       deps: string[];
       raw: string;
-    }
-  | {
+    })
+  | (Restricted & {
       /** Parametric curve (x(t), y(t)) swept over a t-range (thetaMin…thetaMax). */
       kind: 'parametric';
       xNode: MathNode;
       yNode: MathNode;
       deps: string[];
       raw: string;
-    }
-  | {
+    })
+  | (Restricted & {
       /** User function definition `f(a, b) = body`, callable from any expression. */
       kind: 'fndef';
       name: string;
@@ -135,7 +155,7 @@ export type Parsed =
       deps: string[];
       rhs: string;
       raw: string;
-    }
+    })
   | {
       /** `body for k = a..b[, j = c..d]` — the body drawn once per loop value. */
       kind: 'repeat';
@@ -473,8 +493,14 @@ function parseLayer(name: string, argText: string, raw: string): Parsed {
 }
 
 function parseRepeat(trimmed: string, at: number, raw: string): Parsed {
-  const bodyRaw = trimmed.slice(0, at).trim();
-  const loopText = trimmed.slice(at + 3).trim();
+  let bodyRaw = trimmed.slice(0, at).trim();
+  let loopText = trimmed.slice(at + 3).trim();
+  // A restriction after the loop belongs to the body: y = k x for k = 1..3 {x > 0}.
+  const rs = splitRestrictions(loopText);
+  if (rs) {
+    loopText = rs.main;
+    bodyRaw = `${bodyRaw} ${rs.conds.map((c) => `{${c}}`).join(' ')}`;
+  }
   if (!bodyRaw) return { kind: 'error', message: 'Nothing to repeat before "for"' };
   let loops: LoopSpec[];
   try {
@@ -527,7 +553,7 @@ function parseFnDef(lhs: string, rhs: string, raw: string): Parsed | null {
     }
     const ps = new Set(params);
     const deps = [...freeSymbols(node)].filter((s) => !ps.has(s));
-    return { kind: 'fndef', name, params, node, deps, rhs, raw };
+    return { kind: 'fndef', name, params, node, deps, rhs, raw, ...piecesOf(node) };
   } catch (err) {
     return { kind: 'error', message: friendlyError(err) };
   }
@@ -650,6 +676,14 @@ function parseEntryUncached(raw: string): Parsed {
   const forAt = findFor(trimmed);
   if (forAt > 0) return parseRepeat(trimmed, forAt, raw);
 
+  // Braces: piecewise values / conditions ({x < 0: -x, x^2}) are rewritten to
+  // ternaries by normalizeInput; malformed ones get a clear message here.
+  const bErr = braceError(trimmed);
+  if (bErr) return { kind: 'error', message: bErr };
+  // Restrictions: `y = x^2 {0 < x < 2}`, `r = θ {θ < pi}`, `y = x^2, 0 < x < 2`.
+  const restricted = splitRestrictions(trimmed);
+  if (restricted) return applyRestrictions(parseEntry(restricted.main), restricted.conds, raw);
+
   const normalized = normalizeInput(trimmed);
 
   // Frame sequence: frames(index expression).
@@ -712,7 +746,9 @@ function parseEntryUncached(raw: string): Parsed {
   const withConds = splitOdeConditions(normalized, trimmed, raw);
   if (withConds) return withConds;
 
-  const ineq = normalized.includes('?') ? null : parseInequality(normalized);
+  // (A top-level ternary `c ? a : b` compares inside its condition; a piecewise
+  // value is parenthesised, so `y < {x < 0: 1, 2}` is still an inequality.)
+  const ineq = hasTopLevel(normalized, '?') ? null : parseInequality(normalized);
   if (ineq) {
     try {
       // Canonicalise x → t across the whole inequality when x is the independent.
@@ -768,7 +804,7 @@ function parseEntryUncached(raw: string): Parsed {
       }
       if (xIsIndependent(node)) node = rewriteXtoT(node);
       const deps = [...freeSymbols(node)].filter((s) => s !== INDEP);
-      return { kind: 'function', name: 'y', node, deps, raw };
+      return { kind: 'function', name: 'y', node, deps, raw, ...piecesOf(node) };
     } catch (err) {
       return { kind: 'error', message: friendlyError(err) };
     }
@@ -813,7 +849,7 @@ function parseEntryUncached(raw: string): Parsed {
     try {
       const rNode = mjParse(rhs);
       const deps = [...freeSymbols(rNode)].filter((s) => s !== 'θ' && s !== 'theta');
-      return { kind: 'polar', rNode, deps, raw };
+      return { kind: 'polar', rNode, deps, raw, ...piecesOf(rNode) };
     } catch (err) {
       return { kind: 'error', message: friendlyError(err) };
     }
@@ -895,6 +931,7 @@ function solveODE(
   raw: string,
 ): OdeCore | Extract<Parsed, { kind: 'error' }> {
   const H = `D${order}_${depVar}`;
+  if (nonDifferentiable(combined)) return solvePiecewiseODE(depVar, order, H, lhs, rhs, raw);
   try {
     const a = simplify(derivative(combined, H));
     if (simplify(derivative(a, H)).toString() !== '0') {
@@ -983,6 +1020,71 @@ function solveODE(
       rhs,
       raw,
       ...(impulses.length ? { impulses } : {}),
+      ...(breaks.length ? { breaks } : {}),
+    };
+  } catch (err) {
+    return { kind: 'error', message: friendlyError(err) };
+  }
+}
+
+/**
+ * An ODE with a piecewise / ternary right side (y' = {t < 1: 1, 0}). Those can't
+ * be differentiated symbolically, so the highest derivative must stand alone on
+ * the left. The integrator splits its steps where a condition comparing
+ * expressions linear in t switches (like a step function's argument).
+ */
+function solvePiecewiseODE(
+  depVar: string,
+  order: number,
+  H: string,
+  lhs: string,
+  rhs: string,
+  raw: string,
+): OdeCore | Extract<Parsed, { kind: 'error' }> {
+  const sym = `${depVar}${"'".repeat(order)}`;
+  try {
+    const l = unparen(mjParse(lhs)) as unknown as { type: string; name?: string };
+    if (l.type !== 'SymbolNode' || l.name !== H) {
+      return { kind: 'error', message: `With a piecewise or condition, write the ODE as ${sym} = …` };
+    }
+    const node = mjParse(rhs);
+    if (hasSymbol(node, H)) {
+      return { kind: 'error', message: `With a piecewise or condition, write the ODE as ${sym} = …` };
+    }
+    const stateSymbols = stateSymbolsFor(depVar, order);
+    const stateSet = new Set(stateSymbols);
+    const breaks: MathNode[] = [];
+    node.traverse((n: MathNode) => {
+      const a = n as unknown as { type: string; fn?: string; args?: MathNode[]; params?: MathNode[] };
+      const operands =
+        a.type === 'RelationalNode'
+          ? a.params ?? []
+          : a.type === 'OperatorNode' && a.fn && COMPARE_FNS.has(a.fn) && a.args?.length === 2
+            ? a.args
+            : [];
+      for (let i = 0; i + 1 < operands.length; i++) {
+        try {
+          const arg = mjParse(`(${operands[i].toString()}) - (${operands[i + 1].toString()})`);
+          if (nonDifferentiable(arg)) continue;
+          if (stateSymbols.some((s) => hasSymbol(arg, s)) || hasSymbol(arg, 'y')) continue;
+          const slope = simplify(derivative(arg, 't'));
+          if (simplify(derivative(slope, 't')).toString() === '0' && slope.toString() !== '0') breaks.push(arg);
+        } catch {
+          /* not linear in t: no break (the adaptive step still copes) */
+        }
+      }
+    });
+    const deps = [...freeSymbols(node)].filter((s) => s !== INDEP && !stateSet.has(s));
+    return {
+      kind: 'ode',
+      depVar,
+      order,
+      node,
+      deps,
+      stateSymbols,
+      lhs,
+      rhs,
+      raw,
       ...(breaks.length ? { breaks } : {}),
     };
   } catch (err) {
@@ -1101,6 +1203,22 @@ function parseRelation(lhs: string, rhs: string, F: MathNode, raw: string): Pars
       /* fall through */
     }
   }
+  // Piecewise / ternary / comparisons can't be differentiated symbolically: with
+  // y alone on one side it's still an explicit function (y = x < 0 ? -x : x^2).
+  if (nonDifferentiable(F)) {
+    const side = isBareY(lhs) ? rhs : isBareY(rhs) ? lhs : null;
+    if (side != null) {
+      try {
+        const node = mjParse(side);
+        if (!hasSymbol(node, 'y')) {
+          const deps = [...freeSymbols(node)].filter((s) => s !== INDEP);
+          return { kind: 'function', name: 'y', node, deps, raw, lhs, rhs, ...piecesOf(node) };
+        }
+      } catch {
+        /* fall through to implicit */
+      }
+    }
+  }
   // Try to read it as explicit-in-y: F linear in y -> y = f(t).
   try {
     const ay = simplify(derivative(F, 'y'));
@@ -1144,7 +1262,220 @@ function namedValue(lhs: string, rhs: string, node: MathNode, raw: string): Pars
       return { kind: 'variable', name: lhs, value, raw };
     }
   }
-  return { kind: 'function', name: lhs, node, deps, raw, lhs, rhs };
+  return { kind: 'function', name: lhs, node, deps, raw, lhs, rhs, ...piecesOf(node) };
+}
+
+// ── piecewise & restrictions ────────────────────────────────────────────────
+
+/** Is there a `c` outside all brackets? */
+function hasTopLevel(s: string, c: string): boolean {
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') depth--;
+    else if (depth === 0 && ch === c) return true;
+  }
+  return false;
+}
+
+const isBareY = (s: string) => /^\(*\s*y\s*\)*$/.test(s.trim());
+
+const COMPARE_FNS = new Set(['smaller', 'smallerEq', 'larger', 'largerEq', 'equal', 'unequal', 'and', 'or', 'not', 'xor']);
+
+/** Contains a conditional or comparison (which mathjs can't differentiate). */
+export function nonDifferentiable(node: MathNode): boolean {
+  let found = false;
+  node.traverse((n: MathNode) => {
+    const t = (n as { type: string }).type;
+    if (t === 'ConditionalNode' || t === 'RelationalNode') found = true;
+    else if (t === 'OperatorNode' && COMPARE_FNS.has((n as unknown as { fn: string }).fn)) found = true;
+  });
+  return found;
+}
+
+function unparen(n: MathNode): MathNode {
+  let m = n as MathNode & { type: string; content?: MathNode };
+  while (m.type === 'ParenthesisNode' && m.content) m = m.content as typeof m;
+  return m;
+}
+
+/** The undefined fallback `NaN` (mathjs parses it as a constant). */
+export const isNaNNode = (n: MathNode) => {
+  const m = unparen(n) as unknown as { type: string; name?: string; value?: unknown };
+  return (m.type === 'SymbolNode' && m.name === 'NaN') || (m.type === 'ConstantNode' && Number.isNaN(m.value));
+};
+
+/** Pieces of a piecewise value: the branches of a ternary chain (the undefined
+ * fallback of `{c: v}` isn't a piece). The root chain, else the first one found. */
+export function piecewiseCount(node: MathNode): number {
+  const chain = (n: MathNode): number => {
+    const c = unparen(n) as unknown as { type: string; falseExpr: MathNode };
+    if (c.type !== 'ConditionalNode') return isNaNNode(n) ? 0 : 1;
+    return 1 + chain(c.falseExpr);
+  };
+  const root = unparen(node);
+  if ((root as { type: string }).type === 'ConditionalNode') return chain(root);
+  let found = 0;
+  node.traverse((n: MathNode) => {
+    if (!found && (n as { type: string }).type === 'ConditionalNode') found = chain(n);
+  });
+  return found;
+}
+
+function piecesOf(node: MathNode): { pieces?: number } {
+  const n = piecewiseCount(node);
+  return n ? { pieces: n } : {};
+}
+
+const NAN = () => mjParse('NaN');
+
+/** `c1 ? (c2 ? node : NaN) : NaN` — node where every condition holds. */
+function guard(node: MathNode, conds: MathNode[]): MathNode {
+  return conds.reduceRight<MathNode>(
+    (acc, c) => new ConditionalNode(c, acc, NAN()) as unknown as MathNode,
+    node,
+  );
+}
+
+/** Replace standalone symbols (not call names) by parenthesised expressions. */
+function substitute(node: MathNode, map: Record<string, MathNode>): MathNode {
+  return node.transform((n, path, parent) => {
+    if (!(n as { isSymbolNode?: boolean }).isSymbolNode || isCallName(path, parent)) return n;
+    const rep = map[(n as unknown as { name: string }).name];
+    return rep ? (new ParenthesisNode(rep.cloneDeep()) as unknown as MathNode) : n;
+  });
+}
+
+/** x → t in a condition when x is the horizontal axis of the entry (the
+ * condition uses x but not t, and the entry itself has no free x). */
+function axisCond(c: MathNode, entryHasX: boolean): MathNode {
+  return hasSymbol(c, 'x') && !hasSymbol(c, 't') && !entryHasX ? rewriteXtoT(c) : c;
+}
+
+function addDeps(deps: string[], nodes: MathNode[], skip: string[]): string[] {
+  const out = new Set(deps);
+  for (const n of nodes) for (const s of freeSymbols(n)) if (!skip.includes(s)) out.add(s);
+  return [...out];
+}
+
+/** Apply trailing restrictions (as typed) to the parse of the main expression. */
+function applyRestrictions(inner: Parsed, condTexts: string[], raw: string): Parsed {
+  if (inner.kind === 'error') return inner;
+  if (inner.kind === 'empty') return { kind: 'error', message: 'Nothing to restrict before { … }' };
+  const conds: MathNode[] = [];
+  for (const text of condTexts) {
+    const norm = normalizeInput(text.trim());
+    if (!isConditionText(norm)) {
+      return { kind: 'error', message: `A restriction needs a comparison, like {x > 0} (got "${text.trim()}")` };
+    }
+    try {
+      conds.push(mjParse(conditionToMath(norm)));
+    } catch (err) {
+      return { kind: 'error', message: `In restriction "${text.trim()}": ${friendlyError(err)}` };
+    }
+  }
+  const meta = (nodes: MathNode[]): Restriction[] =>
+    nodes.map((node, i) => ({ text: condTexts[i].trim(), node }));
+  const prev = 'restrictions' in inner && inner.restrictions ? inner.restrictions : [];
+  switch (inner.kind) {
+    case 'function': {
+      const cs = conds.map((c) => axisCond(c, hasSymbol(inner.node, 'x')));
+      // y in a condition is the function's own value: y = x^2 {y < 4}.
+      const valued = cs.map((c) => substitute(c, { y: inner.node }));
+      return {
+        ...inner,
+        node: guard(inner.node, valued),
+        deps: addDeps(inner.deps, valued, [INDEP]),
+        restrictions: [...prev, ...meta(cs)],
+        ...(inner.pieces ? {} : piecesOf(inner.node)),
+        raw,
+      };
+    }
+    case 'fndef': {
+      if (conds.some((c) => hasSymbol(c, 't') && !inner.params.includes('t'))) {
+        return { kind: 'error', message: `Add t as a parameter: ${inner.name}(…, t)` };
+      }
+      return {
+        ...inner,
+        node: guard(inner.node, conds),
+        deps: addDeps(inner.deps, conds, inner.params),
+        restrictions: [...prev, ...meta(conds)],
+        ...(inner.pieces ? {} : piecesOf(inner.node)),
+        raw,
+      };
+    }
+    case 'polar': {
+      // θ is the parameter; r, x and y in a condition are the curve's own.
+      const r = inner.rNode;
+      const map = {
+        r,
+        x: mjParse(`(${r.toString()}) * cos(θ)`),
+        y: mjParse(`(${r.toString()}) * sin(θ)`),
+      };
+      const valued = conds.map((c) => substitute(c, map));
+      return {
+        ...inner,
+        rNode: guard(r, valued),
+        deps: addDeps(inner.deps, valued, ['θ', 'theta']),
+        restrictions: [...prev, ...meta(conds)],
+        raw,
+      };
+    }
+    case 'parametric': {
+      const valued = conds.map((c) => substitute(c, { x: inner.xNode, y: inner.yNode }));
+      return {
+        ...inner,
+        xNode: guard(inner.xNode, valued),
+        yNode: guard(inner.yNode, valued),
+        deps: addDeps(inner.deps, valued, [INDEP]),
+        restrictions: [...prev, ...meta(conds)],
+        raw,
+      };
+    }
+    case 'implicit':
+    case 'inequality': {
+      const hasX =
+        inner.kind === 'implicit' ? hasSymbol(inner.node, 'x') : inner.parts.some((p) => hasSymbol(p.node, 'x'));
+      const cs = conds.map((c) => axisCond(c, hasX));
+      const all = [...prev.map((p) => p.node), ...cs];
+      const skip = [INDEP, 'y', 'r', 'θ', 'theta'];
+      return {
+        ...inner,
+        restrict: guard(mjParse('1'), all),
+        deps: addDeps(inner.deps, cs, skip),
+        restrictions: [...prev, ...meta(cs)],
+        raw,
+      };
+    }
+    case 'ode': {
+      // A window on the drawn solution: y' = y {0 < t < 3} (the equation is
+      // integrated as usual). x means t when x is the independent variable.
+      const xIndep = inner.indep === 'x';
+      const cs = conds.map((c) => (xIndep && !hasSymbol(c, 't') ? rewriteXtoT(c) : c));
+      const all = [...prev.map((p) => p.node), ...cs];
+      const skip = [INDEP, ...inner.stateSymbols];
+      const restrictOf = (nodes: MathNode[]) => guard(mjParse('1'), nodes);
+      const xAlt = inner.xAlt
+        ? {
+            ...inner.xAlt,
+            restrict: restrictOf(all.map((c) => (hasSymbol(c, 't') ? c : rewriteXtoT(c)))),
+            deps: addDeps(inner.xAlt.deps, all.map((c) => (hasSymbol(c, 't') ? c : rewriteXtoT(c))), skip),
+          }
+        : undefined;
+      return {
+        ...inner,
+        restrict: restrictOf(all),
+        deps: addDeps(inner.deps, cs, skip),
+        restrictions: [...prev, ...meta(cs)],
+        ...(xAlt ? { xAlt } : {}),
+        raw,
+      };
+    }
+    case 'variable':
+      return { kind: 'error', message: `${inner.name} is a slider: restrictions apply to curves and regions` };
+    default:
+      return { kind: 'error', message: `A ${inner.kind} row can't take a restriction { … }` };
+  }
 }
 
 function friendlyError(err: unknown): string {

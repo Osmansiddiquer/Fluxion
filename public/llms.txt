@@ -112,6 +112,26 @@ y = floor(x)               # function
 y = 1/(x - 1)              # function
 ```
 
+### Piecewise functions and restrictions
+
+```fluxion
+y = {x < 0: -x, x < 2: x^2}         # function
+y = {x < 0: -x, x^2}                # function
+y = {x > 1}                         # function
+y = x > 3 ? -x : x                  # function
+y = x^2 {0 < x < 2}                 # function
+y = sin(x) {-pi <= x <= pi} {y > 0} # function
+r = theta {0 < theta < pi}          # polar
+(cos(t), sin(t)) {t < pi}           # parametric
+x^2 + y^2 = 4 {y > 0}               # implicit
+x^2 + y^2 < 9 {x > 0}               # inequality
+```
+
+- Desmos-style braces. `{c1: a, c2: b, d}` is `a` where `c1` holds, else `b` where `c2` holds, else `d`; without the trailing else value it is undefined (not drawn) where no condition holds. `{c}` alone is 1 where `c` holds and undefined elsewhere. The ternary `c ? a : b` is the same thing.
+- Conditions: `<`, `<=`, `>`, `>=`, `=` (equality), `!=`, chains (`0 < x < 2`, `-1 <= x <= 1`), `and`, `or`. They may use sliders: `y = x {x < a}`.
+- Braces after an expression restrict where it's drawn; several braces combine with AND (`y = x^2, 0 < x < 2` also works). Functions use x (and `y` for their own value); polar curves `theta` (or `r`, `x`, `y`); parametric curves `t`; implicit curves and regions `x` and `y`; ODEs draw their solution only inside, e.g. `y' = y {0 < t < 3}`.
+- Piecewise values work anywhere an expression does: user functions `f(x) = {x < 0: 0, x}`, derived values, ODE right sides `y' = {t < 1: 1, 0}` (the step splits where the condition switches), nested braces. Edges and jumps are located exactly: a restricted curve ends on its bound and pieces are never joined by a vertical line.
+
 A bare expression means `y = ...`. Implicit multiplication works: `2x`, `3sin(x)`, `pi x`. Available functions: `sin cos tan sec csc cot`, inverses `asin`/`arcsin` (also `sin^-1(x)`) etc., hyperbolic `sinh cosh tanh` and inverses, `sqrt cbrt nthRoot(x, n) exp ln log` (`log` is natural; `log10`, `log2`, `log(x, b)`), `abs sign floor ceil round mod(x, m) min max hypot atan2 gamma factorial` (`x!`). Constants: `pi` (or `π`), `e`, `tau`, `phi`. Powers: `x^2`, `e^(-x)`, `2^-x`.
 
 ### Differential equations (ODEs)
@@ -369,13 +389,14 @@ y = |x|               =>  y = abs(x)
 y = k*x for k = 1..n  =>  y = k*x for k = 1..3
 y = a*x^2             =>  y = a*x^2 ; a = 1
 y = sin x             =>  y = sin(x)
-y = x^2 if x > 0      =>  y = max(x, 0)^2
+y = x^2 if x > 0      =>  y = x^2 {x > 0}
+y = {x < 0: -x, 0: x} =>  y = {x < 0: -x, x}
 ```
 
 - `πx` is read as one name, `pix`. Put an operator or a space between: `pi*x`, `pi x`, `2pi`.
 - `P(1 - P)` calls a function named P. Write `P*(1 - P)`.
 - Functions need parentheses: `sin(x)`, not `sin x`.
-- No absolute-value bars. For piecewise definitions use a ternary inside a function, `h(u) = u < 0 ? 0 : u`, or `max`/`min`/`step(x)`.
+- No absolute-value bars. For piecewise definitions use braces, `y = {x < 0: 0, x}`, and restrict with a trailing `{0 < x < 2}`. Every piece but the last needs a condition.
 - Don't reuse built-in names (`e`, `pi`, `tau`, `phi`, `i`, `t`, `x`, `y`, `r`, `theta`) as slider names.
 - LaTeX is converted when it can be, but plain text is more reliable.
 
