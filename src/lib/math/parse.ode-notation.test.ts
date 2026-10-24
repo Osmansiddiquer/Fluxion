@@ -131,3 +131,15 @@ describe('LaTeX round trip', () => {
     expect(entryToLatex(parseEntry("y'' = delta(t)"))).toContain('\\delta\\left(');
   });
 });
+
+describe("a prime after a bracket (mathjs would read it as a transpose)", () => {
+  it.each(["X'' = -X - b*(X - x_0)'", "y' = (y)'", "y = sin(x)'"])('%s is an error, not a silently dropped derivative', (raw) => {
+    const p = parseEntry(raw);
+    expect(p.kind).toBe('error');
+    if (p.kind === 'error') expect(p.message).toMatch(/prime/);
+  });
+  it('primes on names still work', () => {
+    expect(parseEntry("X'' = -X - b*X'").kind).toBe('ode');
+    expect(parseEntry("y'(0) = 1").kind).toBe('condition');
+  });
+});

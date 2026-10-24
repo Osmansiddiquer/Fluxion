@@ -685,6 +685,15 @@ function parseEntryUncached(raw: string): Parsed {
   if (restricted) return applyRestrictions(parseEntry(restricted.main), restricted.conds, raw);
 
   const normalized = normalizeInput(trimmed);
+  // Primes left after normalisation follow a bracket or number, e.g.
+  // (X - x_0)': mathjs would read ' as a matrix transpose (a no-op on numbers)
+  // and silently drop the derivative.
+  if (normalized.includes("'")) {
+    return {
+      kind: 'error',
+      message: "A prime ′ goes right after a variable name, like X′; it can't differentiate a bracket. Write the derivative out: (X − x₀)′ is X′ when x₀ is a constant.",
+    };
+  }
 
   // Frame sequence: frames(index expression).
   const fm = /^frames\s*\((.*)\)$/.exec(normalized);
