@@ -222,6 +222,7 @@ export function latexToText(latex: string): string {
   // Operators.
   s = s.replace(/\\cdot|\\times|\\ast/g, '*');
   s = s.replace(/\\div/g, '/');
+  s = s.replace(/\\ldotp\s*/g, '.'); // A.x (a point's coordinate)
   s = s.replace(/\\pm/g, '+');
   s = s.replace(/\\exponentialE/g, 'e');
   s = s.replace(/\\pi(?![a-zA-Z])/g, 'pi');

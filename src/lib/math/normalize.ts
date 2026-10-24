@@ -1,6 +1,7 @@
 import { FUNCTION_SYNONYMS, UNICODE_MAP, INVERSE_BASE, KNOWN_FUNCTIONS } from './builtins';
 import { greekGlyphToWord } from './greek';
 import { desugarBraces } from './piecewise';
+import { rewriteCoords } from './coords';
 
 /** Index of the `)` matching the `(` at `open`, or -1 if unbalanced. */
 function matchParen(s: string, open: number): number {
@@ -101,6 +102,8 @@ export function normalizeInput(raw: string): string {
   let s = raw;
   s = greekGlyphToWord(s);
   s = applyUnicode(s);
+  // Point coordinates A.x / A.y → the plain symbols A__x / A__y (see coords.ts).
+  s = rewriteCoords(s);
   s = applySynonyms(s);
   s = rewritePowFunc(s);
   s = normalizeDerivatives(s);

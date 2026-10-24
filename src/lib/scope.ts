@@ -4,6 +4,7 @@ import { compileNode } from './math/compileCache';
 import { HELPERS } from './math/helpers';
 import type { Entry } from '../store/types';
 import { installSolutions, type SolutionTable } from './solver/solutions';
+import { coordSymbol, prettyCoords } from './math/coords';
 
 /**
  * The evaluation scope shared by every expression: scripting helpers, slider
@@ -28,6 +29,13 @@ export interface EvalContext {
   fnKey: string;
   /** ODE solutions callable as `y(T)`, `y'(T)` (lib/solver/solutions). */
   solutions: SolutionTable;
+  /** Named points `A = (…, …)` (first definition of each name). Their
+   * coordinates are the scope symbols `A__x` / `A__y` (A.x / A.y, lib/math/coords). */
+  pointNames: Set<string>;
+  /** Resolved coordinates of each named point with finite coordinates. */
+  points: Map<string, [number, number]>;
+  /** Why a named point has no coordinates (cycle, bad call, …), by entry id. */
+  pointErrors: Map<string, string>;
 }
 
 export interface EvalOpts {
@@ -37,6 +45,7 @@ export interface EvalOpts {
 
 type FnDef = Extract<Parsed, { kind: 'fndef' }>;
 type FnParsed = Extract<Parsed, { kind: 'function' }>;
+type PointParsed = Extract<Parsed, { kind: 'pointvar' }>;
 
 /** A named expression of no t (`b = 2a + 1`) is a derived value, not a curve. */
 export function isDerived(parsed: Parsed): parsed is FnParsed {
@@ -108,7 +117,7 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[], opts
     fnDefs.push(parsed);
   }
   // Derived values (`b = 2a`): names first, values in dependency order below.
-  let pending: { entry: Entry; parsed: FnParsed }[] = [];
+  const pending: { entry: Entry; parsed: FnParsed }[] = [];
   for (const it of items) {
     if (!isDerived(it.parsed)) continue;
     const { name } = it.parsed;
@@ -120,11 +129,32 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[], opts
     pending.push({ entry: it.entry, parsed: it.parsed });
   }
 
+  // Named points (A = (a, 1)): resolved with the derived values below, since
+  // either may read the other (B = (A.x + 1, A.y), d = A.x^2).
+  const pointNames = new Set<string>();
+  const points = new Map<string, [number, number]>();
+  const pointErrors = new Map<string, string>();
+  const coordNames = new Set<string>();
+  const pendingPoints: { entry: Entry; parsed: PointParsed }[] = [];
+  for (const { entry, parsed } of items) {
+    if (parsed.kind !== 'pointvar') continue;
+    const { name } = parsed;
+    if (varNames.has(name) || fnNames.has(name) || derivedNames.has(name) || pointNames.has(name)) {
+      pointErrors.set(entry.id, `${name} is already defined`);
+      continue;
+    }
+    pointNames.add(name);
+    coordNames.add(coordSymbol(name, 'x'));
+    coordNames.add(coordSymbol(name, 'y'));
+    pendingPoints.push({ entry, parsed });
+  }
+
   // ODE solutions y(T), y'(T): lazily integrated closures (names already
-  // defined above win over them).
+  // defined above win over them). An equation reading a point coordinate waits
+  // for it like for a derived value.
   const solutions = installSolutions(items, scope, {
     varNames,
-    derivedNames,
+    derivedNames: coordNames.size ? new Set([...derivedNames, ...coordNames]) : derivedNames,
     fnNames,
     fnDefs,
     fixedStep: opts.odeStep,
@@ -142,26 +172,56 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[], opts
         };
   }
 
-  // Derived values, resolved in dependency order by repeated passes (each pass
-  // evaluates whatever has become computable). Leftovers are cycles / errors.
-  // (A solution call whose equation reads a derived value not yet set throws,
-  // so the value retries on a later pass.)
+  // Derived values and named points, resolved in dependency order by repeated
+  // passes (each pass evaluates whatever has become computable). Leftovers are
+  // cycles / errors. (A solution call whose equation reads a value not yet set
+  // throws, so the value retries on a later pass.)
+  type Item =
+    | { entry: Entry; parsed: FnParsed; point?: undefined }
+    | { entry: Entry; parsed: PointParsed; point: true };
+  const waitsOn = (d: string) => (derivedNames.has(d) || coordNames.has(d)) && !(d in scope);
   const lastError = new Map<string, string>();
-  while (pending.length) {
-    const next: typeof pending = [];
-    for (const it of pending) {
-      const { name, deps } = it.parsed;
-      if (deps.some((d) => derivedNames.has(d) && !(d in scope))) {
+  const num = (v: unknown) => (typeof v === 'number' ? v : typeof v === 'boolean' ? Number(v) : NaN);
+  let queue: Item[] = [...pending, ...pendingPoints.map((p) => ({ ...p, point: true as const }))];
+  while (queue.length) {
+    const next: Item[] = [];
+    for (const it of queue) {
+      if (it.parsed.deps.some(waitsOn)) {
         next.push(it);
         continue;
       }
+      if (it.point) {
+        const { name, tNode, yNode } = it.parsed;
+        if (!callsOk(tNode) || !callsOk(yNode)) {
+          pointErrors.set(it.entry.id, 'Unknown function');
+          continue; // never evaluated (compute's validation names the function)
+        }
+        const sx = coordSymbol(name, 'x');
+        const sy = coordSymbol(name, 'y');
+        // Never shadow a function (an ODE solution's shielded name, a helper).
+        if (typeof scope[sx] === 'function' || typeof scope[sy] === 'function') {
+          pointErrors.set(it.entry.id, `${name} is a reserved name: rename the point`);
+          continue;
+        }
+        try {
+          const x = num(compileNode(tNode).evaluate(scope));
+          const y = num(compileNode(yNode).evaluate(scope));
+          scope[sx] = x;
+          scope[sy] = y;
+          if (Number.isFinite(x) && Number.isFinite(y)) points.set(name, [x, y]);
+        } catch (err) {
+          lastError.set(it.entry.id, err instanceof Error ? err.message : String(err));
+          next.push(it);
+        }
+        continue;
+      }
+      const { name } = it.parsed;
       if (!callsOk(it.parsed.node)) {
         derivedErrors.set(it.entry.id, 'Unknown function');
         continue; // never evaluated (compute's validation names the function)
       }
       try {
-        const v = compileNode(it.parsed.node).evaluate(scope);
-        const n = typeof v === 'number' ? v : typeof v === 'boolean' ? Number(v) : NaN;
+        const n = num(compileNode(it.parsed.node).evaluate(scope));
         scope[name] = n;
         derivedValues.set(it.entry.id, n);
       } catch (err) {
@@ -169,17 +229,44 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[], opts
         next.push(it);
       }
     }
-    if (next.length === pending.length) {
+    if (next.length === queue.length) {
+      // What each leftover is waiting for: the items defining those names.
+      const byName = new Map<string, Item>();
       for (const it of next) {
-        const circular = it.parsed.deps.some((d) => derivedNames.has(d) && !(d in scope));
-        derivedErrors.set(
-          it.entry.id,
-          circular ? 'Circular definition' : (lastError.get(it.entry.id) ?? 'Could not evaluate'),
-        );
+        if (it.point) {
+          byName.set(coordSymbol(it.parsed.name, 'x'), it);
+          byName.set(coordSymbol(it.parsed.name, 'y'), it);
+        } else byName.set(it.parsed.name, it);
+      }
+      const onCycle = (start: Item): boolean => {
+        const seen = new Set<Item>();
+        const stack = [start];
+        while (stack.length) {
+          const cur = stack.pop()!;
+          for (const d of cur.parsed.deps) {
+            const dep = byName.get(d);
+            if (!dep) continue;
+            if (dep === start) return true;
+            if (!seen.has(dep)) {
+              seen.add(dep);
+              stack.push(dep);
+            }
+          }
+        }
+        return false;
+      };
+      for (const it of next) {
+        const blocked = it.parsed.deps.filter(waitsOn);
+        const msg = onCycle(it)
+          ? 'Circular definition'
+          : blocked.length
+            ? `${prettyCoords(blocked[0])} has no value yet`
+            : prettyCoords(lastError.get(it.entry.id) ?? 'Could not evaluate');
+        (it.point ? pointErrors : derivedErrors).set(it.entry.id, msg);
       }
       break;
     }
-    pending = next;
+    queue = next;
   }
 
   // Key over every function definition and the global values bodies read.
@@ -197,5 +284,8 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[], opts
     derivedErrors,
     fnKey,
     solutions,
+    pointNames,
+    points,
+    pointErrors,
   };
 }

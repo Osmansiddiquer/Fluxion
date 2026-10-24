@@ -18,6 +18,7 @@ import { branchOf, clipSegments, restrictionTest, sampleCurve } from './solver/b
 import { sampleImplicit } from './solver/implicit';
 import { EMPTY_CURVE, type Point, type SampledCurve } from './solver/curve';
 import { buildEvalContext, isDerived, isPlottableFnDef, type EvalContext } from './scope';
+import { COORD_PROPS, prettyCoords, splitCoord } from './math/coords';
 import { boxOutside, parametricBox, polarBox } from './math/bounds';
 import { specNodes, type PointSpec } from './math/points';
 import { PathBuilder, flattenOps, type Pt } from './geom/path';
@@ -32,6 +33,8 @@ export interface CurveResult {
   error?: string;
   /** Referenced names that aren't defined anywhere — prompt the user to define them. */
   undefinedVars?: string[];
+  /** Those of `undefinedVars` used as points (A.x): prompt `A = (…, …)`. */
+  undefinedPoints?: string[];
   /** Called functions that aren't recognised. */
   unknownFns?: string[];
   /** Marker coordinates for a 'points' entry. */
@@ -692,23 +695,45 @@ export function computeAll(
   const condRows = applyOdeNotation(parsedList, depVars, valueNames);
   const callsUser = (p: Parsed) => fnNames.size > 0 && [...callsOf(p)].some((f) => fnNames.has(f));
 
-  // Point-valued variables (A = (x, y)) resolved to coordinates.
-  const pointScope = new Map<string, [number, number]>();
-  const pointvarNames = new Set<string>();
-  for (const { parsed } of parsedList) {
-    if (parsed.kind !== 'pointvar') continue;
-    // Never evaluate calls to unknown functions (links are untrusted input).
-    if ([...callsOf(parsed)].some((f) => !callable(f))) continue;
-    pointvarNames.add(parsed.name);
-    try {
-      const t = compileNode(parsed.tNode).evaluate(scope);
-      const y = compileNode(parsed.yNode).evaluate(scope);
-      if (typeof t === 'number' && typeof y === 'number' && Number.isFinite(t) && Number.isFinite(y)) {
-        pointScope.set(parsed.name, [t, y]);
-      }
-    } catch {
-      /* unresolved; left out of pointScope */
+  // Point-valued variables (A = (x, y)) resolved to coordinates (lib/scope.ts,
+  // alongside derived values: their coordinates A.x / A.y are scope symbols).
+  const pointScope = ectx.points;
+  const pointvarNames = ectx.pointNames;
+
+  /**
+   * Problems with the point coordinates (A.x) an entry reads: a name that isn't
+   * a point, a property other than x / y, a point without a value. Undefined
+   * names come back to be prompted for (as points).
+   */
+  const coordCheck = (deps: string[], own?: string): { error?: string; undefinedPoints: string[] } => {
+    const undefinedPoints: string[] = [];
+    for (const d of deps) {
+      const c = splitCoord(d);
+      if (!c || valueNames.has(d)) continue;
+      const { point, prop } = c;
+      const label = `${point}.${prop}`;
+      if (pointvarNames.has(point)) {
+        if (!(COORD_PROPS as readonly string[]).includes(prop)) return { error: `${label}: a point has .x and .y`, undefinedPoints };
+        if (!(d in scope)) {
+          if (own) return { error: own, undefinedPoints };
+          const why = ectx.pointErrors.get(pointEntry.get(point) ?? '');
+          return { error: `${point} has no value${why ? ` (${why})` : ''}`, undefinedPoints };
+        }
+      } else if (varNames.has(point) || derivedNames.has(point)) {
+        return { error: `${label}: ${point} is a number, not a point`, undefinedPoints };
+      } else if (fnNames.has(point)) {
+        return { error: `${label}: ${point} is a function, not a point`, undefinedPoints };
+      } else if (depVars.has(point)) {
+        return { error: `${label}: ${point} is an ODE solution, not a point (its value at T is ${point}(T))`, undefinedPoints };
+      } else if (/^(t|x|y|r|theta|e|pi|tau|phi|i)$/.test(point)) {
+        return { error: `${label}: ${point} isn't a point (only a named point A = (…, …) has .x and .y)`, undefinedPoints };
+      } else if (!undefinedPoints.includes(point)) undefinedPoints.push(point);
     }
+    return { undefinedPoints };
+  };
+  const pointEntry = new Map<string, string>();
+  for (const { entry, parsed } of parsedList) {
+    if (parsed.kind === 'pointvar' && !pointEntry.has(parsed.name)) pointEntry.set(parsed.name, entry.id);
   }
 
   const loneSymbol = (node: { type?: string; name?: string }): string | undefined =>
@@ -841,6 +866,8 @@ export function computeAll(
       })
       .join(',');
 
+  // Messages name A.x, never the internal symbol A__x.
+  const pretty = (r: CurveResult): CurveResult => (r.error ? { ...r, error: prettyCoords(r.error) } : r);
   const seenFn = new Set<string>();
   for (const { entry, parsed } of parsedList) {
     const computeOne = (): CurveResult => {
@@ -868,7 +895,16 @@ export function computeAll(
       ) {
         defined = new Set([...valueNames, ...pointvarNames]);
       } else defined = valueNames;
-      const undefinedVars = barePoint ? [] : parsed.deps.filter((d) => !defined.has(d));
+      // Point coordinates (A.x) are checked on their own (coordCheck).
+      const undefinedVars = barePoint ? [] : parsed.deps.filter((d) => !defined.has(d) && !splitCoord(d));
+      const own =
+        parsed.kind === 'pointvar'
+          ? ectx.pointErrors.get(entry.id)
+          : isDerived(parsed)
+            ? ectx.derivedErrors.get(entry.id)
+            : undefined;
+      const coords = 'deps' in parsed && !barePoint ? coordCheck(parsed.deps, own) : { undefinedPoints: [] };
+      for (const p of coords.undefinedPoints) if (!undefinedVars.includes(p)) undefinedVars.push(p);
 
       if (unknownFns.length) {
         return {
@@ -879,8 +915,14 @@ export function computeAll(
         };
       }
       if (undefinedVars.length) {
-        return { parsed, curve: EMPTY_CURVE, undefinedVars };
+        return {
+          parsed,
+          curve: EMPTY_CURVE,
+          undefinedVars,
+          ...(coords.undefinedPoints.length ? { undefinedPoints: coords.undefinedPoints } : {}),
+        };
       }
+      if (coords.error) return { parsed, curve: EMPTY_CURVE, error: coords.error };
       // A call of an ODE solution whose equation can't be solved: say why.
       if (parsed.kind !== 'ode' && parsed.kind !== 'condition' && callsSolution(parsed)) {
         const err = solutions.errorFor(callsOf(parsed));
@@ -932,6 +974,8 @@ export function computeAll(
           return { parsed, curve: EMPTY_CURVE, points: coord ? [coord] : [] };
         }
         if (parsed.kind === 'pointvar') {
+          const err = ectx.pointErrors.get(entry.id);
+          if (err) return { parsed, curve: EMPTY_CURVE, error: err };
           const coord = pointScope.get(parsed.name);
           return { parsed, curve: EMPTY_CURVE, points: coord ? [coord] : [] };
         }
@@ -999,11 +1043,11 @@ export function computeAll(
         results.set(entry.id, hit.result);
         continue;
       }
-      const result = computeOne();
+      const result = pretty(computeOne());
       RESULT_CACHE.set(entry.id, { key, result });
       results.set(entry.id, result);
     } else {
-      results.set(entry.id, computeOne());
+      results.set(entry.id, pretty(computeOne()));
     }
   }
 

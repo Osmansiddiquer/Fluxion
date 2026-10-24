@@ -323,6 +323,21 @@ B = (-1, -2)               # pointvar
 
 `(x, y)` is a point, `[(...), (...)]` a list of points, `((...), (...), ...)` a connected polyline, `A = (x, y)` a named point (draggable when its coordinates are sliders), and `(A, B)` the segment between two named points. Points accept `label`, `labeldir`, `size` and `drag`.
 
+`A.x` and `A.y` are the coordinates of a named point `A`, usable in any expression: other points (in any order; a cycle is an error), functions, derived values, parametric/implicit/polar curves, regions, restrictions, user functions, colour expressions and ODE equations. They follow A when it is dragged or animated, also when A's coordinates call an ODE solution like `X(T)`.
+
+```fluxion
+a = 2                              # variable
+A = (a, 1)                         # pointvar
+B = (A.x + 1, A.y)                 # pointvar
+((A.x, 0), (B.x, B.y))             # points
+y = (x - A.x)^2 + A.y              # function
+d = sqrt(A.x^2 + A.y^2)            # function
+(A.x + cos(t), A.y + sin(t))       # parametric
+y < A.y {x < A.x}                  # inequality
+```
+
+A point riding on an ODE solution, with a circle around it: https://osmansiddiquer.github.io/Fluxion/#expr=X''=-1.8X-0.5X'&ic=4,0&expr=T=0&min=0&max=20&autoplay=1&expr=center=(X(T)+4,2)&expr=(center.x+0.5cos(t),center.y+0.5sin(t))&expr=y=center.y&xmin=-2&xmax=12
+
 ### Parametric curves, definitions and repeats (drawings and animation)
 
 `(x(t), y(t))` is a parametric curve; `t` runs over `thetaMin`..`thetaMax` (default 0 to 2pi).
@@ -391,6 +406,7 @@ y = a*x^2             =>  y = a*x^2 ; a = 1
 y = sin x             =>  y = sin(x)
 y = x^2 if x > 0      =>  y = x^2 {x > 0}
 y = {x < 0: -x, 0: x} =>  y = {x < 0: -x, x}
+y = A_x               =>  A = (1, 2) ; y = A.x
 ```
 
 - `πx` is read as one name, `pix`. Put an operator or a space between: `pi*x`, `pi x`, `2pi`.
@@ -398,6 +414,7 @@ y = {x < 0: -x, 0: x} =>  y = {x < 0: -x, x}
 - Functions need parentheses: `sin(x)`, not `sin x`.
 - No absolute-value bars. For piecewise definitions use braces, `y = {x < 0: 0, x}`, and restrict with a trailing `{0 < x < 2}`. Every piece but the last needs a condition.
 - Don't reuse built-in names (`e`, `pi`, `tau`, `phi`, `i`, `t`, `x`, `y`, `r`, `theta`) as slider names.
+- A point's coordinates are `A.x` and `A.y` (not `A_x`, which is a separate name). Only a named point has them: `k.x` on a slider is an error.
 - LaTeX is converted when it can be, but plain text is more reliable.
 
 ## Script mode (JavaScript drawings and animation)
