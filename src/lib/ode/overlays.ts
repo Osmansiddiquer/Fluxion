@@ -333,7 +333,9 @@ function overlaysFor(
         return { which, segments: sampleImplicit(ev, {}, vp, { cellsX, cellsY }).segments };
       });
     }
-    // Equilibria: points in the phase plane, constant solutions y = c against t.
+    // Equilibria: points in the phase plane; against t, lines y = c for a
+    // first-order equation only (for y'' = … the stable / centre / saddle
+    // type is a phase-plane idea and reads as noise on a y-vs-t plot).
     const scalar = g.entries.length === 1;
     if (system.dim <= 2 && (view.phase || scalar)) {
       const my = 0.1 * (vp.yMax - vp.yMin);
@@ -347,17 +349,6 @@ function overlaysFor(
           yMin: vp.yMin - my,
           yMax: vp.yMax + my,
         });
-        out.equilibria = { ...res, mode: 'lines' };
-      } else {
-        // y'' = g(y, y′) against t: constant solutions y = c have y′ = 0.
-        const h = vp.yMax - vp.yMin;
-        const res = systemEquilibria(g.parsed, system, g.scope, {
-          xMin: vp.yMin - my,
-          xMax: vp.yMax + my,
-          yMin: -h / 2,
-          yMax: h / 2,
-        });
-        res.list = res.list.filter((e) => Math.abs(e.point[1]) < 1e-9 * Math.max(1, h));
         out.equilibria = { ...res, mode: 'lines' };
       }
     }

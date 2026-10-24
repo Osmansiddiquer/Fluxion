@@ -359,7 +359,7 @@ const odes: DocSection = {
     }),
     H('Equilibria and stability'),
     P(
-      'Equations that don’t use t (autonomous) have their **equilibria** marked and classified. For one equation against t they are the constant solutions $y = c$, drawn as faint dashed lines; in the phase plane they are points, classified by the eigenvalues of the Jacobian (computed symbolically, numerically when that fails). Hover a marker to read its type, eigenvalues and Jacobian. Turn them off with **Equilibria** in the Points menu.',
+      'Equations that don’t use t (autonomous) have their **equilibria** marked and classified. For one first-order equation against t they are the constant solutions $y = c$, drawn as faint dashed lines (higher-order equations show theirs in the phase plane); in the phase plane they are points, classified by the eigenvalues of the Jacobian (computed symbolically, numerically when that fails). Hover a marker to read its type, eigenvalues and Jacobian. Turn them off with **Equilibria** in the Points menu.',
     ),
     TABLE(
       ['Marker', 'Meaning'],

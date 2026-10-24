@@ -245,7 +245,7 @@ describe('equilibria', () => {
     ]);
   });
 
-  it('pendulum: centres at 2kπ, saddles at (2k+1)π; also as y = c lines against t', () => {
+  it('pendulum: centres at 2kπ, saddles at (2k+1)π; none against t', () => {
     const p = E("y'' = -sin(y)", { phase: true });
     const list = eqs([p], { tMin: -4, tMax: 4, yMin: -3, yMax: 3 }).list;
     expect(list.map((e) => [Math.round(e.point[0] / Math.PI), e.type])).toEqual([
@@ -255,9 +255,9 @@ describe('equilibria', () => {
     ]);
     const damped = eqs([E("y'' = -sin(y) - 0.5y'", { phase: true })], { tMin: -1, tMax: 1, yMin: -1, yMax: 1 });
     expect(damped.list[0].type).toBe('stable spiral');
-    const vt = eqs([E("y'' = -sin(y)")], { tMin: -8, tMax: 8, yMin: -4, yMax: 4 });
-    expect(vt.mode).toBe('lines');
-    expect(vt.list.map((e) => Math.round(e.point[0] / Math.PI))).toEqual([-1, 0, 1]);
+    // Against t, a 2nd-order equation's centre / saddle type would only confuse.
+    const vt = E("y'' = -sin(y)");
+    expect(computeAll([vt], { tMin: -8, tMax: 8, yMin: -4, yMax: 4 }).get(vt.id)!.ode!.equilibria).toBeUndefined();
   });
 
   it('uses slider values and a numeric Jacobian when needed', () => {
