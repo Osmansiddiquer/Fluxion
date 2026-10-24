@@ -339,6 +339,15 @@ math-field.math-field::part(virtual-keyboard-toggle) {
   border: 1px solid transparent;
   transition: border-color 0.12s var(--ease);
 }
+.define-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.define-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+}
 .define-btn:hover {
   border-color: var(--accent);
 }

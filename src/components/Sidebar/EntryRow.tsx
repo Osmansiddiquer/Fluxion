@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { useEntryResult } from '../../state/results';
 import { greekWordToGlyph } from '../../lib/math/greek';
+import { parseEntry } from '../../lib/math/parse';
 import type { Entry } from '../../store/types';
 import VariableSlider from './VariableSlider';
 import IVPControls from './IVPControls';
@@ -36,6 +37,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
   const remove = useStore((s) => s.removeEntry);
   const reorder = useStore((s) => s.reorderEntry);
   const addAssignment = useStore((s) => s.addAssignment);
+  const allEntries = useStore((s) => s.entries);
   const [dropping, setDropping] = useState(false);
   const res = useEntryResult(entry.id);
   const parsed = res?.parsed;
@@ -171,10 +173,14 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
           </span>
           {undefinedVars.map((v) => {
             const glyph = greekWordToGlyph(v);
+            const twin = lookalike(v, allEntries);
             return (
-              <button key={v} className="define-btn" onClick={() => addAssignment(glyph)}>
-                {glyph} = …
-              </button>
+              <span key={v} className="define-item">
+                <button className="define-btn" onClick={() => addAssignment(glyph)}>
+                  {glyph} = …
+                </button>
+                {twin && <span className="define-hint">or did you mean {greekWordToGlyph(twin)}?</span>}
+              </span>
             );
           })}
         </div>
@@ -191,4 +197,18 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
       {entry.expanded && sweepLabel && <PolarControls entry={entry} label={sweepLabel} />}
     </div>
   );
+}
+
+/** Fold characters that are easy to mistype for each other (o/0, l/1/I). */
+const lookKey = (name: string) => name.toLowerCase().replace(/o/g, '0').replace(/[li]/g, '1');
+
+/** A name defined elsewhere in the graph that looks like `name` (x_o vs x_0). */
+function lookalike(name: string, entries: Entry[]): string | undefined {
+  const key = lookKey(name);
+  for (const e of entries) {
+    const p = parseEntry(e.raw);
+    const defined = p.kind === 'variable' || p.kind === 'fndef' ? p.name : undefined;
+    if (defined && defined !== name && lookKey(defined) === key) return defined;
+  }
+  return undefined;
 }
