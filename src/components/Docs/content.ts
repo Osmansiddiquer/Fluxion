@@ -449,6 +449,37 @@ const odes: DocSection = {
         viewport: { tMin: -0.5, tMax: 8, yMin: -2, yMax: 2 },
       }),
     ),
+    H('Using a solution: y(T)'),
+    P(
+      'Once a row defines an ODE in $y$, `y(T)` is its solution at $T$ and `y\'(T)` its derivative (up to the equation\'s order, so `y\'\'(T)` for a second-order one). It is exactly the drawn solution, with its typed conditions, initial values, boundary values, solver and forcing, and it works for any $T$, not just inside the view. Put it in a point to move a ball with time, in a function, a parametric curve, a derived value (its badge updates live) or a colour expression. In a system every unknown is callable: `x(T)`, `z\'(T)`.',
+    ),
+    SYNTAX(
+      row('(T, y(T))', 'points', 'A dot riding the solution as T plays', {
+        with: [L("y'' = -4y, y(0) = 3, y'(0) = 0", 'ode'), L('T = 1', 'variable', { varMin: 0, varMax: 10 })],
+      }),
+      row('(0, y(T))', 'points', 'A ball moving up and down with y', {
+        with: [L("y'' = -4y, y(0) = 3, y'(0) = 0", 'ode'), L('T = 1', 'variable', { varMin: 0, varMax: 10 })],
+      }),
+      row("E = y'(T)^2/2 + 2y(T)^2", 'function', 'Energy at T (constant here): a live badge', {
+        derived: true,
+        with: [L("y'' = -4y, y(0) = 3, y'(0) = 0", 'ode'), L('T = 1', 'variable', { varMin: 0, varMax: 10 })],
+      }),
+      row('(x(t), y(t))', 'parametric', 'The phase curve of a system', {
+        with: [L("x' = -y, x(0) = 2", 'ode'), L("y' = x, y(0) = 0", 'ode')],
+        opts: { thetaMin: 0, thetaMax: 6.3 },
+      }),
+    ),
+    EX({
+      id: 'spring-ball',
+      title: 'Ball on a spring',
+      blurb: "The solution of y″ = −k y − c y′ called as y(T): a ball on a coil spring rides the curve like a chart recorder's pen as the clock T plays, and E shows the energy draining away.",
+      tex: "y'' = -k\\,y - c\\,y'",
+      lines: [],
+      demo: 'spring-ball',
+    }),
+    TIP(
+      'Rows like `y(0) = 2` are still conditions, not evaluations. A function you define with the same name (`w(s) = s^2`) wins over the solution, and an ODE can\'t read a solution value in its own equation (`y\'\' = -y + y(1)` is an error: use $y$ itself).',
+    ),
     H('x or t?'),
     LIST(
       'In a function, `x` and `t` are interchangeable: `y = sin(x)` and `y = sin(t)` are the same curve.',

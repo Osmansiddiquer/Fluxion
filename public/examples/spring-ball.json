@@ -1,0 +1,72 @@
+{
+  "version": 1,
+  "expressions": [
+    {
+      "expr": "y'' = -k*y - c*y', y(0) = 3, y'(0) = 0",
+      "color": "#2d70b3"
+    },
+    {
+      "expr": "k = 2",
+      "color": "#000000",
+      "min": 0.2,
+      "max": 6,
+      "step": 0.1
+    },
+    {
+      "expr": "c = 0.15",
+      "color": "#000000",
+      "min": 0,
+      "max": 1,
+      "step": 0.01
+    },
+    {
+      "expr": "T = 0",
+      "color": "#000000",
+      "min": 0,
+      "max": 20,
+      "step": 0.01,
+      "anim": "loop",
+      "speed": 0.2,
+      "autoplay": true
+    },
+    {
+      "expr": "((T - 0.8, 4.5), (T + 0.8, 4.5))",
+      "color": "#6b7684",
+      "lineWidth": 4,
+      "dots": false
+    },
+    {
+      "expr": "(T + 0.3*sin(14*pi*t), 4.5 + (y(T) - 4.5)*t)",
+      "color": "#6b7684",
+      "thetaMin": 0,
+      "thetaMax": 1,
+      "lineWidth": 2
+    },
+    {
+      "expr": "(T, y(T))",
+      "pointSize": 12,
+      "drag": "off"
+    },
+    {
+      "expr": "E = y'(T)^2/2 + k*y(T)^2/2",
+      "color": "#000000"
+    }
+  ],
+  "viewport": {
+    "xmin": -1.5,
+    "xmax": 21,
+    "ymin": -6,
+    "ymax": 6
+  },
+  "features": {
+    "extrema": false,
+    "xIntercepts": false,
+    "yIntercept": false,
+    "discontinuities": false,
+    "intersections": false
+  },
+  "panels": {
+    "right": false,
+    "bottom": false
+  }
+}

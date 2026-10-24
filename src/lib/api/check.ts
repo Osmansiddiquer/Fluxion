@@ -1,5 +1,5 @@
 import { parseEntry, type Parsed } from '../math/parse';
-import { computeAll, type CurveResult } from '../compute';
+import { callsOf, computeAll, type CurveResult } from '../compute';
 import type { GraphData } from '../graphFile';
 import type { Viewport } from '../../store/types';
 import { colorExprCalls } from '../color';
@@ -132,6 +132,13 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
   const fnNames = new Set(
     g.entries.map((e) => parseEntry(e.raw)).flatMap((p) => (p.kind === 'fndef' ? [p.name] : [])),
   );
+  // ODE solutions are callable too: y(T), y'(T) for every ODE in y.
+  const solNames = new Set<string>();
+  for (const p of g.entries.map((e) => parseEntry(e.raw))) {
+    if (p.kind !== 'ode') continue;
+    for (let k = 0; k <= p.order; k++) solNames.add(k ? `D${k}_${p.depVar}` : p.depVar);
+  }
+  for (const n of solNames) fnNames.add(n);
   const layerNames = new Set(
     g.entries.map((e) => parseEntry(e.raw)).flatMap((p) => (p.kind === 'layer' ? [p.name] : [])),
   );
@@ -141,6 +148,13 @@ export function checkGraph(g: GraphData, pathOf: (i: number) => string = (i) => 
     const res = results.get(entry.id);
     const path = pathOf(i);
     const rep: ExpressionReport = { index: i, expr: entry.raw, kind: parsed.kind, summary: summarize(parsed) };
+    if (parsed.kind !== 'ode' && parsed.kind !== 'condition' && solNames.size) {
+      const used = [...callsOf(parsed)].filter((f) => solNames.has(f));
+      if (used.length) {
+        const labels = used.map((f) => f.replace(/^D(\d+)_(\w+)$/, (_m, k, n) => n + "'".repeat(Number(k))));
+        rep.summary += `, using the ODE solution ${labels.map((l) => `${l}(…)`).join(', ')}`;
+      }
+    }
     expressions.push(rep);
 
     if (parsed.kind === 'error') {

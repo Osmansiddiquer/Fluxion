@@ -268,7 +268,14 @@ Two layers keep recompute cheap (verified; required to stay smooth under 4× CPU
    the signature — colour expressions are re-evaluated at draw time. Animation fields
    that change *what is sampled* ARE in both the signature and the key: `samples`,
    `layer` (layered entries are never culled), `glow` / `blur` (they widen the cull
-   margin). `blend` and `dots` are cosmetic.
+   margin). `blend` and `dots` are cosmetic. **ODE solutions as functions** (`y(T)`,
+   `y'(T)`; `lib/solver/solutions.ts`): `buildEvalContext` installs lazy closures per
+   ODE dep var (`ectx.solutions`), resolved exactly like the drawn curve
+   (`resolveGroupSetup` + `groupStart`) and backed by a `DenseOde` cached (LRU) by the
+   group's full key; entries calling one fold `solutions.keyFor(calls)` into their key
+   (and `fnKey` covers fndef bodies that call one). An ODE reading a solution is
+   refused (`whileSolving` guard); implicit/inequality nodes go through `shieldCalls`
+   because `y` is bound as a coordinate there.
 3. **The evaluator** (`lib/math/fastCompile.ts`, behind `compileNode`): mathjs trees
    become native closures (number arithmetic native, everything else delegated to the
    mathjs function — results bit-identical, see `fastCompile.test.ts`). Costly subtrees

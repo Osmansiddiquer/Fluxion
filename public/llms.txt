@@ -180,6 +180,36 @@ y' = x*(28 - z) - y        # ode
 z' = x*y - 8/3*z           # ode
 ```
 
+#### Using a solution elsewhere: y(T)
+
+Once a row defines an ODE in y, `y(T)` is the value of its solution at T, and `y'(T)` (up to the equation's order, e.g. `y''(T)` for a 2nd-order one) its derivatives. The value is the drawn solution: typed conditions, `ic`/`t0`, boundary values, `solver` and step / delta forcing all apply, and it works for any T, inside the view or not (up to 2000 from t0). Calls work in points and point variables, functions (`f = y(t)^2`, `y = 2*y(x)`), parametric curves (`(x(t), y(t))` of a system is its phase curve), derived values (live badge), regions and colour expressions. In a system each unknown is callable: `x(T)`, `z'(T)`.
+
+- Animate a slider `T` (`"anim": "loop"`, `"autoplay": true`) and `(T, y(T))` rides the curve; `(0, y(T))` moves a ball up and down.
+- Rows such as `y(0) = 2` (alone or after the ODE's comma) are still conditions, not evaluations.
+- A function you define with the same name (`w(s) = s^2` next to `w' = -w`) wins over the solution; `u(t - 1)` stays the unit step.
+- An ODE's own equation (or its conditions) can't read a solution value (`y'' = -y + y(1)` is an error); use the variable itself.
+
+```fluxion
+y'' = -4*y, y(0) = 3, y'(0) = 0       # ode
+T = 1                                 # variable
+(T, y(T))                             # points
+B = (0, y(T))                         # pointvar
+E = y'(T)^2/2 + 2*y(T)^2              # function
+f = y(t)^2/3                          # function
+```
+
+```fluxion
+x' = -y, x(0) = 2                     # ode
+y' = x, y(0) = 0                      # ode
+(x(t), y(t))                          # parametric
+```
+
+A ball on a damped spring, moved by the solution while T plays:
+
+https://osmansiddiquer.github.io/Fluxion/#expr=y''=-4y-0.2y',y(0)=3,y'(0)=0&expr=T=0&min=0&max=12&anim=loop&speed=0.33&autoplay=1&expr=(T,y(T))&color=red&size=12&xmin=-1&xmax=12
+
+The `spring-ball` example hangs the ball from a coil spring (a parametric curve through `y(T)`) and shows the energy: https://osmansiddiquer.github.io/Fluxion/#example=spring-ball
+
 #### The qualitative picture: fields, phase plane, equilibria, families
 
 Fluxion shows these automatically when they apply; the options below turn them on or off.
@@ -507,6 +537,7 @@ Fluxion ships example scripts (Script mode programs). Open one as-is with `#exam
 | `silhouette` | Silhouette clip | https://osmansiddiquer.github.io/Fluxion/#example=silhouette | link only (carries a frame clip) |
 | `sunset` | Cinematic sunset (Graph mode: gradients, layers, splines, letterbox) | https://osmansiddiquer.github.io/Fluxion/#example=sunset | https://osmansiddiquer.github.io/Fluxion/examples/sunset.json |
 | `impulse` | Spring hit by a hammer (Graph mode: `delta` forcing, inline initial conditions, sliders) | https://osmansiddiquer.github.io/Fluxion/#example=impulse | https://osmansiddiquer.github.io/Fluxion/examples/impulse.json |
+| `spring-ball` | Ball on a spring (Graph mode: the solution called as `y(T)` moves a ball while the clock plays) | https://osmansiddiquer.github.io/Fluxion/#example=spring-ball | https://osmansiddiquer.github.io/Fluxion/examples/spring-ball.json |
 
 Tips for your own drawings, learned from these:
 

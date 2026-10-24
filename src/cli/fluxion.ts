@@ -4,7 +4,7 @@ import type { FluxionSpec, Issue, NormalizedSpec } from '../lib/api/spec';
 import { exampleSpec, listExamples } from '../lib/api/examples';
 import { specToGraph } from '../lib/api/spec';
 import { checkScript, type ScriptCheckReport } from './scriptCheck';
-import type { GraphEntryData } from '../lib/script/protocol';
+import { graphEntryData, type GraphEntryData } from '../lib/script/protocol';
 
 /**
  * Command-line client for the Fluxion URL API, using the app's real parser so
@@ -153,7 +153,7 @@ function entriesOf(spec: unknown): GraphEntryData[] {
 
 /** The Graph-mode expressions a script reads (graph.ode / fn / value). */
 function graphEntries(spec: NormalizedSpec): GraphEntryData[] {
-  return specToGraph(spec).entries.map((e) => ({ raw: e.raw, visible: e.visible, t0: e.t0, ic: e.ic, varValue: e.varValue }));
+  return specToGraph(spec).entries.map(graphEntryData);
 }
 
 /** Run a spec's script (if any) and fold its problems into the report. */

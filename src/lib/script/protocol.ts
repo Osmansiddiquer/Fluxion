@@ -149,6 +149,33 @@ export interface GraphEntryData {
   t0?: number;
   ic?: number[];
   varValue?: number;
+  /** ODE options, so `graph.ode` follows the drawn solution. */
+  solver?: string;
+  conditions?: string;
+  bc?: number[];
+}
+
+/** The fields of a Graph-mode entry the script bridge reads (lib/script/graphBridge). */
+export function graphEntryData(e: {
+  raw: string;
+  visible: boolean;
+  t0?: number;
+  ic?: number[];
+  varValue?: number;
+  solver?: string;
+  conditions?: string;
+  bc?: number[];
+}): GraphEntryData {
+  return {
+    raw: e.raw,
+    visible: e.visible,
+    t0: e.t0,
+    ic: e.ic,
+    varValue: e.varValue,
+    ...(e.solver ? { solver: e.solver } : {}),
+    ...(e.conditions ? { conditions: e.conditions } : {}),
+    ...(e.bc ? { bc: e.bc } : {}),
+  };
 }
 export interface ClipMeta {
   name: string;

@@ -6,6 +6,7 @@ import { computeSignature } from '../../state/signature';
 import { SandboxHost } from '../../lib/script/sandbox/host';
 import { SCRIPT_LIMITS, usesClock, type ClipMeta, type GraphEntryData, type ScriptInputs } from '../../lib/script/protocol';
 import { getFrameSequence } from '../../lib/frames/assets';
+import { graphEntryData } from '../../lib/script/protocol';
 import type { Entry, ScriptDoc, ThemeMode, Viewport } from '../../store/types';
 
 /** Re-run delay while typing (ms). */
@@ -17,7 +18,7 @@ function resolvedTheme(t: ThemeMode): 'light' | 'dark' {
 }
 
 export function graphData(entries: Entry[]): GraphEntryData[] {
-  return entries.map((e) => ({ raw: e.raw, visible: e.visible, t0: e.t0, ic: e.ic, varValue: e.varValue }));
+  return entries.map(graphEntryData);
 }
 
 export function clipMetas(script: ScriptDoc | undefined): ClipMeta[] {

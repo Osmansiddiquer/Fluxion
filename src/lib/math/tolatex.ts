@@ -18,6 +18,19 @@ function postTex(tex: string): string {
   s = s.replace(/\\mathrm\{delta\}(?=\\left\()/g, '\\delta');
   // Step functions keep their call shape (H(t − 1), not H·(t − 1), on the way back).
   s = s.replace(/\\mathrm\{(H|u|heaviside)\}(?=\\left\()/g, '\\operatorname{$1}');
+  // Call heads keep their call shape on the way back through the editor (a
+  // braced {g} would read as g·(…)): an ODE solution y(T) or its derivative
+  // y'(T) (the function D1_y), a user function g(2), a helper lerp(…).
+  s = s.replace(
+    /\\mathrm\{(?:D(\d+)_)?([A-Za-z][A-Za-z0-9]*)\}(?=\\left\()/g,
+    (_m, k: string | undefined, name: string) => {
+      const head = greekWordToTex(name);
+      const primes = "'".repeat(Number(k ?? 0));
+      return head.length === 1 || head.startsWith('\\') || primes
+        ? `\\mathit{${head}${primes}}`
+        : `\\operatorname{${name}}`;
+    },
+  );
   // mathjs wraps some symbols (e.g. `t`, which it reads as the tonne unit) in
   // \mathrm{}. Re-wrap in braces so a preceding command like \cdot can't merge
   // into it (\cdot\mathrm{t} -> \cdot{t}, never \cdott).

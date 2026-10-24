@@ -3,6 +3,7 @@ import { KNOWN_FUNCTIONS } from './math/builtins';
 import { compileNode } from './math/compileCache';
 import { HELPERS } from './math/helpers';
 import type { Entry } from '../store/types';
+import { installSolutions, type SolutionTable } from './solver/solutions';
 
 /**
  * The evaluation scope shared by every expression: scripting helpers, slider
@@ -22,8 +23,16 @@ export interface EvalContext {
   /** Derived-value results / errors by entry id. */
   derivedValues: Map<string, number>;
   derivedErrors: Map<string, string>;
-  /** Changes whenever any user function's definition or captured values change. */
+  /** Changes whenever any user function's definition or captured values change
+   * (including the ODE solutions their bodies call). */
   fnKey: string;
+  /** ODE solutions callable as `y(T)`, `y'(T)` (lib/solver/solutions). */
+  solutions: SolutionTable;
+}
+
+export interface EvalOpts {
+  /** Step of fixed-step ODE solutions (compute passes the drawn curve's). */
+  odeStep?: number;
 }
 
 type FnDef = Extract<Parsed, { kind: 'fndef' }>;
@@ -75,7 +84,7 @@ function makeUserFn(def: FnDef, global: Record<string, unknown>, depth: { n: num
   };
 }
 
-export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[]): EvalContext {
+export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[], opts: EvalOpts = {}): EvalContext {
   const scope: Record<string, unknown> = { ...HELPERS };
   const varNames = new Set<string>();
   const derivedNames = new Set<string>();
@@ -98,20 +107,7 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[]): Eva
     fnNames.add(parsed.name);
     fnDefs.push(parsed);
   }
-  // Links are untrusted: a body may only call known functions and other user
-  // functions — never mathjs internals like evaluate / createUnit.
-  const callsOk = (node: Parameters<typeof calledFunctions>[0]) =>
-    [...calledFunctions(node)].every((f) => KNOWN_FUNCTIONS.has(f) || fnNames.has(f));
-  for (const def of fnDefs) {
-    scope[def.name] = callsOk(def.node)
-      ? makeUserFn(def, scope, depth)
-      : () => {
-          throw new Error(`${def.name} calls an unknown function`);
-        };
-  }
-
-  // Derived values, resolved in dependency order by repeated passes (each pass
-  // evaluates whatever has become computable). Leftovers are cycles / errors.
+  // Derived values (`b = 2a`): names first, values in dependency order below.
   let pending: { entry: Entry; parsed: FnParsed }[] = [];
   for (const it of items) {
     if (!isDerived(it.parsed)) continue;
@@ -123,6 +119,33 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[]): Eva
     derivedNames.add(name);
     pending.push({ entry: it.entry, parsed: it.parsed });
   }
+
+  // ODE solutions y(T), y'(T): lazily integrated closures (names already
+  // defined above win over them).
+  const solutions = installSolutions(items, scope, {
+    varNames,
+    derivedNames,
+    fnNames,
+    fnDefs,
+    fixedStep: opts.odeStep,
+  });
+
+  // Links are untrusted: a body may only call known functions, other user
+  // functions and ODE solutions — never mathjs internals like evaluate / createUnit.
+  const callsOk = (node: Parameters<typeof calledFunctions>[0]) =>
+    [...calledFunctions(node)].every((f) => KNOWN_FUNCTIONS.has(f) || fnNames.has(f) || solutions.names.has(f));
+  for (const def of fnDefs) {
+    scope[def.name] = callsOk(def.node)
+      ? makeUserFn(def, scope, depth)
+      : () => {
+          throw new Error(`${def.name} calls an unknown function`);
+        };
+  }
+
+  // Derived values, resolved in dependency order by repeated passes (each pass
+  // evaluates whatever has become computable). Leftovers are cycles / errors.
+  // (A solution call whose equation reads a derived value not yet set throws,
+  // so the value retries on a later pass.)
   const lastError = new Map<string, string>();
   while (pending.length) {
     const next: typeof pending = [];
@@ -160,9 +183,10 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[]): Eva
   }
 
   // Key over every function definition and the global values bodies read.
-  const fnKey = fnDefs
+  let fnKey = fnDefs
     .map((d) => `${d.raw}:${d.deps.map((x) => (typeof scope[x] === 'number' ? scope[x] : 'u')).join(',')}`)
     .join(';');
+  if (solutions.names.size) fnKey += '|' + solutions.keyFor(fnDefs.flatMap((d) => [...calledFunctions(d.node)]));
 
   return {
     scope: scope as Record<string, number>,
@@ -172,5 +196,6 @@ export function buildEvalContext(items: { entry: Entry; parsed: Parsed }[]): Eva
     derivedValues,
     derivedErrors,
     fnKey,
+    solutions,
   };
 }

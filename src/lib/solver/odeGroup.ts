@@ -114,6 +114,8 @@ function resolveIC(ic: number[] | undefined, order: number): number[] {
 
 const callsOk = (c: CondSpec, fnNames: Set<string>) =>
   [c.at, c.value].every((n) => [...calledFunctions(n)].every((f) => KNOWN_FUNCTIONS.has(f) || fnNames.has(f)));
+const callsSolution = (c: CondSpec, solNames: Set<string>) =>
+  solNames.size > 0 && [c.at, c.value].some((n) => [...calledFunctions(n)].some((f) => solNames.has(f)));
 
 /** A condition's number, or NaN while it names something undefined (mid-typing). */
 function evalNum(node: CondSpec['at'], scope: Record<string, unknown>): number {
@@ -138,6 +140,7 @@ export function resolveGroupSetup(
   scope: Record<string, unknown>,
   entries: Entry[],
   fnNames: Set<string> = new Set(),
+  solNames: Set<string> = new Set(),
 ): GroupSetup {
   const first = members.reduce((a, m) => (entries.indexOf(m.entry) < entries.indexOf(a.entry) ? m : a), members[0]);
   const method: SolverMethod = first.entry.solver ?? DEFAULT_SOLVER;
@@ -160,6 +163,10 @@ export function resolveGroupSetup(
     su.typedText = conds.map((c) => c.text.replace(/D(\d+)_([A-Za-z]\w*)/g, (_s, k, n) => prime(n, Number(k))));
     const vals: { k: number; at: number; v: number; text: string }[] = [];
     for (const c of conds) {
+      if (callsSolution(c, solNames)) {
+        error ??= "A condition can't use a solution value: give it a number (or a slider)";
+        return;
+      }
       if (!callsOk(c, fnNames)) {
         error ??= 'Unknown function in a condition';
         return;
@@ -287,14 +294,18 @@ export interface GroupRun {
   numerics: OdeNumerics[];
 }
 
-/** Integrate a group with its resolved setup. Throws (message → each member's error). */
-export function runGroup(
+/**
+ * The initial point a group is integrated from (typed conditions applied, a
+ * boundary-value problem shot) and its forcing. Shared by the drawn curve
+ * (runGroup) and the on-demand solution `y(T)` (lib/solver/solutions), so both
+ * follow the same trajectory. Throws on a bad setup or a failed shot.
+ */
+export function groupStart(
   system: OdeSystem,
   members: GroupMember[],
   setup: GroupSetup,
   scope: Record<string, unknown>,
-  view: { tMin: number; tMax: number; samples: number },
-): GroupRun {
+): { t0: number; y0: number[]; impulses: Impulse[]; breaks: number[]; perMember: number[][] } {
   if (setup.error) throw new Error(setup.error);
   const { impulses, breaks, perMember } = forcing(system, members, scope);
   const y0 = new Array<number>(system.dim).fill(0);
@@ -310,6 +321,55 @@ export function runGroup(
     y0[1] = res.y0[1];
     t0 = p.a;
   }
+  return { t0, y0, impulses, breaks, perMember };
+}
+
+/**
+ * Coupling groups of ODE rows: rows are joined when one's equation reads
+ * another's dependent variable (the first row defining a variable owns it).
+ * Returns groups of indices into `odes`, in first-appearance order.
+ */
+export function odeGroups(odes: { depVar: string; deps: string[] }[]): number[][] {
+  const defByVar = new Map<string, number>();
+  odes.forEach((o, i) => {
+    if (!defByVar.has(o.depVar)) defByVar.set(o.depVar, i);
+  });
+  const parent = odes.map((_, i) => i);
+  const find = (x: number): number => {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]];
+      x = parent[x];
+    }
+    return x;
+  };
+  odes.forEach((o, i) => {
+    for (const dep of o.deps) {
+      const j = defByVar.get(dep.replace(/^D\d+_/, ''));
+      if (j === undefined || j === i) continue;
+      const ra = find(i);
+      const rb = find(j);
+      if (ra !== rb) parent[ra] = rb;
+    }
+  });
+  const groups = new Map<number, number[]>();
+  odes.forEach((_, i) => {
+    const r = find(i);
+    const g = groups.get(r);
+    if (g) g.push(i);
+    else groups.set(r, [i]);
+  });
+  return [...groups.values()];
+}
+
+/** Integrate a group with its resolved setup. Throws (message → each member's error). */
+export function runGroup(
+  system: OdeSystem,
+  members: GroupMember[],
+  setup: GroupSetup,
+  scope: Record<string, unknown>,
+  view: { tMin: number; tMax: number; samples: number },
+): GroupRun {
+  const { t0, y0, impulses, breaks, perMember } = groupStart(system, members, setup, scope);
   const info = newInfo();
   const traj = integrateSystem(system.deriv, {
     t0,
