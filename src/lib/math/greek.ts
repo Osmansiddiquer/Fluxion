@@ -74,3 +74,11 @@ export function greekWordToGlyph(s: string): string {
 export function greekWordToTex(s: string): string {
   return s.replace(WORD_RE, (w) => WORD_TO_TEX.get(w) ?? w);
 }
+
+/** A variable name as LaTeX: Greek words become symbols and a subscript is
+ * typeset as one (omega_0 -> \\omega_{0}, a_12 -> a_{12}). */
+export function nameToTex(name: string): string {
+  const i = name.indexOf('_');
+  if (i <= 0 || i === name.length - 1) return greekWordToTex(name);
+  return `${greekWordToTex(name.slice(0, i))}_{${greekWordToTex(name.slice(i + 1))}}`;
+}
