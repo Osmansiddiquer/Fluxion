@@ -49,6 +49,42 @@ function rewritePowFunc(s: string): string {
   return out;
 }
 
+/**
+ * Absolute-value bars |x| → abs(x) (mathjs reads | as bitwise or). A bar opens
+ * after an operator / bracket / the start, and closes after an operand; a bar
+ * after an operand with nothing open opens too when another bar follows (2|x|).
+ * Lone bars (x < 0 | x > 2, "or" in a condition) are left alone.
+ */
+export function absBars(s: string): string {
+  if (!s.includes('|')) return s;
+  const opens: number[] = [];
+  const pairs: [number, number][] = [];
+  for (let i = 0; i < s.length; i++) {
+    if (s[i] !== '|') continue;
+    if (s[i + 1] === '|' || s[i - 1] === '|') {
+      // "||" is "or"; ")||(" too.
+      if (s[i + 1] === '|') i++;
+      continue;
+    }
+    const prev = s.slice(0, i).replace(/\s+$/, '').slice(-1);
+    const operandBefore = !!prev && /[A-Za-z0-9_.)\]'}]/.test(prev);
+    if (operandBefore && opens.length) {
+      pairs.push([opens.pop()!, i]);
+    } else if (!operandBefore || s.indexOf('|', i + 1) > i) {
+      opens.push(i);
+    }
+  }
+  if (!pairs.length) return s;
+  const at = new Map<number, string>();
+  for (const [o, c] of pairs) {
+    at.set(o, 'abs(');
+    at.set(c, ')');
+  }
+  let out = '';
+  for (let i = 0; i < s.length; i++) out += at.get(i) ?? s[i];
+  return out;
+}
+
 function applySynonyms(s: string): string {
   // Replace `name(` where name is a known synonym.
   return s.replace(/([A-Za-z]\w*)(\s*\()/g, (full, name: string, tail: string) => {
@@ -104,6 +140,7 @@ export function normalizeInput(raw: string): string {
   s = applyUnicode(s);
   // Point coordinates A.x / A.y → the plain symbols A__x / A__y (see coords.ts).
   s = rewriteCoords(s);
+  s = absBars(s);
   s = applySynonyms(s);
   s = rewritePowFunc(s);
   s = normalizeDerivatives(s);

@@ -20,6 +20,7 @@ export const FUNCTION_SYNONYMS: Record<string, string> = {
   ln: 'log', // natural log (mathjs `log` is natural)
   lg: 'log10',
   sgn: 'sign',
+  nthroot: 'nthRoot',
 };
 
 /** Unicode → ASCII conveniences (applied globally). */

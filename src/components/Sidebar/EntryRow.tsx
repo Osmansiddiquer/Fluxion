@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { useEntryResult } from '../../state/results';
 import { greekWordToGlyph } from '../../lib/math/greek';
@@ -45,10 +45,17 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
   const [picker, setPicker] = useState(false);
   const setFocus = useOdeFocus((s) => s.set);
 
-  const undefinedVars = res?.undefinedVars ?? [];
-  const error =
+  const rawUndefined = res?.undefinedVars ?? [];
+  const rawError =
     res?.error ?? (parsed && parsed.kind === 'error' ? parsed.message : undefined);
+  // A new error waits for typing to pause; one already showing stays (updated).
+  const settled = useSettled(entry.raw);
+  const shownRef = useRef(false);
+  const quiet = !settled && !shownRef.current;
+  const error = quiet ? undefined : rawError;
+  const undefinedVars = quiet ? [] : rawUndefined;
   const hasError = !!error || undefinedVars.length > 0;
+  shownRef.current = hasError;
   const plottable =
     kind === 'ode' ||
     (kind === 'function' && res?.value === undefined) ||
@@ -172,7 +179,7 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
             Define {undefinedVars.length > 1 ? 'these:' : ''}
           </span>
           {undefinedVars.map((v) => {
-            const glyph = greekWordToGlyph(v);
+            const glyph = displayName(v);
             const twin = lookalike(v, allEntries);
             // Used as A.x / A.y: offer a point, not a slider.
             const asPoint = res?.undefinedPoints?.includes(v);
@@ -202,6 +209,35 @@ export default function EntryRow({ entry, index }: { entry: Entry; index: number
       {entry.expanded && sweepLabel && <PolarControls entry={entry} label={sweepLabel} />}
     </div>
   );
+}
+
+/** How long the text must rest before a new error shows (ms). */
+const ERROR_SETTLE_MS = 600;
+
+/**
+ * False while the user is typing: for a short while after `raw` changes (not on
+ * mount). Errors on half-typed input (`y =`, `sin(`) then appear only once
+ * typing pauses, like Desmos, instead of flashing on every keystroke.
+ */
+function useSettled(raw: string): boolean {
+  const [settled, setSettled] = useState(true);
+  const first = useRef(true);
+  useEffect(() => {
+    if (first.current) {
+      first.current = false;
+      return;
+    }
+    setSettled(false);
+    const id = window.setTimeout(() => setSettled(true), ERROR_SETTLE_MS);
+    return () => clearTimeout(id);
+  }, [raw]);
+  return settled;
+}
+
+/** An undefined name as the user wrote it: derivative tokens D1_bX read bX′. */
+function displayName(v: string): string {
+  const d = /^D(\d+)_(.+)$/.exec(v);
+  return d ? greekWordToGlyph(d[2]) + '′'.repeat(Number(d[1])) : greekWordToGlyph(v);
 }
 
 /** Fold characters that are easy to mistype for each other (o/0, l/1/I). */
