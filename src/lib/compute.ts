@@ -10,6 +10,7 @@ import {
 import { buildSystem } from './math/reduce';
 import { compileNode } from './math/compileCache';
 import { KNOWN_FUNCTIONS } from './math/builtins';
+import { greekGlyphToWord } from './math/greek';
 import type { Trajectory } from './solver/integrate';
 import { applyOdeNotation, forcing, odeGroups, resolveGroupSetup, runGroup, type OdeNumerics } from './solver/odeGroup';
 import { SOLUTION_IN_EQUATION, shieldCalls, solutionLabel, whileSolving } from './solver/solutions';
@@ -671,6 +672,97 @@ function sampleRepeat(
   return out;
 }
 
+/** `name(` → `name*(` for each listed name (whole identifiers only). */
+function callsToProducts(text: string, names: Set<string>, symbolic: Set<string>): string {
+  return text.replace(/[A-Za-zͰ-Ͽ][A-Za-z0-9_Ͱ-Ͽ]*(?=\s*\()/g, (id, at: number) => {
+    const name = greekGlyphToWord(id);
+    if (!names.has(name) || text[at - 1] === '\\') return id;
+    if (symbolic.has(name)) {
+      // y(1 − y) is a product; y(2) is a solution value (and stays an error).
+      const open = text.indexOf('(', at + id.length);
+      const close = closeParenAt(text, open);
+      if (!/[A-Za-zͰ-Ͽ]/.test(text.slice(open + 1, close < 0 ? text.length : close))) return id;
+    }
+    return `${id}*`;
+  });
+}
+
+function closeParenAt(s: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === '(') depth++;
+    else if (s[i] === ')' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** Index of the first comma outside brackets, or -1. */
+function topComma(s: string): number {
+  let depth = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (c === ',' && depth === 0) return i;
+  }
+  return -1;
+}
+
+const IMPLICIT_CACHE = new Map<string, Parsed>();
+
+/**
+ * Desmos reads `a(x + 1)` as a product when `a` isn't a function, and so do we:
+ * a call of something that can't be called — a slider or derived value, the
+ * variable x or t, or (inside an ODE, where a solution value y(T) isn't
+ * allowed) an ODE's own variable, as in the logistic y′ = y(1 − y) — is
+ * re-read as multiplication. Functions, built-ins and solution calls y(3) on
+ * other rows keep their meaning; an unknown name stays an "Unknown function".
+ */
+export function withImplicitProducts(list: { entry: Entry; parsed: Parsed }[]): void {
+  const fnNames = new Set<string>();
+  const solNames = new Set<string>();
+  const valueNames = new Set<string>(['x', 't']);
+  for (const { parsed } of list) {
+    if (parsed.kind === 'fndef') fnNames.add(parsed.name);
+    else if (parsed.kind === 'ode') solNames.add(parsed.depVar);
+    else if (parsed.kind === 'variable') valueNames.add(parsed.name);
+    else if (isDerived(parsed)) valueNames.add(parsed.name);
+  }
+  for (const item of list) {
+    const p = item.parsed;
+    if (p.kind === 'empty' || p.kind === 'error' || p.kind === 'condition' || p.kind === 'fndef') continue;
+    const isOde = p.kind === 'ode';
+    const targets = new Set(
+      [...callsOf(p)].filter(
+        (f) =>
+          !KNOWN_FUNCTIONS.has(f) &&
+          !fnNames.has(f) &&
+          (isOde ? solNames.has(f) || valueNames.has(f) : valueNames.has(f) && !solNames.has(f)),
+      ),
+    );
+    if (!targets.size) continue;
+    const raw = item.entry.raw;
+    // An ODE row's conditions (y'' = -y, y(0) = 1) stay calls.
+    const cut = isOde ? topComma(raw) : -1;
+    // In an ODE, a solution name is only re-read when its argument is an expression.
+    const symbolic = isOde ? new Set([...targets].filter((f) => solNames.has(f))) : new Set<string>();
+    const text =
+      cut < 0
+        ? callsToProducts(raw, targets, symbolic)
+        : callsToProducts(raw.slice(0, cut), targets, symbolic) + raw.slice(cut);
+    if (text === raw) continue;
+    const key = `${raw}\u0000${text}`;
+    let re = IMPLICIT_CACHE.get(key);
+    if (!re) {
+      const q = parseEntry(text);
+      re = 'raw' in q ? ({ ...q, raw } as Parsed) : q;
+      if (IMPLICIT_CACHE.size > 300) IMPLICIT_CACHE.clear();
+      IMPLICIT_CACHE.set(key, re);
+    }
+    if (re.kind !== 'error') item.parsed = re;
+  }
+}
+
 export function computeAll(
   entries: Entry[],
   viewport: Viewport,
@@ -679,6 +771,7 @@ export function computeAll(
   const { tMin, tMax } = viewport;
   const results = new Map<string, CurveResult>();
   const parsedList = entries.map((e) => ({ entry: e, parsed: parseEntry(e.raw) }));
+  withImplicitProducts(parsedList);
 
   // Defined names: variables, derived values, user functions (+ ODE dep vars).
   // (Fixed-step ODE solutions called as y(T) step like the drawn curve.)

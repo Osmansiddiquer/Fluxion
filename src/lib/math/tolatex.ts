@@ -62,6 +62,11 @@ function unparen(n: MathNode): MathNode {
   return m;
 }
 
+function isDivide(n: MathNode): boolean {
+  const m = n as unknown as { type: string; fn?: string; args?: MathNode[] };
+  return m.type === 'OperatorNode' && m.fn === 'divide' && m.args?.length === 2;
+}
+
 function isOne(n: MathNode): boolean {
   const m = unparen(n) as unknown as { type: string; value?: unknown };
   return m.type === 'ConstantNode' && m.value === 1;
@@ -83,6 +88,30 @@ function texHandler(node: MathNode, options: object): string | undefined {
   // (b) shows as b: brackets around a lone name add nothing.
   if (type === 'ParenthesisNode' && (unparen(node) as { type: string }).type === 'SymbolNode') {
     return unparen(node).toTex(options);
+  }
+  // A fraction delimits itself: no brackets around it or inside it. (Typing
+  // 1/(x+1) gives ((1)/((x+1))), which showed as (\frac{(1)}{((x+1))}).)
+  if (type === 'ParenthesisNode' && isDivide(unparen(node))) return unparen(node).toTex(options);
+  if (type === 'OperatorNode' && isDivide(node)) {
+    const [a, b] = (node as unknown as { args: MathNode[] }).args;
+    return `\\frac{${unparen(a).toTex(options)}}{${unparen(b).toTex(options)}}`;
+  }
+  // A raised exponent is grouped already: e^{-x^2}, not e^{(-x^2)}.
+  if (type === 'OperatorNode' && (node as unknown as { fn: string }).fn === 'pow') {
+    const [b, x] = (node as unknown as { args: MathNode[] }).args;
+    if ((x as { type: string }).type !== 'ParenthesisNode') return undefined;
+    const base = unparen(b);
+    const simple = ['SymbolNode', 'ConstantNode', 'FunctionNode'].includes((base as { type: string }).type);
+    const baseTex = simple ? base.toTex(options) : `\\left(${base.toTex(options)}\\right)`;
+    return `{${baseTex}}^{${unparen(x).toTex(options)}}`;
+  }
+  // A list shows as typed, [1, 2, 3] — not a column vector (which the editor
+  // can't read back).
+  if (type === 'ArrayNode') {
+    const items = (node as unknown as { items: MathNode[] }).items;
+    if (items.every((i) => (i as { type: string }).type !== 'ArrayNode')) {
+      return `\\left[${items.map((i) => i.toTex(options)).join(',')}\\right]`;
+    }
   }
   if (type !== 'ConditionalNode') return undefined;
   const tex = (n: MathNode) => unparen(n).toTex(options);
@@ -155,7 +184,17 @@ function odeLhsTex(lhs: string, depVar: string, order: number, indep?: 'x'): str
  *  `varValue` overrides a variable's displayed value (the live slider value). */
 export function entryToLatex(parsed: Parsed, varValue?: number): string | null {
   const base = baseLatex(parsed, varValue);
-  return base == null ? null : base + restrictionsTex(parsed);
+  if (base == null) return null;
+  const out = base + restrictionsTex(parsed);
+  // x as the independent variable is computed as t, but shows as the x that was
+  // typed (otherwise the next edit silently turned the user's x into t).
+  return typedX(parsed) ? out.replace(/\{t\}/g, '{x}') : out;
+}
+
+function typedX(parsed: Parsed): boolean {
+  if (!('raw' in parsed) || typeof parsed.raw !== 'string') return false;
+  const ids = new Set(parsed.raw.match(/[A-Za-z_][A-Za-z0-9_]*/g) ?? []);
+  return ids.has('x') && !ids.has('t');
 }
 
 function baseLatex(parsed: Parsed, varValue?: number): string | null {

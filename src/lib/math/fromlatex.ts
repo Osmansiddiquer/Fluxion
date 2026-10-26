@@ -175,12 +175,99 @@ function replaceCases(s: string): string {
   return out;
 }
 
+// A \left / \right delimiter: a character, a command (\lbrace, \vert, …) or `.`
+// (an invisible fence — MathLive's stand-in for a bracket not typed yet).
+const FENCE_RE = /\\(left|right|mleft|mright)\s*(\\[a-zA-Z]+|\\[{}|]|[^\s\\])/g;
+const OPEN_OF: Record<string, string> = { ')': '(', ']': '[', '\\}': '\\{', '\\rbrace': '\\lbrace', '\\rbrack': '\\lbrack' };
+const CLOSE_OF: Record<string, string> = { '(': ')', '[': ']', '\\{': '\\}', '\\lbrace': '\\rbrace', '\\lbrack': '\\rbrack' };
+const BAR = new Set(['|', '\\vert', '\\lvert', '\\rvert', '\\mid']);
+
+/**
+ * Resolve \left…\right pairs into plain brackets:
+ *  - an invisible side (`\left(x\right.`: the `)` not typed yet, or deleted) is
+ *    the bracket the editor draws as a ghost, so it closes there: (x);
+ *  - |x| is abs(x), ⌊x⌋ floor(x), ⌈x⌉ ceil(x).
+ */
+function resolveFences(s: string): string {
+  type Tok = { at: number; end: number; side: 'left' | 'right'; delim: string };
+  const toks: Tok[] = [];
+  for (const m of s.matchAll(FENCE_RE)) {
+    toks.push({ at: m.index!, end: m.index! + m[0].length, side: m[1].endsWith('left') ? 'left' : 'right', delim: m[2] });
+  }
+  if (!toks.length) return s;
+  const repl = new Map<Tok, string>();
+  const stack: Tok[] = [];
+  for (const t of toks) {
+    if (t.side === 'left') {
+      stack.push(t);
+      continue;
+    }
+    const open = stack.pop();
+    if (!open) {
+      repl.set(t, t.delim === '.' ? '' : t.delim);
+      continue;
+    }
+    let l = open.delim;
+    let r = t.delim;
+    if (BAR.has(l) || BAR.has(r)) {
+      [l, r] = ['abs(', ')'];
+    } else if (l === '\\lfloor' || r === '\\rfloor') {
+      [l, r] = ['floor(', ')'];
+    } else if (l === '\\lceil' || r === '\\rceil') {
+      [l, r] = ['ceil(', ')'];
+    } else if (l === '.' && r === '.') {
+      [l, r] = ['', ''];
+    } else if (l === '.') {
+      l = OPEN_OF[r] ?? '(';
+    } else if (r === '.') {
+      r = CLOSE_OF[l] ?? ')';
+    }
+    repl.set(open, l);
+    repl.set(t, r);
+  }
+  for (const t of stack) repl.set(t, t.delim === '.' ? '' : t.delim);
+  let out = '';
+  let last = 0;
+  for (const t of toks) {
+    out += s.slice(last, t.at) + (repl.get(t) ?? t.delim);
+    last = t.end;
+  }
+  return out + s.slice(last);
+}
+
+/** Index of the `)` matching the `(` at `open`, or -1 (plain text). */
+function closeOf(s: string, open: number): number {
+  let depth = 0;
+  for (let i = open; i < s.length; i++) {
+    if (s[i] === '(') depth++;
+    else if (s[i] === ')' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/** ((a + b)) → (a + b): fractions and exponent braces add a pair of parentheses
+ * around what the user already bracketed. */
+function collapseDoubleParens(s: string): string {
+  let out = s;
+  for (let i = 0; i < out.length - 1; i++) {
+    if (out[i] !== '(' || out[i + 1] !== '(') continue;
+    const outer = closeOf(out, i);
+    const inner = closeOf(out, i + 1);
+    if (outer > 0 && inner === outer - 1) {
+      out = out.slice(0, i) + out.slice(i + 1, outer) + out.slice(outer + 1);
+      i--;
+    }
+  }
+  return out;
+}
+
 export function latexToText(latex: string): string {
   let s = latex;
 
   // Editor scaffolding.
   s = s.replace(/\\placeholder\{[^}]*\}/g, '');
   s = replaceCases(s);
+  s = resolveFences(s);
   s = s.replace(/\\(left|right|mleft|mright)(?=[([|{.)\]}])?/g, '');
   // Named delimiters MathLive may emit for [ ] etc.
   s = s.replace(/\\lbrack/g, '[').replace(/\\rbrack/g, ']');
@@ -225,6 +312,12 @@ export function latexToText(latex: string): string {
   s = s.replace(/\\ldotp\s*/g, '.'); // A.x (a point's coordinate)
   s = s.replace(/\\pm/g, '+');
   s = s.replace(/\\exponentialE/g, 'e');
+  s = s.replace(/\\imaginaryI/g, 'i');
+  s = s.replace(/\\differentialD/g, 'd');
+  s = s.replace(/\\infty(?![a-zA-Z])/g, 'Infinity');
+  s = s.replace(/\\(?:bmod|mod)(?![a-zA-Z])/g, ' mod ');
+  // Variant glyphs name the same Greek letter.
+  s = s.replace(/\\var(epsilon|theta|phi|pi|rho|sigma)(?![a-zA-Z])/g, '\\$1');
   s = s.replace(/\\pi(?![a-zA-Z])/g, 'pi');
 
   // Strip backslash from remaining commands (functions, Greek, etc.).
@@ -247,7 +340,9 @@ export function latexToText(latex: string): string {
   // log_b(x) -> log(x, b)  (after braces became parens so a base like x+1 works).
   s = replaceLogBase(s);
 
+  s = collapseDoubleParens(s);
+
   // Tidy.
-  s = s.replace(/\\/g, '').replace(/\s+/g, ' ').trim();
+  s = s.replace(/\\/g, '').replace(/\s+/g, ' ').replace(/\( /g, '(').trim();
   return s;
 }

@@ -100,10 +100,11 @@ describe('checkSpec', () => {
   });
 
   it('catches the implicit-multiplication pitfalls documented in llms.txt', () => {
-    // πx is one symbol "pix"; x(1-x) is a call to a function named x.
+    // πx is one symbol "pix". x(1-x) inside x's own equation multiplies (Desmos-style).
     expect(checkSpec({ expressions: ['y = sin(πx)'] }).ok).toBe(false);
     expect(checkSpec({ expressions: ['y = sin(pi*x)'] }).ok).toBe(true);
-    expect(checkSpec({ expressions: ["x' = x(1 - x)"] }).ok).toBe(false);
+    expect(checkSpec({ expressions: ["x' = x(1 - x)"] }).ok).toBe(true);
+    expect(checkSpec({ expressions: ["y = q(2)"] }).ok).toBe(false);
     expect(checkSpec({ expressions: ["x' = x*(1 - x)"] }).ok).toBe(true);
   });
 
